@@ -1,0 +1,125 @@
+name: Deploy MkDocs to GitHub Pages
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to deploy (for example: 0.1.0 or v0.1.0)'
+        required: true
+      set_latest:
+        description: 'Set as latest version?'
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      DOCS_REPO: humemai/humemai-docs
+      DOCS_BRANCH: main
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+        with:
+          python-version: '3.12'
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Install docs dependencies
+        run: |
+          uv sync --group docs
+
+      - name: Validate docs token
+        run: |
+          if [ -z "${{ secrets.HUMEMAI_DOCS_TOKEN }}" ]; then
+            echo "HUMEMAI_DOCS_TOKEN is missing"
+            exit 1
+          fi
+
+      - name: Extract version from tag or input
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            RAW_VERSION="${{ github.event.inputs.version }}"
+            SET_LATEST="${{ github.event.inputs.set_latest }}"
+          else
+            RAW_VERSION="${{ github.ref_name }}"
+            SET_LATEST="true"
+          fi
+
+          VERSION="${RAW_VERSION#v}"
+          VERSION_TAG="v$VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "version_tag=$VERSION_TAG" >> "$GITHUB_OUTPUT"
+          echo "set_latest=$SET_LATEST" >> "$GITHUB_OUTPUT"
+          echo "Deploying documentation version: $VERSION"
+          echo "Using source tag ref: $VERSION_TAG"
+
+      - name: Checkout humemai-docs
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          repository: ${{ env.DOCS_REPO }}
+          ref: ${{ env.DOCS_BRANCH }}
+          token: ${{ secrets.HUMEMAI_DOCS_TOKEN }}
+          path: humemai-docs
+
+      - name: Configure Git (humemai-docs)
+        run: |
+          git -C humemai-docs config user.name "github-actions[bot]"
+          git -C humemai-docs config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Deploy with mike (set as latest)
+        if: steps.version.outputs.set_latest == 'true'
+        working-directory: humemai-docs
+        env:
+          MIKE_VERSION: ${{ steps.version.outputs.version }}
+          MIKE_VERSION_TAG: ${{ steps.version.outputs.version_tag }}
+        run: |
+          uv run --project .. mike deploy --update-aliases \
+            --deploy-prefix cypherglot \
+            --branch ${{ env.DOCS_BRANCH }} \
+            --push \
+            --config-file ../mkdocs.yml \
+            ${{ steps.version.outputs.version }} latest \
+            --title "${{ steps.version.outputs.version }}"
+          uv run --project .. mike set-default \
+            --deploy-prefix cypherglot \
+            --branch ${{ env.DOCS_BRANCH }} \
+            --push \
+            --config-file ../mkdocs.yml \
+            latest
+
+      - name: Deploy with mike (not latest)
+        if: steps.version.outputs.set_latest != 'true'
+        working-directory: humemai-docs
+        env:
+          MIKE_VERSION: ${{ steps.version.outputs.version }}
+          MIKE_VERSION_TAG: ${{ steps.version.outputs.version_tag }}
+        run: |
+          uv run --project .. mike deploy \
+            --deploy-prefix cypherglot \
+            --branch ${{ env.DOCS_BRANCH }} \
+            --push \
+            --config-file ../mkdocs.yml \
+            ${{ steps.version.outputs.version }} \
+            --title "${{ steps.version.outputs.version }}"
