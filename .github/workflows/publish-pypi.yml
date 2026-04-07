@@ -1,0 +1,75 @@
+name: Publish Python package to PyPI
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: Run unit tests
+    uses: ./.github/workflows/test.yml
+
+  build:
+    name: Build package
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Install project and docs dependencies
+        run: |
+          uv sync --group docs
+
+      - name: Build docs
+        run: |
+          uv run mkdocs build --strict
+
+      - name: Build distributions
+        run: |
+          uv run --with build python -m build
+
+      - name: Check package metadata
+        run: |
+          uv run --with twine python -m twine check dist/*
+
+      - name: Verify wheel installation
+        run: |
+          uv run --isolated --with ./dist/*.whl python -c "import cypherglot; print(cypherglot.__version__)"
+
+      - name: Upload distributions
+        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
+        with:
+          name: python-package-distributions
+          path: dist/
+
+  publish:
+    name: Publish package to PyPI
+    needs: [tests, build]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          name: python-package-distributions
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # release/v1
