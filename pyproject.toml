@@ -12,6 +12,7 @@ authors = [
   { name = "HumemAI" },
 ]
 dependencies = [
+  "antlr4-python3-runtime>=4.13,<5",
   "sqlglot[c]>=30,<31",
 ]
 requires-python = ">=3.10"
@@ -38,10 +39,17 @@ Repository = "https://github.com/humemai/cypherglot"
 Issues = "https://github.com/humemai/cypherglot/issues"
 
 [dependency-groups]
+test = [
+  "pytest>=9,<10",
+]
 docs = [
   "mike>=2.1,<3",
   "mkdocs-material>=9.6,<10",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
 
 [tool.hatch.version]
 source = "vcs"
