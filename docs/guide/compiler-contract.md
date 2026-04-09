@@ -34,15 +34,17 @@ are intentionally aligned with SQLite-backed host runtimes.
 In practice that means:
 
 - the current compiled graph contract is SQLite-first
-- the current runtime validation in this repo is SQLite-only
+- the current runtime validation in this repo is SQLite-first, with narrow
+  DuckDB read-only coverage for admitted analytical reads
 - HumemDB is the main reference runtime for execution
 - host runtimes should treat the current graph-to-table schema contract as part
   of the execution boundary, not as an incidental implementation detail
 - `to_sql(..., dialect=...)` and `render_cypher_program_text(..., dialect=...)`
   expose SQLGlot rendering controls, but those controls do not by themselves make
   the compiled output backend-neutral
-- DuckDB is not the current target for CypherGlot-generated graph SQL, even
-  though host runtimes may still use DuckDB elsewhere for other workloads
+- DuckDB is now a narrow read-only rendering target for admitted OLAP-style
+  graph reads over the same schema contract, but it is not yet a full parity
+  backend for every compiled Cypher shape
 
 ## Scope
 

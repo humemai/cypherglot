@@ -1,26 +1,33 @@
 # Benchmarks
 
-CypherGlot now ships a benchmark harness for the public compiler stages and
-entrypoints that matter for the current admitted subset, plus a comparable
-SQLGlot workload for PostgreSQL-to-SQLite transpilation, plus a separate
-end-to-end SQLite execution benchmark.
+CypherGlot has two benchmark entrypoints, and they answer two different
+questions:
 
-The goal is practical and explicit:
+- `scripts/benchmarks/benchmark_compiler.py` measures compiler-stage and
+  compiler-entrypoint latency.
+- `scripts/benchmarks/benchmark_sqlite_runtime.py` measures compile-plus-execute
+  runtime cost over the graph-to-table schema contract.
 
-- measure stage-level latency for parsing, validation, and normalization
-- measure end-to-end latency for `to_sqlglot_ast(...)` and `to_sql(...)`
-- measure program-oriented compilation and rendering surfaces where CypherGlot
-  actually supports them today
-- include vector-aware queries where CypherGlot has a public contract today
-- measure comparable SQLGlot PostgreSQL-to-SQLite work across tokenize, parse,
-  parse-and-render, and transpile entrypoints
-- record a baseline for future regression tracking
-- measure realistic compile-plus-execute cost against the documented SQLite
-  schema for representative admitted queries
+This page documents them separately so each script has its own scope, inputs,
+commands, and output model.
 
-## Scope
+## Compiler benchmark
 
-The current harness covers these public entrypoints:
+Script:
+
+- `scripts/benchmarks/benchmark_compiler.py`
+
+Supporting files:
+
+- `scripts/benchmarks/corpora/compiler_benchmark_corpus.json`
+- `scripts/benchmarks/corpora/compiler_sqlglot_benchmark_corpus.json`
+- `scripts/benchmarks/results/compiler_benchmark_baseline.json`
+
+### Compiler scope
+
+This harness is for compiler latency, not backend execution. It measures the
+public CypherGlot stages and entrypoints that matter for the current admitted
+subset:
 
 - `parse_cypher_text(...)`
 - `validate_cypher_text(...)`
@@ -30,62 +37,32 @@ The current harness covers these public entrypoints:
 - `to_sqlglot_program(...)`
 - `render_cypher_program_text(...)`
 
-It also benchmarks SQLGlot directly on a separate SQL corpus using:
+It also runs a separate SQLGlot comparison suite over a PostgreSQL-to-SQLite
+SQL corpus using:
 
 - `tokenize(...)`
 - `parse_one(...)`
 - `parse_one(...).sql(dialect="sqlite")`
 - `transpile(..., read="postgres", write="sqlite")`
 
-The checked-in corpus intentionally mixes query families instead of benchmarking
-only one read shape. It currently covers:
+The compiler corpus intentionally mixes query families rather than timing only a
+single read shape. It currently includes ordinary reads, optional reads, `WITH`
+queries, grouped aggregation, bounded variable-length reads, graph-introspection
+projections, metadata projections, `UNWIND`, standalone writes, traversal-backed
+program shapes, and vector-aware normalization queries.
 
-- `MATCH ... RETURN`
-- narrow one-hop relationship reads
-- narrow `OPTIONAL MATCH ... RETURN`
-- narrow `OPTIONAL MATCH` grouped-count reads
-- narrow `MATCH ... WITH ... RETURN`
-- grouped aggregation
-- bounded variable-length reads and grouped variable-length aggregation
-- searched `CASE`
-- graph-introspection projections
-- metadata projections such as `properties(...)`, `labels(...)`, and `keys(...)`
-- `UNWIND ... RETURN`
-- standalone writes plus traversal-backed `MATCH ... CREATE` and `MATCH ... MERGE`
-  program shapes
-- vector-aware `CALL db.index.vector.queryNodes(...)` normalization shapes
+Vector-aware queries are benchmarked only through parse, validate, and
+normalize. That matches the current product contract: CypherGlot carries vector
+intent for host runtimes, but does not compile vector-aware `CALL` queries to
+SQL-backed output directly.
 
-Vector-aware queries are benchmarked only through parse, validate, and normalize.
-That matches the current product contract: CypherGlot carries vector intent
-forward for host runtimes, but it does not compile vector-aware `CALL` queries
-into SQLGlot-backed output directly.
-
-The SQLGlot corpus is intentionally the same size as the CypherGlot corpus so
-that the benchmark runs a comparable number of source queries per suite.
-
-## Files
-
-- benchmark script: `scripts/benchmarks/benchmark_compiler.py`
-- compiler corpus: `scripts/benchmarks/corpora/compiler_benchmark_corpus.json`
-- SQLGlot comparison corpus: `scripts/benchmarks/corpora/compiler_sqlglot_benchmark_corpus.json`
-- latest checked-in compiler baseline: `scripts/benchmarks/results/compiler_benchmark_baseline.json`
-- runtime benchmark script: `scripts/benchmarks/benchmark_sqlite_runtime.py`
-- runtime corpus: `scripts/benchmarks/corpora/sqlite_runtime_benchmark_corpus.json`
-- default runtime output: `scripts/benchmarks/results/sqlite_runtime_benchmark_baseline.json`
-
-## Run it
+### Compiler commands
 
 From the repo root:
 
 ```bash
 uv run python scripts/benchmarks/benchmark_compiler.py
 ```
-
-That default run currently uses:
-
-- `1000` measured iterations per query and per entrypoint
-- `10` warmup iterations per query and per entrypoint
-- the installed SQLGlot package layout for the PostgreSQL-to-SQLite suite
 
 Useful overrides:
 
@@ -96,47 +73,29 @@ uv run python scripts/benchmarks/benchmark_compiler.py --sqlglot-mode both
 uv run python scripts/benchmarks/benchmark_compiler.py --sqlglot-mode off
 ```
 
-The end-to-end SQLite benchmark uses the documented schema contract, seeds a
-small representative fixture per query, compiles each admitted Cypher query,
-executes the resulting SQL or rendered program, and records both whole-batch
-and per-query timing:
+The default compiler run uses:
 
-```bash
-uv run python scripts/benchmarks/benchmark_sqlite_runtime.py
-uv run python scripts/benchmarks/benchmark_sqlite_runtime.py --iterations 1000 --warmup 10
-uv run python scripts/benchmarks/benchmark_sqlite_runtime.py --output scripts/benchmarks/results/local-sqlite-runtime-benchmark-baseline.json
-```
+- `1000` measured iterations per query and entrypoint
+- `10` warmup iterations per query and entrypoint
+- the installed SQLGlot package layout for the PostgreSQL-to-SQLite comparison
 
-The runtime harness now uses a temporary file-backed SQLite database with:
+### Compiler output and baseline
 
-- `journal_mode=WAL`
-- `synchronous=NORMAL`
-- `foreign_keys=ON`
+The checked-in compiler baseline lives at
+`scripts/benchmarks/results/compiler_benchmark_baseline.json`.
 
-Use `--sqlglot-mode both` when you want to compare the installed `sqlglot[c]`
-path against a temporary pure-Python SQLGlot import. `sqlglotc` does not expose
-its own top-level runtime API; instead it installs compiled modules into the
-`sqlglot` package namespace. The benchmark reports which module files were used
-for each suite so you can confirm whether the run was compiled or pure Python.
+That baseline records:
 
-## Current baseline
+- stage-level latency summaries
+- per-entrypoint summaries
+- per-query summaries
+- vector-only normalization summaries
+- SQLGlot comparison results for compiled and pure-Python installs when enabled
 
-### Compiler Baseline
+The current checked-in baseline was produced from a `20`-query CypherGlot
+compiler corpus and a matching `20`-query SQLGlot comparison corpus.
 
-Source file: `scripts/benchmarks/results/compiler_benchmark_baseline.json`
-
-The current checked-in compiler baseline is regenerated from the current
-20-query corpus. It was produced with:
-
-- compiler corpus: `scripts/benchmarks/corpora/compiler_benchmark_corpus.json`
-- corpus size: `20` queries
-- SQLGlot comparison corpus: `scripts/benchmarks/corpora/compiler_sqlglot_benchmark_corpus.json`
-- SQLGlot corpus size: `20` queries
-- warmup: `10` iterations per query and entrypoint
-- measured iterations: `1000` per query and entrypoint
-- SQLGlot mode: `both` (`sqlglotc`-backed compiled install plus pure-Python fallback)
-
-Compiler entrypoint summary from the current full run:
+Compiler entrypoint summary from the current checked-in run:
 
 | Entrypoint | p50 | p95 | p99 |
 | --- | ---: | ---: | ---: |
@@ -168,58 +127,141 @@ Vector-aware normalization queries from the same baseline:
 | `vector_query_nodes_match` | `0.97 ms` | `1.00 ms` | `1.11 ms` |
 | `vector_query_nodes_yield_where` | `1.18 ms` | `1.32 ms` | `1.47 ms` |
 
-### Runtime Baseline
+## Runtime benchmark
 
-Source file: `scripts/benchmarks/results/sqlite_runtime_benchmark_baseline.json`
+Script:
 
-SQLite runtime summary from the current full run:
+- `scripts/benchmarks/benchmark_sqlite_runtime.py`
 
-- runtime corpus: `scripts/benchmarks/corpora/sqlite_runtime_benchmark_corpus.json`
-- corpus size: `9` queries
-- warmup: `10` iterations per query and batch run
-- measured iterations: `1000` per query and batch run
-- SQLite profile: file-backed temporary database with `WAL` journal mode and `NORMAL` synchronous mode
+Supporting files:
 
-| Runtime scope | p50 | p95 | p99 |
-| --- | ---: | ---: | ---: |
-| full runtime batch | `13.52 ms` | `14.71 ms` | `15.82 ms` |
+- `scripts/benchmarks/results/sqlite_runtime_benchmark_baseline.json`
 
-| Query | Mode | Fixture | p50 | p95 | p99 |
-| --- | --- | --- | ---: | ---: | ---: |
-| `simple_match_return` | `statement` | `basic_graph` | `1.13 ms` | `1.26 ms` | `1.33 ms` |
-| `optional_match_missing` | `statement` | `basic_graph` | `1.25 ms` | `1.36 ms` | `1.42 ms` |
-| `with_scalar_rebinding` | `statement` | `basic_graph` | `1.20 ms` | `1.26 ms` | `1.40 ms` |
-| `grouped_count` | `statement` | `duplicate_name_graph` | `1.43 ms` | `1.51 ms` | `1.56 ms` |
-| `bounded_variable_length` | `statement` | `user_chain_graph` | `2.18 ms` | `2.29 ms` | `2.38 ms` |
-| `graph_introspection` | `statement` | `basic_graph` | `1.84 ms` | `2.05 ms` | `2.24 ms` |
-| `match_set_node` | `statement` | `basic_graph` | `1.20 ms` | `1.24 ms` | `1.32 ms` |
-| `delete_relationship` | `statement` | `basic_graph` | `1.35 ms` | `1.38 ms` | `1.43 ms` |
-| `traversal_create_program` | `program` | `basic_graph` | `1.57 ms` | `1.61 ms` | `1.73 ms` |
+### Runtime scope
 
-The exact compiler baseline numbers are recorded in `scripts/benchmarks/results/compiler_benchmark_baseline.json`.
-The exact runtime baseline numbers are recorded in `scripts/benchmarks/results/sqlite_runtime_benchmark_baseline.json`.
-Those files now store overall summaries plus per-query summaries, so future runs can compare:
+This harness is for end-to-end runtime cost over the documented graph schema,
+not just compilation. It compiles admitted Cypher queries, executes them on the
+target backend, and records timing splits for each phase.
 
-- stage-level changes
-- end-to-end read entrypoint changes
-- program-compilation changes
-- vector-aware parse or normalize regressions
-- SQLGlot tokenize, parse, render, and transpile changes
-- end-to-end SQLite execution changes across representative runtime queries
+The runtime workload is predefined in Python rather than loaded from a JSON
+corpus. It currently contains:
 
-After another corpus refresh, rerun `scripts/benchmarks/benchmark_compiler.py` to refresh
-the checked-in baseline against the current corpus contents.
+- `13` OLTP-style queries measured on SQLite
+- `10` OLAP-style read queries measured on SQLite and DuckDB
+
+The OLTP mix is intentionally broader than reads now. It covers:
+
+- point and adjacency reads
+- optional and bounded-traversal reads
+- create operations
+- update operations
+- delete operations
+
+For each backend it:
+
+- creates a temporary file-backed database
+- creates the graph tables
+- creates the relevant indexes
+- ingests a synthetic graph fixture into SQLite
+- runs `ANALYZE` on the SQLite source after ingest so the planner has real statistics
+- lets DuckDB attach and read that SQLite-ingested dataset for OLAP reads
+- records setup timing for connect, schema, index, and ingest
+
+For each query it records:
+
+- CypherGlot compile latency
+- backend execution latency
+- end-to-end compile-plus-execute latency
+- reset latency
+
+Mutation-oriented OLTP queries run inside a SQLite savepoint and are rolled back
+after each iteration, so `reset` now measures the rollback cost needed to keep
+the seeded graph stable across repeated create, update, and delete samples.
+
+### Runtime shape and scale
+
+The runtime harness currently uses:
+
+- `journal_mode=WAL` for SQLite
+- `synchronous=NORMAL` for SQLite
+- `foreign_keys=ON` for SQLite
+- a file-backed SQLite source database plus a DuckDB reader over that SQLite data
+- the current graph-to-table contract: `nodes`, `edges`, and `node_labels`
+
+The default synthetic ingest scale is:
+
+- `100000` users
+- `1000` companies
+- `100000` `WORKS_AT` edges
+- `300000` `KNOWS` edges
+
+The scale is configurable with:
+
+- `--user-count`
+- `--company-count`
+- `--knows-edges-per-user`
+- `--ingest-batch-size`
+
+DuckDB is required for the default full OLAP comparison run. Pass
+`--skip-duckdb` if you only want the SQLite portion.
+
+DuckDB is not separately seeded anymore for the OLAP benchmark path. SQLite is
+the single ingest path, and DuckDB reads the SQLite-ingested tables.
+
+For SQLite specifically, the benchmark now treats post-ingest `ANALYZE` as part
+of normal setup. Without planner statistics, selective graph reads can fall
+into much worse edge-first plans and produce misleading execution timings.
+
+### Runtime commands
+
+From the repo root:
+
+```bash
+uv run python scripts/benchmarks/benchmark_sqlite_runtime.py
+```
+
+Useful overrides:
+
+```bash
+uv run python scripts/benchmarks/benchmark_sqlite_runtime.py --iterations 1000 --warmup 10
+uv run python scripts/benchmarks/benchmark_sqlite_runtime.py --output scripts/benchmarks/results/local-sqlite-runtime-benchmark-baseline.json
+uv run python scripts/benchmarks/benchmark_sqlite_runtime.py --query-name oltp_user_point_lookup --query-name olap_user_count
+uv run python scripts/benchmarks/benchmark_sqlite_runtime.py --skip-duckdb
+uv run python scripts/benchmarks/benchmark_sqlite_runtime.py --user-count 1000 --company-count 25 --knows-edges-per-user 2 --ingest-batch-size 500
+```
+
+### Runtime output and baseline
+
+The checked-in runtime baseline lives at
+`scripts/benchmarks/results/sqlite_runtime_benchmark_baseline.json`.
+
+That output is workload-oriented rather than corpus-oriented. It records:
+
+- graph scale metadata
+- workload counts
+- per-backend setup summaries
+- per-backend pooled compile, execute, end-to-end, and reset summaries
+- per-query timing summaries inside each workload/backend suite
+
+Runtime timing summaries are emitted in milliseconds throughout the JSON output
+and CLI summary. The CLI summary now prints mean, p50, p95, and p99 for the
+pooled suites and for each query entry.
+
+At the moment the runtime page should be read as documenting the current output
+shape and workflow, not as promising a stable cross-machine performance claim.
+The important comparison is repo-local regression tracking under the same setup.
 
 ## Notes
 
-- Percentiles are computed from raw per-iteration latency samples across the
-  full corpus, using linear interpolation.
-- The harness disables Python GC during the measured loop to reduce avoidable
-  noise from collection pauses.
-- Not every query applies to every entrypoint. The corpus explicitly declares
-  which public entrypoints are valid for each query shape.
-- The current baseline should be treated as a repository-local regression anchor,
-  not as a cross-machine or cross-runtime performance claim.
-- The pure-Python SQLGlot suite runs in a subprocess with a temporary package
-  copy that excludes compiled `.so` modules, so the comparison does not mutate
-  the active virtualenv.
+- Percentiles are computed from raw per-iteration latency samples using linear
+  interpolation.
+- The measured loop disables Python GC to reduce avoidable collection noise.
+- Not every query applies to every compiler entrypoint, so the compiler corpus
+  explicitly declares valid entrypoints per query shape.
+- The compiler benchmark and runtime benchmark answer different questions and
+  should not be compared directly.
+- The checked-in baselines are repository-local regression anchors, not general
+  benchmark claims across machines, operating systems, or Python builds.
+- The pure-Python SQLGlot comparison path runs in a subprocess with a temporary
+  package copy that excludes compiled `.so` modules, so the active virtualenv is
+  not mutated.
