@@ -512,6 +512,54 @@ Status: in progress.
       with one fresh unlabeled endpoint node when the other endpoint reuses a
       matched node alias from a one-hop relationship or fixed-length chain
       source.
+- [x] Add a narrow read-only DuckDB SQL target for admitted Cypher OLAP-style
+      reads over the existing `nodes` / `edges` / `node_labels` schema,
+      starting with backend-aware JSON property access and whole-entity
+      reconstruction instead of treating `to_sql(..., dialect='duckdb')` as a
+      free portability claim, then keep closing the remaining gaps until DuckDB
+      can execute the full admitted Cypher read subset with SQLite-equivalent
+      read semantics.
+  - [x] Land the first DuckDB renderer path for admitted reads, including
+        backend-aware JSON scalar extraction, whole-entity reconstruction,
+        numeric aggregate/comparison handling, numeric property ordering, and
+        `min(...)` / `max(...)` over JSON-backed property reads.
+  - [x] Add direct DuckDB runtime tests plus a curated SQLite-vs-DuckDB parity
+        harness for admitted reads, and keep growing that suite with string,
+        numeric, boolean, and relationship-property read shapes.
+  - [x] Keep expanding the parity corpus toward the full admitted read subset,
+        then fix the next renderer gaps as parity failures expose them.
+    - [x] Cover ordinary reads, whole-entity returns, graph introspection,
+          grouped counts, grouped `avg(...)`, properties/labels/keys,
+          bounded variable-length reads, `MATCH ... WITH ... RETURN` rebound
+          projections, parameterized reads, and broad `OPTIONAL MATCH` scalar
+          and entity-return families in the curated SQLite-vs-DuckDB harness.
+    - [x] Identify the remaining admitted read shapes that still only have
+          compile coverage, and convert that list into an explicit parity
+          checklist instead of inferring coverage from test files by hand.
+    - [x] Add parity coverage for the remaining `MATCH ... WITH ... RETURN`
+          filter families, especially `WITH WHERE` over rebound scalars,
+          `id(...)` / `type(...)` filters, null checks, string predicates, and
+          `size(...)` predicates.
+    - [x] Add parity coverage for the remaining `MATCH ... WITH ... RETURN`
+          projection families that are still compile-only, especially grouped
+          `count(...)` / grouped numeric aggregates such as `max(...)`,
+          no-alias outputs, `id(...)` / `type(...)` / `size(...)` variants,
+          scalar literal-plus-parameter outputs, predicate outputs, null
+          predicate outputs, and the broader relationship-property projection
+          suites.
+    - [x] Add parity coverage for the remaining plain `MATCH` read families
+          that are still compile-only, especially no-alias outputs,
+          scalar-literal-only and parameter-only projections,
+          `id(...)` / `type(...)` / `size(id(...))` variants,
+          grouped relationship plain-read counts, remaining node math/trig/log
+          conversion slices that are only compile-asserted, and the broader
+          relationship-property string, numeric, predicate, and null-predicate
+          suites.
+    - [x] Add parity coverage for the remaining `OPTIONAL MATCH` read families
+          that are still compile-only, especially grouped count/entity-count
+          shapes, scalar-literal-only outputs, `size(id(...))`, `id(...)`, and
+          the remaining optional predicate variants beyond the currently covered
+          scalar and entity-return cases.
 - [ ] Revisit the remaining broader write-side traversal semantics and the
       remaining variable-length cases such as open-ended ranges,
       downstream use of variable-length relationship aliases, fresh endpoint

@@ -28,14 +28,15 @@ The repository is intentionally compiler-focused.
 
 ## Current backend target
 
-CypherGlot currently targets SQL for a SQLite-backed graph store, and the repo's
-runtime validation is SQLite-only.
+CypherGlot currently targets SQL for a SQLite-backed graph store, with narrow
+DuckDB read-only support for admitted analytical reads over the same schema.
 
 - the main intended host runtime today is HumemDB
 - generated SQL is tested and supported against the current SQLite-backed graph schema
 - SQLGlot dialect rendering is exposed as an output helper, not as a claim that
     every emitted query is backend-portable today
-- DuckDB is not the current target for CypherGlot graph compilation
+- DuckDB support is currently limited to read-only graph-query families, not full
+    backend parity
 
 ## What this repo is not
 
