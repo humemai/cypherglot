@@ -1,0 +1,264 @@
+[
+  {
+    "name": "simple_match_filter_limit",
+    "category": "match-read",
+    "entrypoints": [
+      "parse_cypher_text",
+      "validate_cypher_text",
+      "normalize_cypher_text",
+      "to_sqlglot_ast",
+      "to_sql",
+      "to_sqlglot_program",
+      "render_cypher_program_text"
+    ],
+    "query": "MATCH (u:User) WHERE u.name = $name RETURN u.name ORDER BY u.name LIMIT 1"
+  },
+  {
+    "name": "relationship_projection",
+    "category": "one-hop-read",
+    "entrypoints": [
+      "parse_cypher_text",
+      "validate_cypher_text",
+      "normalize_cypher_text",
+      "to_sqlglot_ast",
+      "to_sql",
+      "to_sqlglot_program",
+      "render_cypher_program_text"
+    ],
+    "query": "MATCH (a:User)-[r:KNOWS]->(b:User) RETURN a.name AS from_name, r.note AS note, b.name AS to_name ORDER BY from_name, to_name"
+  },
+  {
+    "name": "optional_match_string_filter",
+    "category": "optional-match",
+    "entrypoints": [
+      "parse_cypher_text",
+      "validate_cypher_text",
+      "normalize_cypher_text",
+      "to_sqlglot_ast",
+      "to_sql",
+      "to_sqlglot_program",
+      "render_cypher_program_text"
+    ],
+    "query": "OPTIONAL MATCH (u:User) WHERE u.name STARTS WITH 'Al' RETURN u.name AS name ORDER BY name"
+  },
+  {
+    "name": "optional_match_grouped_count",
+    "category": "optional-match",
+    "entrypoints": [
+      "parse_cypher_text",
+      "validate_cypher_text",
+      "normalize_cypher_text",
+      "to_sqlglot_ast",
+      "to_sql",
+      "to_sqlglot_program",
+      "render_cypher_program_text"
+    ],
+    "query": "OPTIONAL MATCH (u:User) RETURN u.name AS name, count(u) AS total ORDER BY total DESC"
+  },
+  {
+    "name": "with_scalar_rebinding",
+    "category": "with-return",
+    "entrypoints": [
+      "parse_cypher_text",
+      "validate_cypher_text",
+      "normalize_cypher_text",
+      "to_sqlglot_ast",
+      "to_sql",
+      "to_sqlglot_program",
+      "render_cypher_program_text"
+    ],
+    "query": "MATCH (u:User) WITH u.name AS name RETURN name ORDER BY name"
+  },
+  {
+    "name": "with_grouped_aggregate",
+    "category": "aggregation",
+    "entrypoints": [
+      "parse_cypher_text",
+      "validate_cypher_text",
+      "normalize_cypher_text",
+      "to_sqlglot_ast",
+      "to_sql",
+      "to_sqlglot_program",
+      "render_cypher_program_text"
+    ],
+    "query": "MATCH (u:User) WITH u.name AS name, u.score AS score RETURN name, max(score) AS top ORDER BY top DESC"
+  },
+  {
+    "name": "variable_length_projection",
+    "category": "variable-length",
+    "entrypoints": [
+      "parse_cypher_text",
+      "validate_cypher_text",
+      "normalize_cypher_text",
+      "to_sqlglot_ast",
+      "to_sql",
+      "to_sqlglot_program",
+      "render_cypher_program_text"
+    ],
+    "query": "MATCH (a:User)-[:KNOWS*1..2]->(b:User) RETURN a.name AS user_name, b.name AS friend ORDER BY friend"
+  },
+  {
+    "name": "variable_length_grouped_count",
+    "category": "variable-length",
+    "entrypoints": [
+      "parse_cypher_text",
+      "validate_cypher_text",
+      "normalize_cypher_text",
+      "to_sqlglot_ast",
+      "to_sql",
+      "to_sqlglot_program",
+      "render_cypher_program_text"
+    ],
+    "query": "MATCH (a:User)-[:KNOWS*1..2]->(b:User) RETURN b.name AS friend, count(b) AS total ORDER BY total DESC"
+  },
+  {
+    "name": "searched_case_projection",
+    "category": "computed-projection",
+    "entrypoints": [
+      "parse_cypher_text",
+      "validate_cypher_text",
+      "normalize_cypher_text",
+      "to_sqlglot_ast",
+      "to_sql",
+      "to_sqlglot_program",
+      "render_cypher_program_text"
+    ],
+    "query": "MATCH (u:User) WITH u.age AS age, u.name AS name RETURN CASE WHEN age >= 18 THEN name ELSE 'minor' END AS label ORDER BY label"
+  },
+  {
+    "name": "graph_introspection",
+    "category": "introspection",
+    "entrypoints": [
+      "parse_cypher_text",
+      "validate_cypher_text",
+      "normalize_cypher_text",
+      "to_sqlglot_ast",
+      "to_sql",
+      "to_sqlglot_program",
+      "render_cypher_program_text"
+    ],
+    "query": "MATCH (a:User)-[r:KNOWS]->(b:User) RETURN id(a) AS uid, type(r) AS rel_type, startNode(r).id AS start_id, endNode(r).id AS end_id ORDER BY uid"
+  },
+  {
+    "name": "metadata_projection",
+    "category": "metadata-projection",
+    "entrypoints": [
+      "parse_cypher_text",
+      "validate_cypher_text",
+      "normalize_cypher_text",
+      "to_sqlglot_ast",
+      "to_sql",
+      "to_sqlglot_program",
+      "render_cypher_program_text"
+    ],
+    "query": "MATCH (a:User)-[r:KNOWS]->(b:User) RETURN properties(a) AS user_props, labels(a) AS user_labels, keys(r) AS rel_keys ORDER BY user_props, user_labels, rel_keys"
+  },
+  {
+    "name": "relationship_property_functions",
+    "category": "computed-projection",
+    "entrypoints": [
+      "parse_cypher_text",
+      "validate_cypher_text",
+      "normalize_cypher_text",
+      "to_sqlglot_ast",
+      "to_sql",
+      "to_sqlglot_program",
+      "render_cypher_program_text"
+    ],
+    "query": "MATCH (a:User)-[r:KNOWS]->(b:User) RETURN lower(r.note) AS lower_note, size(r.note) AS note_len, toString(r.weight) AS weight_text ORDER BY lower_note, note_len, weight_text"
+  },
+  {
+    "name": "unwind_literal_list",
+    "category": "unwind",
+    "entrypoints": [
+      "parse_cypher_text",
+      "validate_cypher_text",
+      "normalize_cypher_text",
+      "to_sqlglot_ast",
+      "to_sql",
+      "to_sqlglot_program",
+      "render_cypher_program_text"
+    ],
+    "query": "UNWIND [1, 2, 3] AS x RETURN x AS value ORDER BY value DESC LIMIT 2"
+  },
+  {
+    "name": "create_node_program",
+    "category": "write-program",
+    "entrypoints": [
+      "parse_cypher_text",
+      "validate_cypher_text",
+      "normalize_cypher_text",
+      "to_sqlglot_program",
+      "render_cypher_program_text"
+    ],
+    "query": "CREATE (:User {name: 'Alice', age: 30})"
+  },
+  {
+    "name": "traversal_create_program",
+    "category": "write-program",
+    "entrypoints": [
+      "parse_cypher_text",
+      "validate_cypher_text",
+      "normalize_cypher_text",
+      "to_sqlglot_program",
+      "render_cypher_program_text"
+    ],
+    "query": "MATCH (a:User)-[r:KNOWS]->(b:User) CREATE (a)-[:INTRODUCED]->(:Person {name: 'Cara'})"
+  },
+  {
+    "name": "traversal_merge_program",
+    "category": "write-program",
+    "entrypoints": [
+      "parse_cypher_text",
+      "validate_cypher_text",
+      "normalize_cypher_text",
+      "to_sqlglot_program",
+      "render_cypher_program_text"
+    ],
+    "query": "MATCH (a:User)-[r:KNOWS]->(b:User) MERGE (a)-[:INTRODUCED]->(:Person {name: 'Cara'})"
+  },
+  {
+    "name": "match_set_node",
+    "category": "write-single-statement",
+    "entrypoints": [
+      "parse_cypher_text",
+      "validate_cypher_text",
+      "normalize_cypher_text",
+      "to_sqlglot_program",
+      "render_cypher_program_text"
+    ],
+    "query": "MATCH (u:User) WHERE u.name = $name SET u.age = 31"
+  },
+  {
+    "name": "match_delete_relationship",
+    "category": "write-single-statement",
+    "entrypoints": [
+      "parse_cypher_text",
+      "validate_cypher_text",
+      "normalize_cypher_text",
+      "to_sqlglot_program",
+      "render_cypher_program_text"
+    ],
+    "query": "MATCH (a:User)-[r:KNOWS]->(b:User) DELETE r"
+  },
+  {
+    "name": "vector_query_nodes_match",
+    "category": "vector-aware",
+    "entrypoints": [
+      "parse_cypher_text",
+      "validate_cypher_text",
+      "normalize_cypher_text"
+    ],
+    "query": "CALL db.index.vector.queryNodes('user_embedding_idx', 1, $query) YIELD node, score MATCH (node:User) RETURN node.id, score ORDER BY score DESC"
+  },
+  {
+    "name": "vector_query_nodes_yield_where",
+    "category": "vector-aware",
+    "entrypoints": [
+      "parse_cypher_text",
+      "validate_cypher_text",
+      "normalize_cypher_text"
+    ],
+    "query": "CALL db.index.vector.queryNodes('user_embedding_idx', 3, $query) YIELD node, score WHERE node.region = 'west' RETURN node.id, score ORDER BY score DESC"
+  }
+]

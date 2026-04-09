@@ -1,0 +1,475 @@
+# Public Entrypoints
+
+CypherGlot exposes a small compiler-facing API. These are the public surfaces a
+host runtime or integration layer should usually start from:
+
+- `parse_cypher_text(...)`
+- `validate_cypher_text(...)`
+- `normalize_cypher_text(...)`
+- `to_sqlglot_ast(...)`
+- `to_sql(...)`
+- `to_sqlglot_program(...)`
+- `render_cypher_program_text(...)`
+
+They split naturally into three layers:
+
+- parse and validation
+- normalized host-runtime handoff
+- SQLGlot-backed compilation and rendering
+
+If you want the overall boundary and backend assumptions, see the
+[Compiler Contract](compiler-contract.md) and
+[Schema Contract](schema-contract.md) guides. This page is narrower: it explains
+what each public entrypoint is for and shows what a few real query shapes look
+like as they move through the API.
+
+## At a glance
+
+| Entrypoint | What it returns | Use it when | Notes |
+| --- | --- | --- | --- |
+| `parse_cypher_text(text)` | `CypherParseResult` | You want the raw parse result and syntax errors | Parsing does not enforce the admitted subset by itself. |
+| `validate_cypher_text(text)` | `None` or raises `ValueError` | You want an explicit admitted-subset check | Good boundary check before relying on compilation. |
+| `normalize_cypher_text(text)` | A repo-owned normalized statement object | You need a stable host-runtime handoff shape | This is also the main public surface for vector-aware queries. |
+| `to_sqlglot_ast(text)` | one SQLGlot `Expression` | The admitted query lowers to one SQL statement | Rejects multi-step shapes. |
+| `to_sql(text, dialect=...)` | rendered SQL text | You want string SQL for one admitted statement | Thin rendering helper over `to_sqlglot_ast(...)`. |
+| `to_sqlglot_program(text)` | `CompiledCypherProgram` | The admitted query lowers to multiple SQL-backed steps | Used for writes and other program-shaped flows. |
+| `render_cypher_program_text(text, dialect=...)` | `RenderedCypherProgram` | You want SQL text for each compiled program step | Preserves program structure instead of flattening it. |
+
+## How to choose
+
+Use the highest-level public entrypoint that matches your actual need.
+
+- Use `parse_cypher_text(...)` when you are inspecting syntax or surfacing parse
+  errors directly.
+- Use `validate_cypher_text(...)` when you need a fast yes-or-no admitted-subset
+  boundary check.
+- Use `normalize_cypher_text(...)` when a host runtime needs structured Cypher
+  intent, especially for vector-aware queries.
+- Use `to_sqlglot_ast(...)` or `to_sql(...)` for admitted single-statement
+  shapes.
+- Use `to_sqlglot_program(...)` or `render_cypher_program_text(...)` for
+  admitted multi-step shapes.
+
+## Walkthrough: single-statement read
+
+This is the simplest mainstream path: parse, validate, normalize, then compile
+to one SQLGlot expression or one SQL string.
+
+```python
+import cypherglot
+
+query = (
+    "MATCH (u:User) "
+    "WHERE u.name = $name "
+    "RETURN u.name "
+    "ORDER BY u.name "
+    "LIMIT 1"
+)
+
+parsed = cypherglot.parse_cypher_text(query)
+assert not parsed.has_errors
+
+cypherglot.validate_cypher_text(query)
+
+normalized = cypherglot.normalize_cypher_text(query)
+print(type(normalized).__name__)
+
+expression = cypherglot.to_sqlglot_ast(query)
+print(type(expression).__name__)
+print(expression.to_s())
+
+sql = cypherglot.to_sql(query)
+print(sql)
+```
+
+What each step is doing:
+
+- `parse_cypher_text(...)` gives you the raw frontend parse result.
+- `validate_cypher_text(...)` confirms the query is inside the current admitted
+  subset.
+- `normalize_cypher_text(...)` converts the query into a repo-owned normalized
+  object that downstream compiler stages understand.
+- `to_sqlglot_ast(...)` lowers that admitted read into one SQLGlot expression.
+- `to_sql(...)` renders that expression to SQL text.
+
+For this query family, the rendered SQL is a single `SELECT ...` statement over
+the current graph-to-table contract. One checked-in test expects output in this
+shape:
+
+```sql
+SELECT JSON_EXTRACT(u.properties, '$.name') AS "u.name"
+FROM nodes AS u
+JOIN node_labels AS u_label_0 ON u_label_0.node_id = u.id
+AND u_label_0.label = 'User'
+WHERE JSON_EXTRACT(u.properties, '$.name') = :name
+LIMIT 1
+```
+
+The generated SQLGlot AST for this example is a `Select` expression. Written via
+`expression.to_s()`, it looks like this:
+
+```python
+Select(
+  kind=None,
+  hint=None,
+  distinct=None,
+  expressions=[
+    Alias(
+      this=JSONExtract(
+        this=Column(
+          this=Identifier(this=properties, quoted=False),
+          table=Identifier(this=u, quoted=False)),
+        expression=JSONPath(
+          expressions=[
+            JSONPathRoot(),
+            JSONPathKey(this=name)])),
+      alias=Identifier(this='u.name', quoted=True))],
+  limit=Limit(
+    this=None,
+    expression=Literal(this=1, is_string=False)),
+  from_=From(
+    this=Table(
+      this=Identifier(this=nodes, quoted=False),
+      alias=TableAlias(this=Identifier(this=u, quoted=False)))),
+  joins=[
+    Join(
+      this=Table(
+        this=Identifier(this=node_labels, quoted=False),
+        alias=TableAlias(this=Identifier(this=u_label_0, quoted=False))),
+      on=And(
+        this=EQ(
+          this=Column(
+            this=Identifier(this=node_id, quoted=False),
+            table=Identifier(this=u_label_0, quoted=False)),
+          expression=Column(
+            this=Identifier(this=id, quoted=False),
+            table=Identifier(this=u, quoted=False))),
+        expression=EQ(
+          this=Column(
+            this=Identifier(this=label, quoted=False),
+            table=Identifier(this=u_label_0, quoted=False)),
+          expression=Literal(this='User', is_string=True))))],
+  where=Where(
+    this=EQ(
+      this=JSONExtract(
+        this=Column(
+          this=Identifier(this=properties, quoted=False),
+          table=Identifier(this=u, quoted=False)),
+        expression=JSONPath(
+          expressions=[
+            JSONPathRoot(),
+            JSONPathKey(this=name)])),
+      expression=Placeholder(this=name))),
+  order=Order(
+    this=None,
+    expressions=[
+      Ordered(
+        this=JSONExtract(
+          this=Column(
+            this=Identifier(this=properties, quoted=False),
+            table=Identifier(this=u, quoted=False)),
+          expression=JSONPath(
+            expressions=[
+              JSONPathRoot(),
+              JSONPathKey(this=name)])),
+        desc=False,
+        nulls_first=True)]))
+```
+
+## Walkthrough: multi-step write program
+
+Some admitted Cypher shapes are not one SQL statement. They compile into a small
+program of SQL-backed steps instead.
+
+```python
+import cypherglot
+
+query = "MATCH (x:Begin) CREATE (x)-[:TYPE]->(:End {name: 'finish'})"
+
+program = cypherglot.to_sqlglot_program(query)
+print(type(program).__name__)
+print(len(program.steps))
+
+rendered = cypherglot.render_cypher_program_text(query)
+print(type(rendered).__name__)
+print(len(rendered.steps))
+
+loop = rendered.steps[0]
+print(type(loop).__name__)
+print(loop.source)
+print(loop.body[0].sql)
+print(loop.source.to_s())
+print(loop.body[0].sql.to_s())
+print(loop.body[1].sql.to_s())
+print(loop.body[2].sql.to_s())
+```
+
+The distinction matters:
+
+- `to_sqlglot_program(...)` keeps the compiled structure as SQLGlot-backed
+  program objects.
+- `render_cypher_program_text(...)` turns each compiled step into SQL text while
+  preserving the same step boundaries.
+
+That is why `to_sql(...)` rejects these shapes. A multi-step write cannot be
+represented honestly as one flat SQL string without losing structure.
+
+For this example, the generated program contains one loop with one source query
+AST and three body-statement ASTs.
+
+Loop source AST via `loop.source.to_s()`:
+
+```python
+Select(
+  kind=None,
+  hint=None,
+  distinct=None,
+  expressions=[
+    Alias(
+      this=Column(
+        this=Identifier(this=id, quoted=False),
+        table=Identifier(this=x, quoted=False)),
+      alias=Identifier(this=match_node_id, quoted=False))],
+  from_=From(
+    this=Table(
+      this=Identifier(this=nodes, quoted=False),
+      alias=TableAlias(this=Identifier(this=x, quoted=False)))),
+  where=Where(
+    this=Exists(
+      this=Select(
+        kind=None,
+        hint=None,
+        distinct=None,
+        expressions=[Literal(this=1, is_string=False)],
+        from_=From(
+          this=Table(
+            this=Identifier(this=node_labels, quoted=False),
+            alias=TableAlias(
+              this=Identifier(this=x_label_filter_0, quoted=False)))),
+        where=Where(
+          this=And(
+            this=EQ(
+              this=Column(
+                this=Identifier(this=node_id, quoted=False),
+                table=Identifier(this=x_label_filter_0, quoted=False)),
+              expression=Column(
+                this=Identifier(this=id, quoted=False),
+                table=Identifier(this=x, quoted=False))),
+            expression=EQ(
+              this=Column(
+                this=Identifier(this=label, quoted=False),
+                table=Identifier(this=x_label_filter_0, quoted=False)),
+              expression=Literal(this='Begin', is_string=True))))))))
+```
+
+First body statement AST via `loop.body[0].sql.to_s()`:
+
+```python
+Insert(
+  hint=None,
+  is_function=False,
+  this=Schema(
+    this=Table(this=Identifier(this=nodes, quoted=False)),
+    expressions=[Identifier(this=properties, quoted=False)]),
+  stored=False,
+  by_name=False,
+  exists=False,
+  where=False,
+  partition=False,
+  settings=False,
+  default=False,
+  expression=Values(
+    expressions=[
+      Tuple(
+        expressions=[
+          JSONObject(
+            expressions=[
+              JSONKeyValue(
+                this=Literal(this='name', is_string=True),
+                expression=Literal(this='finish', is_string=True))])])]),
+  returning=Returning(
+    expressions=[Column(this=Identifier(this=id, quoted=False))]),
+  overwrite=False,
+  ignore=False,
+  source=False)
+```
+
+Second body statement AST via `loop.body[1].sql.to_s()`:
+
+```python
+Insert(
+  hint=None,
+  is_function=False,
+  this=Schema(
+    this=Table(this=Identifier(this=node_labels, quoted=False)),
+    expressions=[
+      Identifier(this=node_id, quoted=False),
+      Identifier(this=label, quoted=False)]),
+  stored=False,
+  by_name=False,
+  exists=False,
+  where=False,
+  partition=False,
+  settings=False,
+  default=False,
+  expression=Values(
+    expressions=[
+      Tuple(
+        expressions=[
+          Placeholder(this=created_node_id),
+          Literal(this='End', is_string=True)])]),
+  conflict=None,
+  returning=None,
+  overwrite=False,
+  ignore=False,
+  source=False)
+```
+
+Third body statement AST via `loop.body[2].sql.to_s()`:
+
+```python
+Insert(
+  hint=None,
+  is_function=False,
+  this=Schema(
+    this=Table(this=Identifier(this=edges, quoted=False)),
+    expressions=[
+      Identifier(this=type, quoted=False),
+      Identifier(this=from_id, quoted=False),
+      Identifier(this=to_id, quoted=False),
+      Identifier(this=properties, quoted=False)]),
+  stored=False,
+  by_name=False,
+  exists=False,
+  where=False,
+  partition=False,
+  settings=False,
+  default=False,
+  expression=Values(
+    expressions=[
+      Tuple(
+        expressions=[
+          Literal(this='TYPE', is_string=True),
+          Placeholder(this=match_node_id),
+          Placeholder(this=created_node_id),
+          Literal(this='{}', is_string=True)])]),
+  conflict=None,
+  returning=None,
+  overwrite=False,
+  ignore=False,
+  source=False)
+```
+
+## Walkthrough: vector-aware normalization handoff
+
+Vector-aware `CALL db.index.vector.queryNodes(...)` queries are part of the
+public normalization contract, but they are not compiled into SQLGlot-backed SQL
+today.
+
+```python
+import cypherglot
+
+query = (
+    "CALL db.index.vector.queryNodes('user_embedding_idx', 3, $query) "
+    "YIELD node, score "
+    "WHERE node.region = 'west' "
+    "RETURN node.id, score "
+    "ORDER BY score DESC"
+)
+
+cypherglot.validate_cypher_text(query)
+
+normalized = cypherglot.normalize_cypher_text(query)
+print(type(normalized).__name__)
+print(normalized.index_name)
+print(normalized.query_param_name)
+print(normalized.top_k)
+print(type(normalized.candidate_query).__name__)
+print(normalized.return_items)
+print(normalized.order_by)
+print(repr(normalized))
+```
+
+For this family, `normalize_cypher_text(...)` is the key public surface. The
+result is a `NormalizedQueryNodesVectorSearch` object that carries:
+
+- vector index name
+- query parameter name
+- admitted top-k value
+- a normalized candidate `MATCH` query
+- admitted return items
+- admitted ordering
+
+That handoff is for host runtimes such as HumemDB. The host runtime can perform
+vector search, apply any runtime-specific planning, and then join the vector
+result with relational execution as needed.
+
+The generated normalized handoff object for this example is:
+
+```python
+NormalizedQueryNodesVectorSearch(
+  kind='vector_query',
+  procedure_kind='queryNodes',
+  index_name='user_embedding_idx',
+  query_param_name='query',
+  top_k=3,
+  candidate_query=NormalizedMatchNode(
+    kind='match',
+    pattern_kind='node',
+    node=NodePattern(alias='node', label=None, properties=()),
+    predicates=(
+      Predicate(alias='node', field='region', operator='=', value='west', disjunct_index=0),
+    ),
+    returns=(
+      ReturnItem(
+        alias='node',
+        field='id',
+        kind='field',
+        operator=None,
+        value=None,
+        start_value=None,
+        length_value=None,
+        search_value=None,
+        replace_value=None,
+        delimiter_value=None,
+        output_alias=None,
+      ),
+    ),
+    order_by=(),
+    limit=None,
+    distinct=False,
+    skip=None,
+  ),
+  return_items=('node.id', 'score'),
+  order_by=(('score', 'desc'),),
+)
+```
+
+What does not happen today:
+
+- `to_sqlglot_ast(...)` does not compile vector-aware `CALL` queries
+- `to_sql(...)` does not render them to SQL text
+- `to_sqlglot_program(...)` does not turn them into a SQL-backed program
+
+That boundary is intentional. CypherGlot carries vector intent forward, but it
+does not pretend vector execution is native SQLGlot work.
+
+## Practical guidance
+
+- If your runtime needs syntax errors, start with `parse_cypher_text(...)`.
+- If your runtime needs an explicit contract check, call
+  `validate_cypher_text(...)`.
+- If your runtime consumes structured Cypher intent, prefer
+  `normalize_cypher_text(...)`.
+- If your runtime wants one SQL statement, use `to_sqlglot_ast(...)` or
+  `to_sql(...)`.
+- If your runtime wants a structured write program, use `to_sqlglot_program(...)`
+  or `render_cypher_program_text(...)`.
+- If the query is vector-aware, stay at the normalization layer.
+
+## Related guides
+
+- [Quick Start](../getting-started/quickstart.md)
+- [Admitted Subset](admitted-subset.md)
+- [Compiler Contract](compiler-contract.md)
+- [Schema Contract](schema-contract.md)

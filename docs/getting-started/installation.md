@@ -3,13 +3,19 @@
 Install `cypherglot` from PyPI:
 
 ```bash
-pip install cypherglot
+uv pip install cypherglot
 ```
 
-For local development with docs tooling:
+Install from source in editable mode:
 
 ```bash
-uv sync --group docs
+uv pip install -e .
+```
+
+For local development with docs and test tooling:
+
+```bash
+uv sync --group test --group docs
 ```
 
 ## Python support

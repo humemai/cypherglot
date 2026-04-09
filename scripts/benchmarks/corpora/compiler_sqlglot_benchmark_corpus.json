@@ -1,0 +1,102 @@
+[
+  {
+    "name": "simple_filter_limit",
+    "category": "select-read",
+    "query": "SELECT u.name FROM users AS u WHERE u.name = 'Alice' ORDER BY u.name LIMIT 1"
+  },
+  {
+    "name": "relationship_projection",
+    "category": "join-read",
+    "query": "SELECT a.name AS from_name, r.note AS note, b.name AS to_name FROM users AS a JOIN knows AS r ON r.from_id = a.id JOIN users AS b ON b.id = r.to_id ORDER BY from_name, to_name"
+  },
+  {
+    "name": "left_join_fallback_projection",
+    "category": "left-join",
+    "query": "SELECT COALESCE(p.nickname, u.name) AS name FROM users AS u LEFT JOIN profiles AS p ON p.user_id = u.id WHERE u.name LIKE 'Al%' ORDER BY name"
+  },
+  {
+    "name": "left_join_grouped_count",
+    "category": "left-join",
+    "query": "SELECT u.name AS name, COUNT(p.user_id) AS total FROM users AS u LEFT JOIN profiles AS p ON p.user_id = u.id GROUP BY u.name ORDER BY total DESC"
+  },
+  {
+    "name": "cte_scalar_rebinding",
+    "category": "cte-return",
+    "query": "WITH named_users AS (SELECT u.name AS name FROM users AS u) SELECT name FROM named_users ORDER BY name"
+  },
+  {
+    "name": "grouped_aggregate",
+    "category": "aggregation",
+    "query": "SELECT u.name AS name, MAX(u.score) AS top FROM users AS u GROUP BY u.name ORDER BY top DESC"
+  },
+  {
+    "name": "recursive_projection",
+    "category": "recursive-cte",
+    "query": "WITH RECURSIVE user_paths AS (SELECT from_id AS start_id, to_id AS end_id, 1 AS depth FROM knows UNION ALL SELECT user_paths.start_id AS start_id, knows.to_id AS end_id, user_paths.depth + 1 AS depth FROM user_paths JOIN knows ON knows.from_id = user_paths.end_id WHERE user_paths.depth < 2) SELECT start_id, end_id FROM user_paths ORDER BY end_id"
+  },
+  {
+    "name": "recursive_grouped_count",
+    "category": "recursive-cte",
+    "query": "WITH RECURSIVE user_paths AS (SELECT from_id AS start_id, to_id AS end_id, 1 AS depth FROM knows UNION ALL SELECT user_paths.start_id AS start_id, knows.to_id AS end_id, user_paths.depth + 1 AS depth FROM user_paths JOIN knows ON knows.from_id = user_paths.end_id WHERE user_paths.depth < 2) SELECT end_id AS friend_id, COUNT(*) AS total FROM user_paths GROUP BY end_id ORDER BY total DESC"
+  },
+  {
+    "name": "searched_case_projection",
+    "category": "computed-projection",
+    "query": "SELECT CASE WHEN u.age >= 18 THEN u.name ELSE 'minor' END AS label FROM users AS u ORDER BY label"
+  },
+  {
+    "name": "id_projection",
+    "category": "projection",
+    "query": "SELECT r.from_id AS uid, r.kind AS rel_type, r.from_id AS start_id, r.to_id AS end_id FROM knows AS r ORDER BY uid"
+  },
+  {
+    "name": "json_metadata_projection",
+    "category": "json",
+    "query": "SELECT JSON_BUILD_OBJECT('name', u.name, 'age', u.age) AS user_props, JSON_BUILD_ARRAY('User') AS user_labels, JSON_BUILD_ARRAY('note') AS rel_keys FROM users AS u ORDER BY user_props, user_labels, rel_keys"
+  },
+  {
+    "name": "string_property_functions",
+    "category": "computed-projection",
+    "query": "SELECT LOWER(r.note) AS lower_note, LENGTH(r.note) AS note_len, CAST(r.weight AS TEXT) AS weight_text FROM knows AS r ORDER BY lower_note, note_len, weight_text"
+  },
+  {
+    "name": "values_projection",
+    "category": "values",
+    "query": "SELECT x.column1 AS value FROM (VALUES (1), (2), (3)) AS x ORDER BY value DESC LIMIT 2"
+  },
+  {
+    "name": "insert_user",
+    "category": "insert",
+    "query": "INSERT INTO users (name, age) VALUES ('Alice', 30)"
+  },
+  {
+    "name": "insert_edge_from_select",
+    "category": "insert-select",
+    "query": "INSERT INTO edges (from_id, to_id, type) SELECT b.id, e.id, 'TYPE' FROM begin_nodes AS b CROSS JOIN end_nodes AS e WHERE e.name = 'finish'"
+  },
+  {
+    "name": "insert_edge_with_conflict_ignore",
+    "category": "insert-select",
+    "query": "INSERT INTO edges (from_id, to_id, type) SELECT u.id, p.id, 'INTRODUCED' FROM users AS u JOIN people AS p ON p.name = 'Cara' ON CONFLICT DO NOTHING"
+  },
+  {
+    "name": "update_user",
+    "category": "update",
+    "query": "UPDATE users SET age = 31 WHERE name = 'Alice'"
+  },
+  {
+    "name": "delete_relationship",
+    "category": "delete",
+    "query": "DELETE FROM knows WHERE note IS NOT NULL"
+  },
+  {
+    "name": "postgres_cast_projection",
+    "category": "cast",
+    "query": "SELECT id, created_at::TIMESTAMP AS created_ts FROM users WHERE email LIKE '%@example.com' ORDER BY created_ts DESC LIMIT 5"
+  },
+  {
+    "name": "json_text_projection",
+    "category": "json",
+    "query": "SELECT payload ->> 'city' AS city FROM events ORDER BY city"
+  }
+]

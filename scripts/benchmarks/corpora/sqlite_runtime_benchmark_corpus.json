@@ -1,0 +1,65 @@
+[
+  {
+    "name": "simple_match_return",
+    "category": "match-read",
+    "fixture": "basic_graph",
+    "mode": "statement",
+    "query": "MATCH (u:User) RETURN u.name ORDER BY u.name"
+  },
+  {
+    "name": "optional_match_missing",
+    "category": "optional-match",
+    "fixture": "basic_graph",
+    "mode": "statement",
+    "query": "OPTIONAL MATCH (u:User) WHERE u.name = 'Cara' RETURN u.name AS name"
+  },
+  {
+    "name": "with_scalar_rebinding",
+    "category": "with-return",
+    "fixture": "basic_graph",
+    "mode": "statement",
+    "query": "MATCH (u:User) WITH u.name AS name RETURN name ORDER BY name"
+  },
+  {
+    "name": "grouped_count",
+    "category": "aggregation",
+    "fixture": "duplicate_name_graph",
+    "mode": "statement",
+    "query": "MATCH (u:User) RETURN u.name AS name, count(*) AS total ORDER BY total DESC, name ASC"
+  },
+  {
+    "name": "bounded_variable_length",
+    "category": "variable-length",
+    "fixture": "user_chain_graph",
+    "mode": "statement",
+    "query": "MATCH (a:User)-[:KNOWS*1..2]->(b:User) WHERE a.name = 'Alice' RETURN b.name AS friend ORDER BY friend"
+  },
+  {
+    "name": "graph_introspection",
+    "category": "introspection",
+    "fixture": "basic_graph",
+    "mode": "statement",
+    "query": "MATCH (a:User)-[r:KNOWS]->(b:User) RETURN id(a) AS uid, type(r) AS rel_type, startNode(r).id AS start_id, endNode(r).id AS end_id ORDER BY uid"
+  },
+  {
+    "name": "match_set_node",
+    "category": "write-single-statement",
+    "fixture": "basic_graph",
+    "mode": "statement",
+    "query": "MATCH (u:User {name: 'Alice'}) SET u.age = 31, u.active = true"
+  },
+  {
+    "name": "delete_relationship",
+    "category": "write-single-statement",
+    "fixture": "basic_graph",
+    "mode": "statement",
+    "query": "MATCH (a:User)-[r:KNOWS]->(b:User) WHERE a.name = 'Alice' DELETE r"
+  },
+  {
+    "name": "traversal_create_program",
+    "category": "write-program",
+    "fixture": "basic_graph",
+    "mode": "program",
+    "query": "MATCH (a:User)-[r:KNOWS]->(b:User) CREATE (a)-[:INTRODUCED]->(:Person {name: 'Cara'})"
+  }
+]
