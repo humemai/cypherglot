@@ -1,8 +1,10 @@
 # Benchmarks
 
-CypherGlot has two benchmark entrypoints, and they answer two different
+CypherGlot has three benchmark entrypoints, and they answer different
 questions:
 
+- `scripts/benchmarks/benchmark_sqlite_schema_shapes.py` compares alternative
+  SQLite storage schemas on the same synthetic graph workload.
 - `scripts/benchmarks/benchmark_compiler.py` measures compiler-stage and
   compiler-entrypoint latency.
 - `scripts/benchmarks/benchmark_sqlite_runtime.py` measures compile-plus-execute
@@ -10,6 +12,181 @@ questions:
 
 This page documents them separately so each script has its own scope, inputs,
 commands, and output model.
+
+## Schema benchmark
+
+Script:
+
+- `scripts/benchmarks/benchmark_sqlite_schema_shapes.py`
+
+Supporting files:
+
+- `scripts/benchmarks/results/sqlite_schema_shape_benchmark.json`
+
+### Schema scope
+
+This harness is for physical-schema experiments inside SQLite. It does not run
+CypherGlot compilation. Instead, it builds the same synthetic graph into three
+different SQLite layouts and benchmarks a representative set of direct SQL
+query shapes against each layout:
+
+- generic JSON-backed `nodes` and `edges`
+- generic typed-property tables
+- type-aware per-node-type and per-edge-type tables
+
+The goal is to compare setup cost, database size, point reads, ordered top-k
+reads, one-hop adjacency reads, multi-hop traversals, relationship aggregates,
+and relationship-heavy projections under the same generated graph.
+
+The default synthetic schema stress test is intentionally broader than the
+runtime harness. It uses:
+
+- `10` node types
+- `10` edge types
+- `5000` nodes per node type
+- `4` outgoing edges per source node for each edge type
+- a `5`-hop traversal query
+- `10` numeric node properties per type
+
+The scale is configurable with:
+
+- `--node-type-count`
+- `--edge-type-count`
+- `--nodes-per-type`
+- `--edges-per-source`
+- `--multi-hop-length`
+- `--node-numeric-property-count`
+- `--node-text-property-count`
+- `--node-boolean-property-count`
+- `--edge-numeric-property-count`
+- `--edge-text-property-count`
+- `--edge-boolean-property-count`
+
+### Schema commands
+
+From the repo root:
+
+```bash
+uv run python scripts/benchmarks/benchmark_sqlite_schema_shapes.py
+```
+
+Useful overrides:
+
+```bash
+uv run python scripts/benchmarks/benchmark_sqlite_schema_shapes.py --iterations 10 --warmup 2
+uv run python scripts/benchmarks/benchmark_sqlite_schema_shapes.py --schema typeaware
+uv run python scripts/benchmarks/benchmark_sqlite_schema_shapes.py --node-type-count 12 --edge-type-count 12 --nodes-per-type 2000 --edges-per-source 6 --multi-hop-length 6
+uv run python scripts/benchmarks/benchmark_sqlite_schema_shapes.py --output scripts/benchmarks/results/local-sqlite-schema-shape-benchmark.json
+```
+
+### Schema output and baseline
+
+The checked-in schema-shape baseline lives at
+`scripts/benchmarks/results/sqlite_schema_shape_benchmark.json` when you choose
+to persist one.
+
+That output records:
+
+- environment metadata
+- the generated graph scale and property counts
+- the synthetic edge-type routing plan
+- per-schema setup timings, RSS snapshots, and database size
+- per-schema row counts
+- pooled execute summaries
+- per-query timing summaries for each schema shape
+
+### Small dataset
+
+The current small schema-shape run was executed with:
+
+- `10` node types
+- `10` edge types
+- `1000` nodes per node type
+- `3` outgoing edges per source node for each edge type
+- `5` hop multi-hop traversal depth
+- `10` measured iterations
+- `2` warmup iterations
+
+That corresponds to roughly:
+
+- `10,000` total nodes
+- `30,000` total edges
+
+Result summary from `scripts/benchmarks/results/schema-shapes-small.json`:
+
+| Schema | Ingest | Analyze | RSS Connect | RSS Schema | RSS Ingest | RSS Analyze | Size | Pooled Execute Mean |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| generic JSON | `481.29 ms` | `18.44 ms` | `20.85 MiB` | `20.89 MiB` | `27.64 MiB` | `27.64 MiB` | `12.23 MiB` | `1.63 ms` |
+| typed-property | `1546.22 ms` | `114.86 ms` | `26.71 MiB` | `26.74 MiB` | `40.14 MiB` | `40.14 MiB` | `38.16 MiB` | `2.05 ms` |
+| type-aware | `266.92 ms` | `17.09 ms` | `35.19 MiB` | `35.22 MiB` | `35.23 MiB` | `35.23 MiB` | `7.48 MiB` | `0.62 ms` |
+
+Representative query means from the same run:
+
+| Query | generic JSON | typed-property | type-aware |
+| --- | ---: | ---: | ---: |
+| `point_lookup` | `0.00 ms` | `0.01 ms` | `0.01 ms` |
+| `top_active_score` | `0.02 ms` | `1.85 ms` | `0.01 ms` |
+| `multi_hop_chain` | `0.32 ms` | `0.30 ms` | `0.13 ms` |
+| `relationship_stats` | `1.87 ms` | `2.00 ms` | `1.00 ms` |
+| `relationship_projection` | `7.93 ms` | `8.68 ms` | `2.53 ms` |
+
+On the small dataset, the type-aware layout is already the strongest option:
+
+- lowest ingest cost
+- lowest analyze cost among the practical contenders
+- smallest on-disk footprint
+- best execute-time results on the heavier relationship and multi-hop queries
+
+The benchmark now records RSS snapshots after `connect`, `schema`, `ingest`,
+and `analyze`, and the table above shows all four checkpoints.
+
+### Medium dataset
+
+The current medium schema-shape run was executed with:
+
+- `10` node types
+- `10` edge types
+- `100000` nodes per node type
+- `4` outgoing edges per source node for each edge type
+- `5` hop multi-hop traversal depth
+- `10` measured iterations
+- `2` warmup iterations
+
+That corresponds to roughly:
+
+- `1,000,000` total nodes
+- `4,000,000` total edges
+
+Result summary from `scripts/benchmarks/results/schema-shapes-medium.json`:
+
+| Schema | Ingest | Analyze | RSS Connect | RSS Schema | RSS Ingest | RSS Analyze | Size | Pooled Execute Mean |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| generic JSON | `61.12 s` | `1.31 s` | `20.85 MiB` | `20.88 MiB` | `31.79 MiB` | `31.79 MiB` | `1580.28 MiB` | `227.99 ms` |
+| typed-property | `8.28 min` | `12.73 s` | `33.85 MiB` | `33.88 MiB` | `53.56 MiB` | `53.56 MiB` | `5076.25 MiB` | `326.53 ms` |
+| type-aware | `33.34 s` | `935.37 ms` | `41.26 MiB` | `41.29 MiB` | `42.89 MiB` | `42.89 MiB` | `913.54 MiB` | `91.06 ms` |
+
+Representative query means from the same run:
+
+| Query | generic JSON | typed-property | type-aware |
+| --- | ---: | ---: | ---: |
+| `point_lookup` | `0.01 ms` | `0.01 ms` | `0.01 ms` |
+| `top_active_score` | `0.03 ms` | `187.93 ms` | `0.01 ms` |
+| `multi_hop_chain` | `1.45 ms` | `1.32 ms` | `0.55 ms` |
+| `relationship_stats` | `218.15 ms` | `299.41 ms` | `125.22 ms` |
+| `relationship_projection` | `1.15 s` | `1.47 s` | `420.54 ms` |
+
+On the medium dataset, the type-aware layout separates much more clearly from
+the other two options:
+
+- lowest ingest cost by a large margin against generic JSON and an even larger
+  margin against typed-property storage
+- lowest analyze cost
+- smallest on-disk footprint
+- best execute-time results on the multi-hop and relationship-heavy queries
+- no collapse on the ordered top-k read, unlike the typed-property layout
+
+This medium baseline was re-run with the streaming/RSS-enabled harness, so the
+setup table now includes the same four RSS checkpoints as the small dataset.
 
 ## Compiler benchmark
 
