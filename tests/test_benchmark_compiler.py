@@ -25,7 +25,7 @@ class BenchmarkCompilerScriptTests(unittest.TestCase):
             benchmark_compiler.DEFAULT_SQLGLOT_CORPUS_PATH
         )
 
-        self.assertEqual(len(cypherglot_queries), 20)
+        self.assertEqual(len(cypherglot_queries), 22)
         self.assertEqual(len(sqlglot_queries), len(cypherglot_queries))
 
     def test_sqlglot_pure_python_context_imports_python_modules(self) -> None:

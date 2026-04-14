@@ -112,6 +112,34 @@
     "query": "MATCH (a:User)-[:KNOWS*1..2]->(b:User) RETURN b.name AS friend, count(b) AS total ORDER BY total DESC"
   },
   {
+    "name": "fixed_length_multi_hop_projection",
+    "category": "fixed-length-multi-hop",
+    "entrypoints": [
+      "parse_cypher_text",
+      "validate_cypher_text",
+      "normalize_cypher_text",
+      "to_sqlglot_ast",
+      "to_sql",
+      "to_sqlglot_program",
+      "render_cypher_program_text"
+    ],
+    "query": "MATCH (a:User)-[r:KNOWS]->(b:User)-[s:WORKS_AT]->(c:Company) RETURN a.name AS user_name, c.name AS company ORDER BY company"
+  },
+  {
+    "name": "zero_hop_variable_length_projection",
+    "category": "variable-length-zero-hop",
+    "entrypoints": [
+      "parse_cypher_text",
+      "validate_cypher_text",
+      "normalize_cypher_text",
+      "to_sqlglot_ast",
+      "to_sql",
+      "to_sqlglot_program",
+      "render_cypher_program_text"
+    ],
+    "query": "MATCH (a:User)-[:KNOWS*0..2]->(b:User) RETURN a.name AS user_name, b.name AS friend ORDER BY friend, user_name"
+  },
+  {
     "name": "searched_case_projection",
     "category": "computed-projection",
     "entrypoints": [
@@ -137,7 +165,7 @@
       "to_sqlglot_program",
       "render_cypher_program_text"
     ],
-    "query": "MATCH (a:User)-[r:KNOWS]->(b:User) RETURN id(a) AS uid, type(r) AS rel_type, startNode(r).id AS start_id, endNode(r).id AS end_id ORDER BY uid"
+    "query": "MATCH (a:User)-[r:KNOWS]->(b:User) RETURN a.id AS uid, type(r) AS rel_type, startNode(r).id AS start_id, endNode(r).id AS end_id ORDER BY uid"
   },
   {
     "name": "metadata_projection",
@@ -151,7 +179,7 @@
       "to_sqlglot_program",
       "render_cypher_program_text"
     ],
-    "query": "MATCH (a:User)-[r:KNOWS]->(b:User) RETURN properties(a) AS user_props, labels(a) AS user_labels, keys(r) AS rel_keys ORDER BY user_props, user_labels, rel_keys"
+    "query": "MATCH (a:User)-[r:KNOWS]->(b:User) RETURN a.id AS user_id, type(r) AS rel_type, startNode(r).id AS start_id, endNode(r).id AS end_id ORDER BY user_id, start_id, end_id"
   },
   {
     "name": "relationship_property_functions",

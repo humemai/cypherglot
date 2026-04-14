@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+from ._logging import get_logger
 from ._normalize_support import (
     _find_top_level_keyword,
     _looks_like_relationship_pattern,
@@ -24,8 +25,12 @@ from ._normalize_support import (
     _split_query_nodes_return_and_order,
     _unwrap_node_pattern,
     _validate_match_create_relationship_between_nodes_endpoints,
+    _validate_match_merge_relationship_endpoints,
 )
 from .parser import CypherParseResult, parse_cypher_text
+
+
+logger = get_logger(__name__)
 
 
 def _context_text(result: CypherParseResult, ctx: object) -> str:
@@ -702,6 +707,34 @@ def _validate_with_shape(result: CypherParseResult, multi_part_query_ctx) -> Non
             if binding_kinds.get(alias) != "scalar":
                 raise ValueError(
                     "CypherGlot currently supports sum(...), avg(...), min(...), and max(...) in the WITH subset only over admitted scalar bindings."
+                )
+            output_name = output_alias or expression_text
+            if output_name in seen_output_names:
+                raise ValueError(
+                    f"CypherGlot currently does not allow duplicate RETURN output alias {output_name!r} in the WITH subset."
+                )
+            seen_output_names.add(output_name)
+            aggregate_aliases.add(output_name)
+            projected_output_kinds[output_name] = "aggregate"
+            continue
+
+        aggregate_field_match = re.fullmatch(
+            (
+                r"(?P<func>sum|avg|min|max)\s*\(\s*"
+                r"(?P<alias>[A-Za-z_][A-Za-z0-9_]*)\."
+                r"(?P<field>[A-Za-z_][A-Za-z0-9_]*)\s*\)"
+            ),
+            expression_text,
+            flags=re.IGNORECASE,
+        )
+        if aggregate_field_match is not None:
+            alias = aggregate_field_match.group("alias")
+            if binding_kinds.get(alias) != "entity":
+                raise ValueError(
+                    "CypherGlot currently supports sum(...), avg(...), "
+                    "min(...), and max(...) in the WITH subset over "
+                    "entity-field inputs only when the alias is an admitted "
+                    "entity binding."
                 )
             output_name = output_alias or expression_text
             if output_name in seen_output_names:
@@ -2608,6 +2641,14 @@ def _validate_with_shape(result: CypherParseResult, multi_part_query_ctx) -> Non
         projected_output_kinds[output_name] = binding_kind
 
     for item in order_items:
+        if item.expression is not None:
+            if item.expression in aggregate_aliases:
+                continue
+            if item.expression in projected_output_kinds:
+                continue
+            raise ValueError(
+                "CypherGlot currently supports ORDER BY exact projected RETURN expressions, projected aliases, or admitted bindings in the supported WITH subset."
+            )
         if item.field == "__value__" and item.alias in aggregate_aliases:
             continue
         if item.field == "__value__" and item.alias in projected_output_kinds:
@@ -4358,11 +4399,23 @@ def _validate_plain_read_projection_shape(
 def validate_cypher_text(text: str):
     """Parse and validate one Cypher statement for the current frontend subset."""
 
-    return validate_cypher_parse_result(parse_cypher_text(text))
+    logger.debug("Validating Cypher text")
+    try:
+        validated = validate_cypher_parse_result(parse_cypher_text(text))
+    except Exception:
+        logger.debug("Validation failed", exc_info=True)
+        raise
+    logger.debug(
+        "Validated Cypher text",
+        extra={"context_kind": type(validated).__name__},
+    )
+    return validated
 
 
 def validate_cypher_parse_result(result: CypherParseResult):
     """Validate that one parse result fits the current admitted subset."""
+
+    logger.debug("Validating parsed Cypher result")
 
     if result.has_errors:
         first_error = result.syntax_errors[0]
@@ -4386,6 +4439,7 @@ def validate_cypher_parse_result(result: CypherParseResult):
     multi_part_query_ctx = single_query_ctx.oC_MultiPartQuery()
     if multi_part_query_ctx is not None:
         _validate_with_shape(result, multi_part_query_ctx)
+        logger.debug("Validated parsed Cypher result", extra={"context_kind": type(multi_part_query_ctx).__name__})
         return multi_part_query_ctx
 
     single_part_query_ctx = single_query_ctx.oC_SinglePartQuery()
@@ -4401,6 +4455,7 @@ def validate_cypher_parse_result(result: CypherParseResult):
 
     if reading_clauses and reading_clauses[0].oC_InQueryCall() is not None:
         _validate_query_nodes_vector_shape(result, single_part_query_ctx)
+        logger.debug("Validated parsed Cypher result", extra={"context_kind": type(single_part_query_ctx).__name__})
         return single_part_query_ctx
 
     if reading_clauses and reading_clauses[0].oC_Match() is not None:
@@ -4510,7 +4565,7 @@ def validate_cypher_parse_result(result: CypherParseResult):
                 ):
                     return single_part_query_ctx
                 raise ValueError(
-                    "CypherGlot currently admits variable-length relationship MATCH ... RETURN only with non-aggregate RETURN projections, or with endpoint-field grouped aggregate projections built from count(*) / count(endpoint_alias) / aggregate(endpoint.field); use MATCH ... WITH ... RETURN for broader aggregation."
+                    "CypherGlot currently admits variable-length relationship MATCH ... RETURN only with non-aggregate RETURN projections, or with grouped aggregate projections built from admitted endpoint return expressions plus count(*) / count(endpoint_alias) / aggregate(endpoint.field); relationship-type and endpoint introspection still require MATCH ... WITH ... RETURN or wider support."
                 )
         return single_part_query_ctx
 
@@ -4569,6 +4624,16 @@ def validate_cypher_parse_result(result: CypherParseResult):
                     left,
                     right,
                     allow_one_new_endpoint=True,
+                )
+            elif len(match_patterns) == 1:
+                match_node = _parse_node_pattern(
+                    _unwrap_node_pattern(match_patterns[0]),
+                    default_alias="__humem_validate_match_merge_node",
+                )
+                _validate_match_merge_relationship_endpoints(
+                    match_node,
+                    left,
+                    right,
                 )
             else:
                 if len(match_patterns) != 2 or any(
@@ -4676,7 +4741,10 @@ def _supports_variable_length_grouped_aggregate_returns(
                 continue
             return False
 
-        if item.kind == "field" and item.alias in allowed_aliases and item.field is not None:
+        if item.kind in {"type", "start_node", "end_node"}:
+            return False
+
+        if item.alias in allowed_aliases:
             continue
 
         return False

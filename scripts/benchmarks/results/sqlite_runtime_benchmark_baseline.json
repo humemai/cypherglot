@@ -1,44 +1,1487 @@
 {
-  "generated_at": "2026-04-09T17:49:46.864239+00:00",
+  "generated_at": "2026-04-12T11:59:59.298639+00:00",
   "python_version": "3.12.11",
   "platform": "Linux-6.17.9-76061709-generic-x86_64-with-glibc2.35",
   "cypherglot_version": "0.0.1.dev1",
-  "corpus_path": "/mnt/ssd2/repos/cypherglot/scripts/benchmarks/corpora/sqlite_runtime_benchmark_corpus.json",
+  "workload_counts": {
+    "oltp": 13,
+    "olap": 10
+  },
+  "graph_scale": {
+    "user_count": 100000,
+    "company_count": 1000,
+    "knows_edges_per_user": 3,
+    "node_count": 101000,
+    "edge_count": 400000,
+    "ingest_batch_size": 5000
+  },
+  "schema_contract": {
+    "layout": "type-aware",
+    "node_tables": [
+      "cg_node_user",
+      "cg_node_company"
+    ],
+    "edge_tables": [
+      "cg_edge_knows",
+      "cg_edge_works_at"
+    ]
+  },
   "results": {
-    "iterations": 1,
-    "warmup": 0,
-    "query_count": 1,
-    "overall": {
-      "min_us": 46714.259,
-      "mean_us": 46714.259,
-      "p50_us": 46714.259,
-      "p95_us": 46714.259,
-      "p99_us": 46714.259,
-      "max_us": 46714.259
-    },
-    "batch": {
-      "min_us": 1440.285,
-      "mean_us": 1440.285,
-      "p50_us": 1440.285,
-      "p95_us": 1440.285,
-      "p99_us": 1440.285,
-      "max_us": 1440.285
-    },
-    "queries": [
-      {
-        "name": "simple_match_return",
-        "category": "match-read",
-        "fixture": "basic_graph",
-        "mode": "statement",
-        "summary": {
-          "min_us": 46714.259,
-          "mean_us": 46714.259,
-          "p50_us": 46714.259,
-          "p95_us": 46714.259,
-          "p99_us": 46714.259,
-          "max_us": 46714.259
+    "workloads": {
+      "oltp": {
+        "description": "Selective transactional-style SQLite reads measured against the admitted type-aware graph-to-table contract.",
+        "sqlite": {
+          "backend": "sqlite",
+          "iterations": 100,
+          "warmup": 5,
+          "query_count": 13,
+          "setup": {
+            "connect_ms": 36.311654,
+            "schema_ms": 28.490458,
+            "index_ms": 0.27219,
+            "ingest_ms": 3079.185341,
+            "analyze_ms": 223.990434
+          },
+          "row_counts": {
+            "node_count": 101000,
+            "edge_count": 400000
+          },
+          "compile": {
+            "mean_of_mean_ms": 0.9894556069230769,
+            "mean_of_p50_ms": 0.9839024999999999,
+            "mean_of_p95_ms": 1.03309765,
+            "mean_of_p99_ms": 1.0725523069230773
+          },
+          "execute": {
+            "mean_of_mean_ms": 1.6663224615384615,
+            "mean_of_p50_ms": 1.6557308846153846,
+            "mean_of_p95_ms": 1.7501783807692308,
+            "mean_of_p99_ms": 1.769800160769231
+          },
+          "end_to_end": {
+            "mean_of_mean_ms": 2.656852400769231,
+            "mean_of_p50_ms": 2.6420583076923077,
+            "mean_of_p95_ms": 2.776522565384615,
+            "mean_of_p99_ms": 2.831319944615385
+          },
+          "reset": {
+            "mean_of_mean_ms": 0.0032891653846153844,
+            "mean_of_p50_ms": 0.0032926923076923072,
+            "mean_of_p95_ms": 0.003482230769230769,
+            "mean_of_p99_ms": 0.004147415384615389
+          },
+          "queries": [
+            {
+              "name": "oltp_user_point_lookup",
+              "workload": "oltp",
+              "category": "point-read",
+              "backend": "sqlite",
+              "mode": "statement",
+              "mutation": false,
+              "compile": {
+                "min_ms": 0.864031,
+                "mean_ms": 0.9246872700000001,
+                "p50_ms": 0.903781,
+                "p95_ms": 1.02905,
+                "p99_ms": 1.0372463,
+                "max_ms": 1.040741
+              },
+              "execute": {
+                "min_ms": 0.01124,
+                "mean_ms": 0.012093729999999999,
+                "p50_ms": 0.011875,
+                "p95_ms": 0.0125405,
+                "p99_ms": 0.017909600000000032,
+                "max_ms": 0.02381
+              },
+              "end_to_end": {
+                "min_ms": 0.878081,
+                "mean_ms": 0.937664,
+                "p50_ms": 0.916566,
+                "p95_ms": 1.041849,
+                "p99_ms": 1.0500973999999998,
+                "max_ms": 1.053701
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "oltp_user_age_filter",
+              "workload": "oltp",
+              "category": "point-read",
+              "backend": "sqlite",
+              "mode": "statement",
+              "mutation": false,
+              "compile": {
+                "min_ms": 0.758031,
+                "mean_ms": 0.8668521800000001,
+                "p50_ms": 0.833981,
+                "p95_ms": 0.9943895,
+                "p99_ms": 1.1779725000000039,
+                "max_ms": 1.944381
+              },
+              "execute": {
+                "min_ms": 2.105872,
+                "mean_ms": 2.19909444,
+                "p50_ms": 2.176232,
+                "p95_ms": 2.3197805,
+                "p99_ms": 2.35861031,
+                "max_ms": 2.373293
+              },
+              "end_to_end": {
+                "min_ms": 2.888373,
+                "mean_ms": 3.06711303,
+                "p50_ms": 3.035438,
+                "p95_ms": 3.2377255,
+                "p99_ms": 3.4348742000000043,
+                "max_ms": 4.318964
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "oltp_optional_miss",
+              "workload": "oltp",
+              "category": "optional-read",
+              "backend": "sqlite",
+              "mode": "statement",
+              "mutation": false,
+              "compile": {
+                "min_ms": 0.619051,
+                "mean_ms": 0.63846161,
+                "p50_ms": 0.634936,
+                "p95_ms": 0.6596894499999999,
+                "p99_ms": 0.6865600000000004,
+                "max_ms": 0.745861
+              },
+              "execute": {
+                "min_ms": 0.00961,
+                "mean_ms": 0.01020541,
+                "p50_ms": 0.00999,
+                "p95_ms": 0.0105855,
+                "p99_ms": 0.01596100000000002,
+                "max_ms": 0.02002
+              },
+              "end_to_end": {
+                "min_ms": 0.629691,
+                "mean_ms": 0.64947862,
+                "p50_ms": 0.645826,
+                "p95_ms": 0.67122145,
+                "p99_ms": 0.7075457000000003,
+                "max_ms": 0.758501
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "oltp_friends_of_user",
+              "workload": "oltp",
+              "category": "adjacency-read",
+              "backend": "sqlite",
+              "mode": "statement",
+              "mutation": false,
+              "compile": {
+                "min_ms": 0.905451,
+                "mean_ms": 0.93439469,
+                "p50_ms": 0.931041,
+                "p95_ms": 0.9680795,
+                "p99_ms": 0.980415,
+                "max_ms": 0.981801
+              },
+              "execute": {
+                "min_ms": 0.01909,
+                "mean_ms": 0.02042693,
+                "p50_ms": 0.02,
+                "p95_ms": 0.022648999999999996,
+                "p99_ms": 0.027126500000000005,
+                "max_ms": 0.02777
+              },
+              "end_to_end": {
+                "min_ms": 0.928471,
+                "mean_ms": 0.95576332,
+                "p50_ms": 0.951836,
+                "p95_ms": 0.991151,
+                "p99_ms": 1.003879,
+                "max_ms": 1.004671
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "oltp_company_for_user",
+              "workload": "oltp",
+              "category": "lookup-read",
+              "backend": "sqlite",
+              "mode": "statement",
+              "mutation": false,
+              "compile": {
+                "min_ms": 0.909541,
+                "mean_ms": 0.92893899,
+                "p50_ms": 0.927711,
+                "p95_ms": 0.9524265,
+                "p99_ms": 0.95966679,
+                "max_ms": 0.96123
+              },
+              "execute": {
+                "min_ms": 0.01741,
+                "mean_ms": 0.018257509999999998,
+                "p50_ms": 0.01807,
+                "p95_ms": 0.0191635,
+                "p99_ms": 0.024562100000000007,
+                "max_ms": 0.02576
+              },
+              "end_to_end": {
+                "min_ms": 0.928091,
+                "mean_ms": 0.9481050999999999,
+                "p50_ms": 0.947216,
+                "p95_ms": 0.9718965,
+                "p99_ms": 0.97957259,
+                "max_ms": 0.98072
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "oltp_user_score_lookup",
+              "workload": "oltp",
+              "category": "ordered-read",
+              "backend": "sqlite",
+              "mode": "statement",
+              "mutation": false,
+              "compile": {
+                "min_ms": 1.253142,
+                "mean_ms": 1.47450691,
+                "p50_ms": 1.4761115,
+                "p95_ms": 1.6134719999999998,
+                "p99_ms": 1.7027599000000002,
+                "max_ms": 1.715422
+              },
+              "execute": {
+                "min_ms": 18.613477,
+                "mean_ms": 19.199671350000003,
+                "p50_ms": 19.088569,
+                "p95_ms": 20.15314695,
+                "p99_ms": 20.31683049,
+                "max_ms": 20.581209
+              },
+              "end_to_end": {
+                "min_ms": 19.868889,
+                "mean_ms": 20.67726216,
+                "p50_ms": 20.559274,
+                "p95_ms": 21.7581165,
+                "p99_ms": 22.022186,
+                "max_ms": 22.179101
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "oltp_relationship_note_lookup",
+              "workload": "oltp",
+              "category": "relationship-read",
+              "backend": "sqlite",
+              "mode": "statement",
+              "mutation": false,
+              "compile": {
+                "min_ms": 1.044151,
+                "mean_ms": 1.0679592900000001,
+                "p50_ms": 1.066226,
+                "p95_ms": 1.090704,
+                "p99_ms": 1.0990904,
+                "max_ms": 1.102001
+              },
+              "execute": {
+                "min_ms": 0.02136,
+                "mean_ms": 0.02232085,
+                "p50_ms": 0.02197,
+                "p95_ms": 0.024057499999999992,
+                "p99_ms": 0.0283014,
+                "max_ms": 0.02844
+              },
+              "end_to_end": {
+                "min_ms": 1.066791,
+                "mean_ms": 1.09120834,
+                "p50_ms": 1.089286,
+                "p95_ms": 1.1142819499999999,
+                "p99_ms": 1.1227817,
+                "max_ms": 1.125821
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "oltp_bounded_two_hop",
+              "workload": "oltp",
+              "category": "bounded-traversal",
+              "backend": "sqlite",
+              "mode": "statement",
+              "mutation": false,
+              "compile": {
+                "min_ms": 1.173981,
+                "mean_ms": 1.21860776,
+                "p50_ms": 1.215046,
+                "p95_ms": 1.245573,
+                "p99_ms": 1.2575519,
+                "max_ms": 1.258631
+              },
+              "execute": {
+                "min_ms": 0.0331,
+                "mean_ms": 0.034413339999999994,
+                "p50_ms": 0.034195,
+                "p95_ms": 0.0362275,
+                "p99_ms": 0.038656600000000006,
+                "max_ms": 0.0403
+              },
+              "end_to_end": {
+                "min_ms": 1.211761,
+                "mean_ms": 1.2540012,
+                "p50_ms": 1.2500365,
+                "p95_ms": 1.2809725,
+                "p99_ms": 1.29407999,
+                "max_ms": 1.294871
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "oltp_case_projection",
+              "workload": "oltp",
+              "category": "projection-read",
+              "backend": "sqlite",
+              "mode": "statement",
+              "mutation": false,
+              "compile": {
+                "min_ms": 0.80033,
+                "mean_ms": 0.81724389,
+                "p50_ms": 0.815761,
+                "p95_ms": 0.8270580500000001,
+                "p99_ms": 0.8744196000000002,
+                "max_ms": 0.904971
+              },
+              "execute": {
+                "min_ms": 0.01622,
+                "mean_ms": 0.017217,
+                "p50_ms": 0.01666,
+                "p95_ms": 0.01783299999999999,
+                "p99_ms": 0.02554230000000012,
+                "max_ms": 0.04854
+              },
+              "end_to_end": {
+                "min_ms": 0.81812,
+                "mean_ms": 0.8353187,
+                "p50_ms": 0.833756,
+                "p95_ms": 0.8486439499999999,
+                "p99_ms": 0.8918674000000001,
+                "max_ms": 0.923191
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "oltp_with_rebound_projection",
+              "workload": "oltp",
+              "category": "with-read",
+              "backend": "sqlite",
+              "mode": "statement",
+              "mutation": false,
+              "compile": {
+                "min_ms": 1.000421,
+                "mean_ms": 1.01561948,
+                "p50_ms": 1.014576,
+                "p95_ms": 1.0303605,
+                "p99_ms": 1.0332847,
+                "max_ms": 1.033651
+              },
+              "execute": {
+                "min_ms": 0.01363,
+                "mean_ms": 0.01465531,
+                "p50_ms": 0.014455,
+                "p95_ms": 0.0156815,
+                "p99_ms": 0.019773300000000008,
+                "max_ms": 0.02109
+              },
+              "end_to_end": {
+                "min_ms": 1.015161,
+                "mean_ms": 1.03112789,
+                "p50_ms": 1.030006,
+                "p95_ms": 1.04523,
+                "p99_ms": 1.0487333,
+                "max_ms": 1.048961
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "oltp_create_user_program",
+              "workload": "oltp",
+              "category": "create",
+              "backend": "sqlite",
+              "mode": "program",
+              "mutation": true,
+              "compile": {
+                "min_ms": 1.427191,
+                "mean_ms": 1.46030798,
+                "p50_ms": 1.457156,
+                "p95_ms": 1.48300995,
+                "p99_ms": 1.5709664100000003,
+                "max_ms": 1.607142
+              },
+              "execute": {
+                "min_ms": 0.05195,
+                "mean_ms": 0.05482718,
+                "p50_ms": 0.054315,
+                "p95_ms": 0.059002,
+                "p99_ms": 0.06353440000000002,
+                "max_ms": 0.06694
+              },
+              "end_to_end": {
+                "min_ms": 1.483761,
+                "mean_ms": 1.51604966,
+                "p50_ms": 1.512902,
+                "p95_ms": 1.5369734499999999,
+                "p99_ms": 1.6271203100000002,
+                "max_ms": 1.661702
+              },
+              "reset": {
+                "min_ms": 0.01449,
+                "mean_ms": 0.01529591,
+                "p50_ms": 0.01505,
+                "p95_ms": 0.016345,
+                "p99_ms": 0.018811900000000017,
+                "max_ms": 0.02197
+              }
+            },
+            {
+              "name": "oltp_update_user_score",
+              "workload": "oltp",
+              "category": "update",
+              "backend": "sqlite",
+              "mode": "statement",
+              "mutation": true,
+              "compile": {
+                "min_ms": 0.649441,
+                "mean_ms": 0.6673414200000001,
+                "p50_ms": 0.6665855,
+                "p95_ms": 0.6748875,
+                "p99_ms": 0.6877572900000002,
+                "max_ms": 0.71709
+              },
+              "execute": {
+                "min_ms": 0.02383,
+                "mean_ms": 0.02477703,
+                "p50_ms": 0.024515,
+                "p95_ms": 0.025663499999999992,
+                "p99_ms": 0.029199800000000022,
+                "max_ms": 0.03314
+              },
+              "end_to_end": {
+                "min_ms": 0.674021,
+                "mean_ms": 0.6928960500000001,
+                "p50_ms": 0.692285,
+                "p95_ms": 0.700493,
+                "p99_ms": 0.7133310900000002,
+                "max_ms": 0.74205
+              },
+              "reset": {
+                "min_ms": 0.01155,
+                "mean_ms": 0.01329333,
+                "p50_ms": 0.013595,
+                "p95_ms": 0.0141805,
+                "p99_ms": 0.014600700000000032,
+                "max_ms": 0.02061
+              }
+            },
+            {
+              "name": "oltp_delete_knows_relationship",
+              "workload": "oltp",
+              "category": "delete",
+              "backend": "sqlite",
+              "mode": "statement",
+              "mutation": true,
+              "compile": {
+                "min_ms": 0.825691,
+                "mean_ms": 0.84800142,
+                "p50_ms": 0.8478205,
+                "p95_ms": 0.8615695,
+                "p99_ms": 0.8754892000000002,
+                "max_ms": 0.921841
+              },
+              "execute": {
+                "min_ms": 0.03267,
+                "mean_ms": 0.03423192,
+                "p50_ms": 0.0336555,
+                "p95_ms": 0.03598799999999999,
+                "p99_ms": 0.04139429000000001,
+                "max_ms": 0.04271
+              },
+              "end_to_end": {
+                "min_ms": 0.861731,
+                "mean_ms": 0.88309314,
+                "p50_ms": 0.8823305,
+                "p95_ms": 0.8962385500000001,
+                "p99_ms": 0.9110906000000002,
+                "max_ms": 0.957581
+              },
+              "reset": {
+                "min_ms": 0.01215,
+                "mean_ms": 0.014169909999999999,
+                "p50_ms": 0.01416,
+                "p95_ms": 0.0147435,
+                "p99_ms": 0.020503800000000003,
+                "max_ms": 0.02088
+              }
+            }
+          ]
+        }
+      },
+      "olap": {
+        "description": "Analytical read queries measured on SQLite and DuckDB over the same type-aware SQLite fixture.",
+        "sqlite": {
+          "backend": "sqlite",
+          "iterations": 100,
+          "warmup": 5,
+          "query_count": 10,
+          "setup": {
+            "connect_ms": 0.38619,
+            "schema_ms": 9.56892,
+            "index_ms": 0.34136,
+            "ingest_ms": 3171.27834,
+            "analyze_ms": 219.58561
+          },
+          "row_counts": {
+            "node_count": 101000,
+            "edge_count": 400000
+          },
+          "compile": {
+            "mean_of_mean_ms": 1.5097384889999999,
+            "mean_of_p50_ms": 1.4891434000000001,
+            "mean_of_p95_ms": 1.64540519,
+            "mean_of_p99_ms": 1.7468085470000005
+          },
+          "execute": {
+            "mean_of_mean_ms": 139.808304301,
+            "mean_of_p50_ms": 139.3363987,
+            "mean_of_p95_ms": 144.14647155,
+            "mean_of_p99_ms": 146.021741917
+          },
+          "end_to_end": {
+            "mean_of_mean_ms": 141.32123316099998,
+            "mean_of_p50_ms": 140.8566992,
+            "mean_of_p95_ms": 145.74857191499999,
+            "mean_of_p99_ms": 147.621982637
+          },
+          "reset": {
+            "mean_of_mean_ms": 0.0,
+            "mean_of_p50_ms": 0.0,
+            "mean_of_p95_ms": 0.0,
+            "mean_of_p99_ms": 0.0
+          },
+          "queries": [
+            {
+              "name": "olap_user_count",
+              "workload": "olap",
+              "category": "aggregate",
+              "backend": "sqlite",
+              "mode": "statement",
+              "mutation": false,
+              "compile": {
+                "min_ms": 0.382761,
+                "mean_ms": 0.40523137,
+                "p50_ms": 0.3972205,
+                "p95_ms": 0.46658544999999996,
+                "p99_ms": 0.4997762900000002,
+                "max_ms": 0.53396
+              },
+              "execute": {
+                "min_ms": 0.03319,
+                "mean_ms": 0.03492705,
+                "p50_ms": 0.03423,
+                "p95_ms": 0.03935449999999999,
+                "p99_ms": 0.04486680000000002,
+                "max_ms": 0.04851
+              },
+              "end_to_end": {
+                "min_ms": 0.417541,
+                "mean_ms": 0.44099432,
+                "p50_ms": 0.4321055,
+                "p95_ms": 0.5110165,
+                "p99_ms": 0.5458698900000001,
+                "max_ms": 0.57843
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_users_per_company",
+              "workload": "olap",
+              "category": "grouped-count",
+              "backend": "sqlite",
+              "mode": "statement",
+              "mutation": false,
+              "compile": {
+                "min_ms": 1.537101,
+                "mean_ms": 1.7009853300000002,
+                "p50_ms": 1.6718865,
+                "p95_ms": 1.9007829999999997,
+                "p99_ms": 2.1203931100000024,
+                "max_ms": 2.540263
+              },
+              "execute": {
+                "min_ms": 41.225389,
+                "mean_ms": 43.4591108,
+                "p50_ms": 42.868071,
+                "p95_ms": 46.1056985,
+                "p99_ms": 46.99981221,
+                "max_ms": 47.810346
+              },
+              "end_to_end": {
+                "min_ms": 42.8167,
+                "mean_ms": 45.163754340000004,
+                "p50_ms": 44.588723,
+                "p95_ms": 47.919256,
+                "p99_ms": 48.93814690000001,
+                "max_ms": 49.664797
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_avg_score_per_name",
+              "workload": "olap",
+              "category": "grouped-average",
+              "backend": "sqlite",
+              "mode": "statement",
+              "mutation": false,
+              "compile": {
+                "min_ms": 1.319301,
+                "mean_ms": 1.38776203,
+                "p50_ms": 1.3657965,
+                "p95_ms": 1.483557,
+                "p99_ms": 1.6382474900000004,
+                "max_ms": 1.724921
+              },
+              "execute": {
+                "min_ms": 109.744495,
+                "mean_ms": 112.49707708,
+                "p50_ms": 112.033042,
+                "p95_ms": 116.72260595,
+                "p99_ms": 118.34992537000004,
+                "max_ms": 125.39401
+              },
+              "end_to_end": {
+                "min_ms": 111.087496,
+                "mean_ms": 113.88879621,
+                "p50_ms": 113.4282335,
+                "p95_ms": 118.205154,
+                "p99_ms": 119.81583327000004,
+                "max_ms": 126.881391
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_min_max_age",
+              "workload": "olap",
+              "category": "extrema",
+              "backend": "sqlite",
+              "mode": "statement",
+              "mutation": false,
+              "compile": {
+                "min_ms": 0.74331,
+                "mean_ms": 0.9436338000000001,
+                "p50_ms": 0.913736,
+                "p95_ms": 1.21549245,
+                "p99_ms": 1.3324559900000017,
+                "max_ms": 1.652621
+              },
+              "execute": {
+                "min_ms": 8.001108,
+                "mean_ms": 9.014267519999999,
+                "p50_ms": 8.9270935,
+                "p95_ms": 9.5690765,
+                "p99_ms": 9.9137328,
+                "max_ms": 10.02984
+              },
+              "end_to_end": {
+                "min_ms": 8.875178,
+                "mean_ms": 9.95979532,
+                "p50_ms": 9.874169,
+                "p95_ms": 10.67423005,
+                "p99_ms": 10.94233341,
+                "max_ms": 11.117901
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_age_math_projection",
+              "workload": "olap",
+              "category": "math",
+              "backend": "sqlite",
+              "mode": "statement",
+              "mutation": false,
+              "compile": {
+                "min_ms": 1.986412,
+                "mean_ms": 2.0517923899999997,
+                "p50_ms": 2.038107,
+                "p95_ms": 2.1561159500000002,
+                "p99_ms": 2.2211277000000007,
+                "max_ms": 2.313762
+              },
+              "execute": {
+                "min_ms": 85.448592,
+                "mean_ms": 86.96075175,
+                "p50_ms": 86.570048,
+                "p95_ms": 89.3363995,
+                "p99_ms": 90.90532083000001,
+                "max_ms": 94.17171
+              },
+              "end_to_end": {
+                "min_ms": 87.456644,
+                "mean_ms": 89.01630104,
+                "p50_ms": 88.63377,
+                "p95_ms": 91.6386025,
+                "p99_ms": 92.94323523000001,
+                "max_ms": 96.164322
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_score_math_projection",
+              "workload": "olap",
+              "category": "math",
+              "backend": "sqlite",
+              "mode": "statement",
+              "mutation": false,
+              "compile": {
+                "min_ms": 1.701762,
+                "mean_ms": 1.76725829,
+                "p50_ms": 1.7485815,
+                "p95_ms": 1.88766045,
+                "p99_ms": 1.9182838,
+                "max_ms": 1.919452
+              },
+              "execute": {
+                "min_ms": 91.044557,
+                "mean_ms": 92.67103881,
+                "p50_ms": 92.4877785,
+                "p95_ms": 94.73308955,
+                "p99_ms": 95.40111511000002,
+                "max_ms": 97.352713
+              },
+              "end_to_end": {
+                "min_ms": 92.935459,
+                "mean_ms": 94.44248440000001,
+                "p50_ms": 94.2458905,
+                "p95_ms": 96.65516655,
+                "p99_ms": 97.26432992000002,
+                "max_ms": 99.216305
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_predicates",
+              "workload": "olap",
+              "category": "predicate",
+              "backend": "sqlite",
+              "mode": "statement",
+              "mutation": false,
+              "compile": {
+                "min_ms": 1.651082,
+                "mean_ms": 1.73557281,
+                "p50_ms": 1.7191815,
+                "p95_ms": 1.858083,
+                "p99_ms": 1.9862142000000012,
+                "max_ms": 2.187402
+              },
+              "execute": {
+                "min_ms": 58.218046,
+                "mean_ms": 59.756367350000005,
+                "p50_ms": 59.285692,
+                "p95_ms": 62.598092,
+                "p99_ms": 64.3382016,
+                "max_ms": 64.589721
+              },
+              "end_to_end": {
+                "min_ms": 59.909528,
+                "mean_ms": 61.49557046,
+                "p50_ms": 61.0323735,
+                "p95_ms": 64.3504105,
+                "p99_ms": 66.2855896,
+                "max_ms": 66.578293
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_relationship_stats",
+              "workload": "olap",
+              "category": "relationship-aggregate",
+              "backend": "sqlite",
+              "mode": "statement",
+              "mutation": false,
+              "compile": {
+                "min_ms": 1.508912,
+                "mean_ms": 1.6082364299999998,
+                "p50_ms": 1.5867965,
+                "p95_ms": 1.7372490499999997,
+                "p99_ms": 1.9069586900000002,
+                "max_ms": 1.946231
+              },
+              "execute": {
+                "min_ms": 173.955216,
+                "mean_ms": 177.5089247,
+                "p50_ms": 176.5413735,
+                "p95_ms": 182.367295,
+                "p99_ms": 186.87657341,
+                "max_ms": 187.86008
+              },
+              "end_to_end": {
+                "min_ms": 175.505987,
+                "mean_ms": 179.12135512999998,
+                "p50_ms": 178.14476,
+                "p95_ms": 183.9858285,
+                "p99_ms": 188.5175391,
+                "max_ms": 189.533091
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_relationship_projection",
+              "workload": "olap",
+              "category": "relationship-projection",
+              "backend": "sqlite",
+              "mode": "statement",
+              "mutation": false,
+              "compile": {
+                "min_ms": 2.231172,
+                "mean_ms": 2.3110861099999997,
+                "p50_ms": 2.284842,
+                "p95_ms": 2.48486905,
+                "p99_ms": 2.5494265,
+                "max_ms": 2.566603
+              },
+              "execute": {
+                "min_ms": 791.554917,
+                "mean_ms": 816.15144341,
+                "p50_ms": 814.5882185,
+                "p95_ms": 839.959989,
+                "p99_ms": 847.3500423400001,
+                "max_ms": 851.961694
+              },
+              "end_to_end": {
+                "min_ms": 793.852159,
+                "mean_ms": 818.46736672,
+                "p50_ms": 816.9908005,
+                "p95_ms": 842.2518060499999,
+                "p99_ms": 849.64145774,
+                "max_ms": 854.450456
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_bounded_reachability",
+              "workload": "olap",
+              "category": "bounded-traversal",
+              "backend": "sqlite",
+              "mode": "statement",
+              "mutation": false,
+              "compile": {
+                "min_ms": 1.119691,
+                "mean_ms": 1.18582633,
+                "p50_ms": 1.165286,
+                "p95_ms": 1.2636565,
+                "p99_ms": 1.2952017000000005,
+                "max_ms": 1.394271
+              },
+              "execute": {
+                "min_ms": 0.026351,
+                "mean_ms": 0.02913454,
+                "p50_ms": 0.02844,
+                "p95_ms": 0.033115,
+                "p99_ms": 0.03782870000000015,
+                "max_ms": 0.0674
+              },
+              "end_to_end": {
+                "min_ms": 1.148441,
+                "mean_ms": 1.21591367,
+                "p50_ms": 1.1961665,
+                "p95_ms": 1.2942485,
+                "p99_ms": 1.3254913100000005,
+                "max_ms": 1.421552
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            }
+          ]
+        },
+        "duckdb": {
+          "backend": "duckdb",
+          "iterations": 100,
+          "warmup": 5,
+          "query_count": 10,
+          "setup": {
+            "connect_ms": 24.166063,
+            "schema_ms": 67.941875,
+            "index_ms": 0.0,
+            "ingest_ms": 0.0
+          },
+          "row_counts": {
+            "node_count": 101000,
+            "edge_count": 400000
+          },
+          "compile": {
+            "mean_of_mean_ms": 4.768679779,
+            "mean_of_p50_ms": 4.7244551,
+            "mean_of_p95_ms": 5.220616285,
+            "mean_of_p99_ms": 5.592142144000002
+          },
+          "execute": {
+            "mean_of_mean_ms": 48.39483167,
+            "mean_of_p50_ms": 48.1145279,
+            "mean_of_p95_ms": 51.76580546,
+            "mean_of_p99_ms": 53.66475036800002
+          },
+          "end_to_end": {
+            "mean_of_mean_ms": 53.167982683000005,
+            "mean_of_p50_ms": 52.8785451,
+            "mean_of_p95_ms": 56.774003705,
+            "mean_of_p99_ms": 58.81225341400002
+          },
+          "reset": {
+            "mean_of_mean_ms": 0.0,
+            "mean_of_p50_ms": 0.0,
+            "mean_of_p95_ms": 0.0,
+            "mean_of_p99_ms": 0.0
+          },
+          "queries": [
+            {
+              "name": "olap_user_count",
+              "workload": "olap",
+              "category": "aggregate",
+              "backend": "duckdb",
+              "mode": "statement",
+              "mutation": false,
+              "compile": {
+                "min_ms": 2.043312,
+                "mean_ms": 2.42367269,
+                "p50_ms": 2.400382,
+                "p95_ms": 2.8461904500000004,
+                "p99_ms": 2.9754611,
+                "max_ms": 2.982203
+              },
+              "execute": {
+                "min_ms": 8.517948,
+                "mean_ms": 9.35812707,
+                "p50_ms": 9.151213,
+                "p95_ms": 11.015023,
+                "p99_ms": 11.198723200000005,
+                "max_ms": 12.096871
+              },
+              "end_to_end": {
+                "min_ms": 10.63631,
+                "mean_ms": 11.78468366,
+                "p50_ms": 11.603831,
+                "p95_ms": 13.504974,
+                "p99_ms": 14.140431690000002,
+                "max_ms": 14.479773
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_users_per_company",
+              "workload": "olap",
+              "category": "grouped-count",
+              "backend": "duckdb",
+              "mode": "statement",
+              "mutation": false,
+              "compile": {
+                "min_ms": 3.528843,
+                "mean_ms": 3.97826987,
+                "p50_ms": 3.913899,
+                "p95_ms": 4.493909,
+                "p99_ms": 4.689566010000002,
+                "max_ms": 5.029335
+              },
+              "execute": {
+                "min_ms": 19.475349,
+                "mean_ms": 21.42627249,
+                "p50_ms": 21.173575,
+                "p95_ms": 23.306415,
+                "p99_ms": 25.178000630000014,
+                "max_ms": 27.637817
+              },
+              "end_to_end": {
+                "min_ms": 23.007212,
+                "mean_ms": 25.40865137,
+                "p50_ms": 25.103659,
+                "p95_ms": 27.3795325,
+                "p99_ms": 29.489288830000014,
+                "max_ms": 31.867351
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_avg_score_per_name",
+              "workload": "olap",
+              "category": "grouped-average",
+              "backend": "duckdb",
+              "mode": "statement",
+              "mutation": false,
+              "compile": {
+                "min_ms": 3.193793,
+                "mean_ms": 3.3403533,
+                "p50_ms": 3.3079985,
+                "p95_ms": 3.59500795,
+                "p99_ms": 3.8249840000000024,
+                "max_ms": 4.306124
+              },
+              "execute": {
+                "min_ms": 32.12938,
+                "mean_ms": 36.20356789,
+                "p50_ms": 36.0397595,
+                "p95_ms": 39.619589049999995,
+                "p99_ms": 40.14941531,
+                "max_ms": 40.684739
+              },
+              "end_to_end": {
+                "min_ms": 35.434143,
+                "mean_ms": 39.548277090000006,
+                "p50_ms": 39.487243,
+                "p95_ms": 43.06953295,
+                "p99_ms": 43.8390677,
+                "max_ms": 44.101982
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_min_max_age",
+              "workload": "olap",
+              "category": "extrema",
+              "backend": "duckdb",
+              "mode": "statement",
+              "mutation": false,
+              "compile": {
+                "min_ms": 2.648283,
+                "mean_ms": 2.96732235,
+                "p50_ms": 2.9379225,
+                "p95_ms": 3.436137,
+                "p99_ms": 3.8672133100000012,
+                "max_ms": 4.110784
+              },
+              "execute": {
+                "min_ms": 9.582409,
+                "mean_ms": 10.11522106,
+                "p50_ms": 10.05873,
+                "p95_ms": 10.7214785,
+                "p99_ms": 11.614760200000003,
+                "max_ms": 12.128491
+              },
+              "end_to_end": {
+                "min_ms": 12.284381,
+                "mean_ms": 13.08588651,
+                "p50_ms": 12.9741325,
+                "p95_ms": 13.952785449999999,
+                "p99_ms": 14.844327710000005,
+                "max_ms": 15.618875
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_age_math_projection",
+              "workload": "olap",
+              "category": "math",
+              "backend": "duckdb",
+              "mode": "statement",
+              "mutation": false,
+              "compile": {
+                "min_ms": 9.378599,
+                "mean_ms": 10.08747592,
+                "p50_ms": 10.059985,
+                "p95_ms": 10.682445,
+                "p99_ms": 11.2564504,
+                "max_ms": 11.368261
+              },
+              "execute": {
+                "min_ms": 33.684022,
+                "mean_ms": 36.930126,
+                "p50_ms": 36.64187,
+                "p95_ms": 39.2086465,
+                "p99_ms": 40.37604956000004,
+                "max_ms": 47.471435
+              },
+              "end_to_end": {
+                "min_ms": 44.009322,
+                "mean_ms": 47.023159920000005,
+                "p50_ms": 46.619979,
+                "p95_ms": 49.81625655,
+                "p99_ms": 51.10889147000004,
+                "max_ms": 58.101506
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_score_math_projection",
+              "workload": "olap",
+              "category": "math",
+              "backend": "duckdb",
+              "mode": "statement",
+              "mutation": false,
+              "compile": {
+                "min_ms": 3.961043,
+                "mean_ms": 4.29977892,
+                "p50_ms": 4.207414,
+                "p95_ms": 4.736695,
+                "p99_ms": 6.109063400000001,
+                "max_ms": 6.307796
+              },
+              "execute": {
+                "min_ms": 32.965352,
+                "mean_ms": 35.95602224,
+                "p50_ms": 35.2983885,
+                "p95_ms": 40.274137950000004,
+                "p99_ms": 44.67370946000004,
+                "max_ms": 51.334079
+              },
+              "end_to_end": {
+                "min_ms": 36.930915,
+                "mean_ms": 40.26089587,
+                "p50_ms": 39.554828,
+                "p95_ms": 45.189804949999996,
+                "p99_ms": 49.42503658000004,
+                "max_ms": 57.446965
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_predicates",
+              "workload": "olap",
+              "category": "predicate",
+              "backend": "duckdb",
+              "mode": "statement",
+              "mutation": false,
+              "compile": {
+                "min_ms": 3.606794,
+                "mean_ms": 4.02990514,
+                "p50_ms": 3.991859,
+                "p95_ms": 4.602657450000001,
+                "p99_ms": 4.7118947,
+                "max_ms": 4.753544
+              },
+              "execute": {
+                "min_ms": 19.586068,
+                "mean_ms": 20.95164723,
+                "p50_ms": 20.77823,
+                "p95_ms": 22.6641925,
+                "p99_ms": 23.396518650000033,
+                "max_ms": 29.515278
+              },
+              "end_to_end": {
+                "min_ms": 23.373772,
+                "mean_ms": 24.985890480000002,
+                "p50_ms": 24.782179,
+                "p95_ms": 27.311764,
+                "p99_ms": 28.112270450000032,
+                "max_ms": 34.132802
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_relationship_stats",
+              "workload": "olap",
+              "category": "relationship-aggregate",
+              "backend": "duckdb",
+              "mode": "statement",
+              "mutation": false,
+              "compile": {
+                "min_ms": 3.582353,
+                "mean_ms": 3.91422595,
+                "p50_ms": 3.883349,
+                "p95_ms": 4.2524385,
+                "p99_ms": 4.4529165000000015,
+                "max_ms": 4.877775
+              },
+              "execute": {
+                "min_ms": 60.073987,
+                "mean_ms": 67.9497916,
+                "p50_ms": 67.78709,
+                "p95_ms": 75.45917005,
+                "p99_ms": 80.4893938,
+                "max_ms": 81.287017
+              },
+              "end_to_end": {
+                "min_ms": 64.009761,
+                "mean_ms": 71.86897505,
+                "p50_ms": 71.7971735,
+                "p95_ms": 79.56085555,
+                "p99_ms": 84.67982971,
+                "max_ms": 86.171632
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_relationship_projection",
+              "workload": "olap",
+              "category": "relationship-projection",
+              "backend": "duckdb",
+              "mode": "statement",
+              "mutation": false,
+              "compile": {
+                "min_ms": 7.271107,
+                "mean_ms": 7.7238835,
+                "p50_ms": 7.658687,
+                "p95_ms": 8.194677,
+                "p99_ms": 8.44490602000001,
+                "max_ms": 10.55143
+              },
+              "execute": {
+                "min_ms": 149.142613,
+                "mean_ms": 157.15384321000002,
+                "p50_ms": 156.342534,
+                "p95_ms": 163.76941455000002,
+                "p99_ms": 166.36115691,
+                "max_ms": 167.11236
+              },
+              "end_to_end": {
+                "min_ms": 156.58274,
+                "mean_ms": 164.88294562000002,
+                "p50_ms": 164.023787,
+                "p95_ms": 171.5060851,
+                "p99_ms": 174.02521524000002,
+                "max_ms": 177.67032
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_bounded_reachability",
+              "workload": "olap",
+              "category": "bounded-traversal",
+              "backend": "duckdb",
+              "mode": "statement",
+              "mutation": false,
+              "compile": {
+                "min_ms": 4.489684,
+                "mean_ms": 4.92191015,
+                "p50_ms": 4.883055,
+                "p95_ms": 5.3660055,
+                "p99_ms": 5.588966000000001,
+                "max_ms": 5.724695
+              },
+              "execute": {
+                "min_ms": 83.9831,
+                "mean_ms": 87.90369790999999,
+                "p50_ms": 87.873889,
+                "p95_ms": 91.6199875,
+                "p99_ms": 93.20977596000004,
+                "max_ms": 99.362325
+              },
+              "end_to_end": {
+                "min_ms": 88.725885,
+                "mean_ms": 92.83046126,
+                "p50_ms": 92.838639,
+                "p95_ms": 96.448446,
+                "p99_ms": 98.45817476000003,
+                "max_ms": 104.34281
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            }
+          ]
         }
       }
-    ]
+    }
   }
 }

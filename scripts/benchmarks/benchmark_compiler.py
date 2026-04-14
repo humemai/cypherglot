@@ -1,3 +1,11 @@
+"""Benchmark CypherGlot compiler throughput across representative corpora.
+
+This script runs the main CypherGlot compiler entrypoints over the benchmark
+corpus, optionally compares comparable SQL workloads against sqlglot, and
+writes a JSON baseline with timing summaries, environment metadata, and corpus
+configuration details.
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -44,6 +52,14 @@ DEFAULT_OUTPUT_PATH = (
 )
 SQLGLOT_READ_DIALECT = "postgres"
 SQLGLOT_WRITE_DIALECT = "sqlite"
+SCHEMA_REQUIRED_ENTRYPOINTS = frozenset(
+    {
+        "to_sqlglot_ast",
+        "to_sql",
+        "to_sqlglot_program",
+        "render_cypher_program_text",
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,6 +97,85 @@ DEFAULT_ENTRYPOINT_ORDER: tuple[str, ...] = (
     "to_sqlglot_program",
     "render_cypher_program_text",
 )
+
+
+def _benchmark_schema_context(cypherglot_module):
+    return cypherglot_module.CompilerSchemaContext.type_aware(
+        cypherglot_module.GraphSchema(
+            node_types=(
+                cypherglot_module.NodeTypeSpec(
+                    name="User",
+                    properties=(
+                        cypherglot_module.PropertyField("name", "string"),
+                        cypherglot_module.PropertyField("age", "integer"),
+                        cypherglot_module.PropertyField("score", "float"),
+                        cypherglot_module.PropertyField("active", "boolean"),
+                    ),
+                ),
+                cypherglot_module.NodeTypeSpec(
+                    name="Company",
+                    properties=(
+                        cypherglot_module.PropertyField("name", "string"),
+                    ),
+                ),
+                cypherglot_module.NodeTypeSpec(
+                    name="Person",
+                    properties=(
+                        cypherglot_module.PropertyField("name", "string"),
+                    ),
+                ),
+            ),
+            edge_types=(
+                cypherglot_module.EdgeTypeSpec(
+                    name="KNOWS",
+                    source_type="User",
+                    target_type="User",
+                    properties=(
+                        cypherglot_module.PropertyField("note", "string"),
+                        cypherglot_module.PropertyField("weight", "float"),
+                        cypherglot_module.PropertyField("score", "float"),
+                        cypherglot_module.PropertyField("active", "boolean"),
+                    ),
+                ),
+                cypherglot_module.EdgeTypeSpec(
+                    name="WORKS_AT",
+                    source_type="User",
+                    target_type="Company",
+                    properties=(
+                        cypherglot_module.PropertyField("since", "integer"),
+                    ),
+                ),
+                cypherglot_module.EdgeTypeSpec(
+                    name="INTRODUCED",
+                    source_type="User",
+                    target_type="Person",
+                ),
+            ),
+        )
+    )
+
+
+def _benchmark_schema_metadata(schema_context) -> dict[str, object]:
+    graph_schema = schema_context.graph_schema
+    assert graph_schema is not None
+    return {
+        "layout": schema_context.layout,
+        "node_types": [node_type.name for node_type in graph_schema.node_types],
+        "edge_types": [edge_type.name for edge_type in graph_schema.edge_types],
+    }
+
+
+def _benchmark_entrypoint_callable(
+    cypherglot_module,
+    *,
+    label: str,
+) -> Callable[[str], object]:
+    func = getattr(cypherglot_module, CYPHERGLOT_ENTRYPOINT_ATTRS[label])
+    if label not in SCHEMA_REQUIRED_ENTRYPOINTS:
+        return func
+
+    schema_context = _benchmark_schema_context(cypherglot_module)
+    return lambda query: func(query, schema_context=schema_context)
 
 
 def _parse_args() -> argparse.Namespace:
@@ -123,7 +218,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--sqlglot-mode",
         choices=("installed", "python", "both", "off"),
-        default="installed",
+        default="both",
         help=(
             "Which SQLGlot implementation(s) to benchmark: the currently installed "
             "package layout, a pure-Python fallback copy, both, or none."
@@ -379,7 +474,7 @@ def _entrypoint_result(
     warmup: int,
 ) -> dict[str, object]:
     cypherglot_module = _import_cypherglot()
-    func = getattr(cypherglot_module, CYPHERGLOT_ENTRYPOINT_ATTRS[label])
+    func = _benchmark_entrypoint_callable(cypherglot_module, label=label)
     per_query: list[dict[str, object]] = []
     all_latencies_ns: list[int] = []
     applicable_queries = [query for query in queries if label in query.entrypoints]
@@ -620,6 +715,14 @@ def main() -> int:
         "python_version": platform.python_version(),
         "platform": platform.platform(),
         "cypherglot_version": cypherglot_module.__version__,
+        "schema_contract": {
+            "layout": "type-aware",
+            "emitted_sql": "strict-relational",
+            "release_subset": "admitted-v0.1.0",
+        },
+        "benchmark_schema": _benchmark_schema_metadata(
+            _benchmark_schema_context(cypherglot_module)
+        ),
         "corpus_path": str(args.corpus),
         "query_count": len(queries),
         "results": cypherglot_results,

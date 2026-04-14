@@ -32,6 +32,17 @@ from .normalize import (
     normalize_cypher_text,
 )
 from .parser import CypherParseResult, CypherSyntaxError, parse_cypher_text
+from .schema import (
+    CompilerSchemaContext,
+    EdgeTypeSpec,
+    GraphSchema,
+    NodeTypeSpec,
+    PropertyField,
+    SchemaContractError,
+    edge_table_name,
+    node_table_name,
+    property_column_name,
+)
 from .validate import validate_cypher_parse_result, validate_cypher_text
 
 
@@ -64,14 +75,23 @@ __all__ = [
     "compile_cypher_text",
     "compile_normalized_cypher_program",
     "compile_normalized_cypher_statement",
+    "CompilerSchemaContext",
+    "edge_table_name",
     "normalize_cypher_parse_result",
     "normalize_cypher_text",
+    "EdgeTypeSpec",
+    "GraphSchema",
+    "NodeTypeSpec",
     "parse_cypher_text",
+    "property_column_name",
+    "PropertyField",
     "render_compiled_cypher_program",
     "render_cypher_program_text",
+    "SchemaContractError",
     "to_sql",
     "to_sqlglot_ast",
     "to_sqlglot_program",
     "validate_cypher_parse_result",
     "validate_cypher_text",
+    "node_table_name",
 ]

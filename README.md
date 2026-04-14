@@ -60,61 +60,62 @@ CypherGlot’s output is schema-aware. If you want to execute its compiled SQL,
 your runtime needs to provide the graph-to-table layout that the compiler
 expects.
 
-The current tested downstream SQLite contract is:
+The repo is moving from the legacy generic JSON-backed graph layout toward a
+generated type-aware schema contract.
+
+The long-term target contract is:
+
+- one table per node type
+- one table per edge type
+- typed property columns instead of one catch-all JSON `properties` blob
+- explicit `from_id` and `to_id` foreign keys on edge tables
+- traversal-oriented indexes on generated edge tables
+
+For a graph schema with node types `User` and `Company`, and an edge type
+`WORKS_AT(User -> Company)`, the target SQLite contract looks like:
 
 ```sql
 PRAGMA foreign_keys = ON;
+PRAGMA journal_mode = WAL;
+PRAGMA synchronous = NORMAL;
 
-CREATE TABLE nodes (
+CREATE TABLE cg_node_user (
   id INTEGER PRIMARY KEY,
-  properties TEXT NOT NULL DEFAULT '{}',
-  CHECK (json_valid(properties)),
-  CHECK (json_type(properties) = 'object')
+  name TEXT NOT NULL,
+  age INTEGER
 ) STRICT;
 
-CREATE TABLE edges (
+CREATE TABLE cg_node_company (
   id INTEGER PRIMARY KEY,
-  type TEXT NOT NULL,
+  name TEXT NOT NULL
+) STRICT;
+
+CREATE TABLE cg_edge_works_at (
+  id INTEGER PRIMARY KEY,
   from_id INTEGER NOT NULL,
   to_id INTEGER NOT NULL,
-  properties TEXT NOT NULL DEFAULT '{}',
-  CHECK (json_valid(properties)),
-  CHECK (json_type(properties) = 'object'),
-  FOREIGN KEY (from_id) REFERENCES nodes(id) ON DELETE CASCADE,
-  FOREIGN KEY (to_id) REFERENCES nodes(id) ON DELETE CASCADE
+  since INTEGER,
+  FOREIGN KEY (from_id) REFERENCES cg_node_user(id) ON DELETE CASCADE,
+  FOREIGN KEY (to_id) REFERENCES cg_node_company(id) ON DELETE CASCADE
 ) STRICT;
 
-CREATE TABLE node_labels (
-  node_id INTEGER NOT NULL,
-  label TEXT NOT NULL,
-  PRIMARY KEY (node_id, label),
-  FOREIGN KEY (node_id) REFERENCES nodes(id) ON DELETE CASCADE
-) STRICT;
-
-CREATE INDEX idx_node_labels_label_node_id ON node_labels(label, node_id);
-CREATE INDEX idx_node_labels_node_id_label ON node_labels(node_id, label);
-CREATE INDEX idx_edges_from_id ON edges(from_id);
-CREATE INDEX idx_edges_to_id ON edges(to_id);
-CREATE INDEX idx_edges_type ON edges(type);
-CREATE INDEX idx_edges_type_from_id ON edges(type, from_id);
-CREATE INDEX idx_edges_type_to_id ON edges(type, to_id);
+CREATE INDEX idx_cg_edge_works_at_from_id ON cg_edge_works_at(from_id);
+CREATE INDEX idx_cg_edge_works_at_to_id ON cg_edge_works_at(to_id);
+CREATE INDEX idx_cg_edge_works_at_from_to ON cg_edge_works_at(from_id, to_id);
+CREATE INDEX idx_cg_edge_works_at_to_from ON cg_edge_works_at(to_id, from_id);
 ```
 
 Recommended baseline indexes:
 
 ```sql
-CREATE INDEX idx_node_labels_label_node_id ON node_labels(label, node_id);
-CREATE INDEX idx_node_labels_node_id_label ON node_labels(node_id, label);
-CREATE INDEX idx_edges_from_id ON edges(from_id);
-CREATE INDEX idx_edges_to_id ON edges(to_id);
-CREATE INDEX idx_edges_type ON edges(type);
-CREATE INDEX idx_edges_type_from_id ON edges(type, from_id);
-CREATE INDEX idx_edges_type_to_id ON edges(type, to_id);
+CREATE INDEX idx_cg_edge_works_at_from_id ON cg_edge_works_at(from_id);
+CREATE INDEX idx_cg_edge_works_at_to_id ON cg_edge_works_at(to_id);
+CREATE INDEX idx_cg_edge_works_at_from_to ON cg_edge_works_at(from_id, to_id);
+CREATE INDEX idx_cg_edge_works_at_to_from ON cg_edge_works_at(to_id, from_id);
 ```
 
-Keep `node_labels` as the canonical label store. If a runtime later adds a label
-cache on `nodes` for performance, that should be treated as denormalized derived
-data, not as the source of truth.
+The generic `nodes` / `edges` / `node_labels` layout should now be treated as
+legacy compatibility rather than the intended long-term backend contract.
 
 See the dedicated guide for the full schema contract, column semantics, and
 indexing notes:
@@ -166,6 +167,37 @@ The stable entrypoints are:
 
 Lower-level `compile_*`, `normalize_*`, and `render_compiled_*` helpers remain
 available for implementation-facing use.
+
+## Logging
+
+CypherGlot uses the standard library `logging` module.
+
+- it stays silent by default
+- it does not configure the root logger
+- it installs a `NullHandler` on the `cypherglot` package logger so library use
+  does not emit warnings or force host logging policy
+
+When a host runtime wants compiler diagnostics, enable `DEBUG` on the
+`cypherglot` logger:
+
+```python
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logging.getLogger("cypherglot").setLevel(logging.DEBUG)
+```
+
+Current level semantics:
+
+- `DEBUG`: parse, validate, normalize, compile, and render pipeline events,
+  including schema-layout and dialect decisions at public entrypoints
+- `INFO`: reserved for explicit high-value lifecycle events; CypherGlot does not
+  currently emit routine `INFO` logs
+- `WARNING`: reserved for degraded or compatibility-path behavior
+- `ERROR`: reserved for internal failures rather than ordinary admitted-subset
+  rejection
+
+Ordinary validation rejection remains an exception path, not an `ERROR` log.
 
 ## 🔗 Documentation
 

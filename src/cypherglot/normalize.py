@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import re
 from typing import Literal, cast
 
+from ._logging import get_logger
 from ._normalize_support import (
     _BINARY_TERNARY_RETURN_FUNCTION_NAMES,
     _SIZE_PREDICATE_FIELD_PREFIX,
@@ -40,9 +41,13 @@ from ._normalize_support import (
     _validate_create_relationship_separate_patterns,
     _validate_match_create_relationship_between_nodes_endpoints,
     _validate_match_create_relationship_endpoints,
+    _validate_match_merge_relationship_endpoints,
 )
 from .parser import CypherParseResult, parse_cypher_text
 from .validate import validate_cypher_parse_result
+
+
+logger = get_logger(__name__)
 
 
 _AGGREGATE_RETURN_KINDS = {"count", "sum", "avg", "min", "max"}
@@ -402,6 +407,17 @@ class NormalizedMatchMergeRelationship:
 
 
 @dataclass(frozen=True, slots=True)
+class NormalizedMatchMergeRelationshipOnNode:
+    kind: Literal["match_merge"]
+    pattern_kind: Literal["relationship"]
+    match_node: NodePattern
+    predicates: tuple[Predicate, ...]
+    left: NodePattern
+    relationship: RelationshipPattern
+    right: NodePattern
+
+
+@dataclass(frozen=True, slots=True)
 class NormalizedMatchMergeRelationshipFromTraversal:
     kind: Literal["match_merge"]
     pattern_kind: Literal["relationship"]
@@ -462,6 +478,7 @@ NormalizedCypherStatement = (
     | NormalizedDeleteNode
     | NormalizedDeleteRelationship
     | NormalizedMatchMergeRelationship
+    | NormalizedMatchMergeRelationshipOnNode
     | NormalizedMatchMergeRelationshipFromTraversal
     | NormalizedMatchCreateRelationship
     | NormalizedMatchCreateRelationshipFromTraversal
@@ -517,30 +534,61 @@ def _validate_normalized_match_predicates(
 
 
 def normalize_cypher_text(text: str) -> NormalizedCypherStatement:
-    return normalize_cypher_parse_result(parse_cypher_text(text))
+    logger.debug("Normalizing Cypher text")
+    try:
+        statement = normalize_cypher_parse_result(parse_cypher_text(text))
+    except Exception:
+        logger.debug("Normalization failed", exc_info=True)
+        raise
+    logger.debug(
+        "Normalized Cypher text",
+        extra={"statement_kind": type(statement).__name__},
+    )
+    return statement
 
 
 def normalize_cypher_parse_result(
     result: CypherParseResult,
 ) -> NormalizedCypherStatement:
+    logger.debug("Normalizing parsed Cypher result")
     validated_query = validate_cypher_parse_result(result)
     if type(validated_query).__name__ == "OC_MultiPartQueryContext":
-        return _normalize_match_with_return(result, validated_query)
+        statement = _normalize_match_with_return(result, validated_query)
+        logger.debug(
+            "Normalized parsed Cypher result",
+            extra={"statement_kind": type(statement).__name__},
+        )
+        return statement
 
     single_part_query = validated_query
     updating_clauses = single_part_query.oC_UpdatingClause()
     reading_clauses = single_part_query.oC_ReadingClause()
 
     if reading_clauses and reading_clauses[0].oC_InQueryCall() is not None:
-        return _normalize_query_nodes_vector_search(result, single_part_query)
+        statement = _normalize_query_nodes_vector_search(result, single_part_query)
+        logger.debug(
+            "Normalized parsed Cypher result",
+            extra={"statement_kind": type(statement).__name__},
+        )
+        return statement
 
     if reading_clauses and reading_clauses[0].oC_Match() is not None:
         match_ctx = reading_clauses[0].oC_Match()
         if match_ctx.OPTIONAL() is not None:
-            return _normalize_optional_match_node(result, single_part_query)
+            statement = _normalize_optional_match_node(result, single_part_query)
+            logger.debug(
+                "Normalized parsed Cypher result",
+                extra={"statement_kind": type(statement).__name__},
+            )
+            return statement
 
     if reading_clauses and reading_clauses[0].oC_Unwind() is not None:
-        return _normalize_unwind_query(result, single_part_query)
+        statement = _normalize_unwind_query(result, single_part_query)
+        logger.debug(
+            "Normalized parsed Cypher result",
+            extra={"statement_kind": type(statement).__name__},
+        )
+        return statement
 
     if updating_clauses:
         if reading_clauses:
@@ -703,6 +751,30 @@ def normalize_cypher_parse_result(
                         kind="match_merge",
                         pattern_kind="relationship",
                         source=source,
+                        left=left,
+                        relationship=relationship,
+                        right=right,
+                    )
+
+                if len(match_patterns) == 1:
+                    match_node = _parse_node_pattern(
+                        _unwrap_node_pattern(match_patterns[0]),
+                        default_alias="__humem_match_merge_node",
+                    )
+                    _validate_normalized_match_predicates(
+                        predicates,
+                        alias_kinds={match_node.alias: "node"},
+                    )
+                    _validate_match_merge_relationship_endpoints(
+                        match_node,
+                        left,
+                        right,
+                    )
+                    return NormalizedMatchMergeRelationshipOnNode(
+                        kind="match_merge",
+                        pattern_kind="relationship",
+                        match_node=match_node,
+                        predicates=predicates,
                         left=left,
                         relationship=relationship,
                         right=right,
@@ -1962,6 +2034,40 @@ def _parse_with_return_items(
                         aggregate_match.group("func").lower(),
                     ),
                     alias=alias,
+                    output_alias=output_alias,
+                )
+            )
+            continue
+
+        aggregate_field_match = re.fullmatch(
+            r"(?P<func>sum|avg|min|max)\s*\(\s*(?P<alias>[A-Za-z_][A-Za-z0-9_]*)\.(?P<field>[A-Za-z_][A-Za-z0-9_]*)\s*\)",
+            expression_text,
+            flags=re.IGNORECASE,
+        )
+        if aggregate_field_match is not None:
+            alias = aggregate_field_match.group("alias")
+            binding = binding_map.get(alias)
+            if binding is None or binding.binding_kind != "entity":
+                raise ValueError(
+                    "HumemCypher v0 WITH queries currently support "
+                    f"{aggregate_field_match.group('func').lower()}(...) over "
+                    "entity-field inputs only when the alias is an admitted "
+                    "entity binding."
+                )
+            output_name = output_alias or expression_text
+            if output_name in seen_output_names:
+                raise ValueError(
+                    f"HumemCypher v0 WITH queries do not allow duplicate RETURN output alias {output_name!r}."
+                )
+            seen_output_names.add(output_name)
+            items.append(
+                WithReturnItem(
+                    kind=cast(
+                        Literal["sum", "avg", "min", "max"],
+                        aggregate_field_match.group("func").lower(),
+                    ),
+                    alias=alias,
+                    field=aggregate_field_match.group("field"),
                     output_alias=output_alias,
                 )
             )
@@ -4789,10 +4895,41 @@ def _parse_with_order_items(
     projected_aliases = {
         item.column_name: item
         for item in returns
-        if item.output_alias is not None and item.kind not in _AGGREGATE_RETURN_KINDS
+        if item.kind not in _AGGREGATE_RETURN_KINDS
     }
     items: list[WithOrderItem] = []
     for item in order_items:
+        if item.expression is not None:
+            if item.expression in aggregate_aliases:
+                items.append(
+                    WithOrderItem(
+                        kind="aggregate",
+                        alias=item.expression,
+                        direction=item.direction,
+                    )
+                )
+                continue
+            projected = projected_aliases.get(item.expression)
+            if projected is not None:
+                items.append(
+                    WithOrderItem(
+                        kind=projected.kind,
+                        alias=projected.alias,
+                        field=projected.field,
+                        direction=item.direction,
+                        operator=projected.operator,
+                        value=projected.value,
+                        start_value=projected.start_value,
+                        length_value=projected.length_value,
+                        search_value=projected.search_value,
+                        replace_value=projected.replace_value,
+                        delimiter_value=projected.delimiter_value,
+                    )
+                )
+                continue
+            raise ValueError(
+                "HumemCypher v0 WITH queries can ORDER BY a projected alias, admitted binding, or an exact projected RETURN expression."
+            )
         if item.field == "__value__" and item.alias in aggregate_aliases:
             items.append(
                 WithOrderItem(kind="aggregate", alias=item.alias, direction=item.direction)

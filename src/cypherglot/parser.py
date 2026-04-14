@@ -7,8 +7,12 @@ from dataclasses import dataclass
 from antlr4 import CommonTokenStream, InputStream
 from antlr4.error.ErrorListener import ErrorListener
 
+from ._logging import get_logger
 from .generated.CypherLexer import CypherLexer
 from .generated.CypherParser import CypherParser
+
+
+logger = get_logger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,6 +67,8 @@ class _CollectingErrorListener(ErrorListener):
 def parse_cypher_text(text: str) -> CypherParseResult:
     """Parse one Cypher statement through the generated ANTLR frontend."""
 
+    logger.debug("Parsing Cypher text", extra={"text_length": len(text)})
+
     input_stream = InputStream(text)
     lexer = CypherLexer(input_stream)
     token_stream = CommonTokenStream(lexer)
@@ -75,9 +81,14 @@ def parse_cypher_text(text: str) -> CypherParseResult:
     parser.addErrorListener(error_listener)
 
     tree = parser.oC_Cypher()
-    return CypherParseResult(
+    result = CypherParseResult(
         source_text=text,
         tree=tree,
         token_stream=token_stream,
         syntax_errors=tuple(error_listener.errors),
     )
+    logger.debug(
+        "Parsed Cypher text",
+        extra={"syntax_error_count": len(result.syntax_errors)},
+    )
+    return result
