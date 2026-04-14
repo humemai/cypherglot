@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from sqlglot import exp
 
+from ._logging import get_logger
 from .compile import (
     CompiledCypherLoop,
     CompiledCypherProgram,
@@ -13,6 +14,10 @@ from .compile import (
     compile_cypher_program_text,
     compile_cypher_text,
 )
+from .schema import CompilerSchemaContext
+
+
+logger = get_logger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,29 +41,51 @@ class RenderedCypherProgram:
     steps: tuple[RenderedCypherProgramStep, ...]
 
 
-def to_sqlglot_ast(text: str) -> exp.Expression:
+def to_sqlglot_ast(
+    text: str,
+    *,
+    schema_context: CompilerSchemaContext | None = None,
+) -> exp.Expression:
     """Compile one single-statement Cypher shape into SQLGlot AST."""
 
-    return compile_cypher_text(text)
+    logger.debug("Rendering helper requested SQLGlot AST")
+    return compile_cypher_text(text, schema_context=schema_context)
 
 
-def to_sqlglot_program(text: str) -> CompiledCypherProgram:
+def to_sqlglot_program(
+    text: str,
+    *,
+    schema_context: CompilerSchemaContext | None = None,
+) -> CompiledCypherProgram:
     """Compile one Cypher shape into SQLGlot-backed compiled output."""
 
-    return compile_cypher_program_text(text)
+    logger.debug("Rendering helper requested SQLGlot program")
+    return compile_cypher_program_text(text, schema_context=schema_context)
 
 
-def to_sql(text: str, *, dialect: str | None = None, pretty: bool = False) -> str:
+def to_sql(
+    text: str,
+    *,
+    dialect: str | None = None,
+    pretty: bool = False,
+    schema_context: CompilerSchemaContext | None = None,
+) -> str:
     """Render one single-statement Cypher shape to SQL using SQLGlot.
 
     When no dialect is provided, CypherGlot currently renders SQL for SQLite.
     """
 
-    return _render_expression_sql(
-        compile_cypher_text(text),
+    logger.debug(
+        "Rendering Cypher text to SQL",
+        extra={"dialect": dialect or "sqlite", "pretty": pretty},
+    )
+    sql = _render_expression_sql(
+        compile_cypher_text(text, schema_context=schema_context),
         dialect=dialect,
         pretty=pretty,
     )
+    logger.debug("Rendered Cypher text to SQL")
+    return sql
 
 
 def render_cypher_program_text(
@@ -66,17 +93,24 @@ def render_cypher_program_text(
     *,
     dialect: str | None = None,
     pretty: bool = False,
+    schema_context: CompilerSchemaContext | None = None,
 ) -> RenderedCypherProgram:
     """Render one compiled Cypher program into SQL strings.
 
     When no dialect is provided, CypherGlot currently renders SQL for SQLite.
     """
 
-    return render_compiled_cypher_program(
-        compile_cypher_program_text(text),
+    logger.debug(
+        "Rendering compiled Cypher program text",
+        extra={"dialect": dialect or "sqlite", "pretty": pretty},
+    )
+    program = render_compiled_cypher_program(
+        compile_cypher_program_text(text, schema_context=schema_context),
         dialect=dialect,
         pretty=pretty,
     )
+    logger.debug("Rendered compiled Cypher program text")
+    return program
 
 
 def render_compiled_cypher_program(
@@ -139,7 +173,7 @@ def _render_expression_sql(
     if dialect is not None and dialect != "sqlite":
         return expression.sql(dialect=dialect, pretty=pretty)
 
-    return _rewrite_sqlite_json_object_pairs(expression.sql(pretty=pretty))
+    return expression.sql(pretty=pretty)
 
 
 def _render_duckdb_expression_sql(
@@ -150,6 +184,7 @@ def _render_duckdb_expression_sql(
     transformed = expression.copy().transform(_rewrite_duckdb_json_extract)
     transformed = transformed.transform(_rewrite_duckdb_integer_casts)
     transformed = transformed.transform(_rewrite_duckdb_numeric_functions)
+    transformed = transformed.transform(_rewrite_duckdb_length_functions)
     transformed = transformed.transform(_rewrite_duckdb_numeric_comparisons)
     transformed = transformed.transform(_rewrite_duckdb_min_max)
     _rewrite_duckdb_order_clauses(transformed)
@@ -188,6 +223,8 @@ def _is_duckdb_numeric_function(node: exp.Expression) -> bool:
     return isinstance(
         node,
         (
+            exp.Sum,
+            exp.Avg,
             exp.Abs,
             exp.Sign,
             exp.Round,
@@ -261,6 +298,23 @@ def _rewrite_duckdb_numeric_functions(node: exp.Expression) -> exp.Expression:
 
     if _should_cast_duckdb_numeric_operand(operand):
         node.set("this", _duckdb_numeric_cast(operand))
+
+    return node
+
+
+def _rewrite_duckdb_length_functions(node: exp.Expression) -> exp.Expression:
+    if not isinstance(node, exp.Length):
+        return node
+
+    operand = node.this
+    if operand is None or isinstance(operand, exp.Cast):
+        return node
+
+    if isinstance(
+        operand,
+        (exp.Column, exp.Identifier, exp.Placeholder, exp.TryCast, exp.Anonymous),
+    ):
+        node.set("this", exp.Cast(this=operand.copy(), to=exp.DataType.build("TEXT")))
 
     return node
 
@@ -382,128 +436,3 @@ def _rewrite_duckdb_order_clauses(expression: exp.Expression) -> None:
         order.set("expressions", rewritten)
 
 
-def _rewrite_sqlite_json_object_pairs(sql: str) -> str:
-    result: list[str] = []
-    index = 0
-    marker = "JSON_OBJECT("
-
-    while True:
-        start = sql.find(marker, index)
-        if start < 0:
-            result.append(sql[index:])
-            return "".join(result)
-
-        result.append(sql[index : start + len(marker)])
-        args_start = start + len(marker)
-        args_end = _find_matching_parenthesis(sql, args_start - 1)
-        result.append(_rewrite_top_level_json_object_arguments(sql[args_start:args_end]))
-        result.append(")")
-        index = args_end + 1
-
-
-def _rewrite_top_level_json_object_arguments(arguments_sql: str) -> str:
-    result: list[str] = []
-    depth = 0
-    in_single_quote = False
-    in_double_quote = False
-    index = 0
-
-    while index < len(arguments_sql):
-        char = arguments_sql[index]
-
-        if in_single_quote:
-            result.append(char)
-            if char == "'":
-                if index + 1 < len(arguments_sql) and arguments_sql[index + 1] == "'":
-                    result.append(arguments_sql[index + 1])
-                    index += 2
-                    continue
-                in_single_quote = False
-            index += 1
-            continue
-
-        if in_double_quote:
-            result.append(char)
-            if char == '"':
-                if index + 1 < len(arguments_sql) and arguments_sql[index + 1] == '"':
-                    result.append(arguments_sql[index + 1])
-                    index += 2
-                    continue
-                in_double_quote = False
-            index += 1
-            continue
-
-        if char == "'":
-            in_single_quote = True
-            result.append(char)
-            index += 1
-            continue
-
-        if char == '"':
-            in_double_quote = True
-            result.append(char)
-            index += 1
-            continue
-
-        if char == "(":
-            depth += 1
-        elif char == ")":
-            depth -= 1
-        elif char == ":" and depth == 0:
-            result.append(",")
-            index += 1
-            continue
-
-        result.append(char)
-        index += 1
-
-    return "".join(result)
-
-
-def _find_matching_parenthesis(sql: str, open_index: int) -> int:
-    depth = 0
-    in_single_quote = False
-    in_double_quote = False
-    index = open_index
-
-    while index < len(sql):
-        char = sql[index]
-
-        if in_single_quote:
-            if char == "'":
-                if index + 1 < len(sql) and sql[index + 1] == "'":
-                    index += 2
-                    continue
-                in_single_quote = False
-            index += 1
-            continue
-
-        if in_double_quote:
-            if char == '"':
-                if index + 1 < len(sql) and sql[index + 1] == '"':
-                    index += 2
-                    continue
-                in_double_quote = False
-            index += 1
-            continue
-
-        if char == "'":
-            in_single_quote = True
-            index += 1
-            continue
-
-        if char == '"':
-            in_double_quote = True
-            index += 1
-            continue
-
-        if char == "(":
-            depth += 1
-        elif char == ")":
-            depth -= 1
-            if depth == 0:
-                return index
-
-        index += 1
-
-    raise ValueError("Unmatched JSON_OBJECT parenthesis while rendering SQLite SQL.")

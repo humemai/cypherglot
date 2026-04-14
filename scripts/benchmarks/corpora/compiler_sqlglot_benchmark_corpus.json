@@ -40,6 +40,16 @@
     "query": "WITH RECURSIVE user_paths AS (SELECT from_id AS start_id, to_id AS end_id, 1 AS depth FROM knows UNION ALL SELECT user_paths.start_id AS start_id, knows.to_id AS end_id, user_paths.depth + 1 AS depth FROM user_paths JOIN knows ON knows.from_id = user_paths.end_id WHERE user_paths.depth < 2) SELECT end_id AS friend_id, COUNT(*) AS total FROM user_paths GROUP BY end_id ORDER BY total DESC"
   },
   {
+    "name": "fixed_length_multi_hop_projection",
+    "category": "join-read",
+    "query": "SELECT a.name AS user_name, c.name AS company FROM users AS a JOIN knows AS r ON r.from_id = a.id JOIN users AS b ON b.id = r.to_id JOIN works_at AS s ON s.from_id = b.id JOIN companies AS c ON c.id = s.to_id ORDER BY company"
+  },
+  {
+    "name": "recursive_zero_hop_projection",
+    "category": "recursive-cte",
+    "query": "WITH RECURSIVE user_paths AS (SELECT u.id AS start_id, u.id AS end_id, 0 AS depth FROM users AS u UNION ALL SELECT k.from_id AS start_id, k.to_id AS end_id, 1 AS depth FROM knows AS k UNION ALL SELECT user_paths.start_id AS start_id, knows.to_id AS end_id, user_paths.depth + 1 AS depth FROM user_paths JOIN knows ON knows.from_id = user_paths.end_id WHERE user_paths.depth < 2) SELECT start_id AS user_id, end_id AS friend_id FROM user_paths ORDER BY friend_id, user_id"
+  },
+  {
     "name": "searched_case_projection",
     "category": "computed-projection",
     "query": "SELECT CASE WHEN u.age >= 18 THEN u.name ELSE 'minor' END AS label FROM users AS u ORDER BY label"
@@ -50,9 +60,9 @@
     "query": "SELECT r.from_id AS uid, r.kind AS rel_type, r.from_id AS start_id, r.to_id AS end_id FROM knows AS r ORDER BY uid"
   },
   {
-    "name": "json_metadata_projection",
-    "category": "json",
-    "query": "SELECT JSON_BUILD_OBJECT('name', u.name, 'age', u.age) AS user_props, JSON_BUILD_ARRAY('User') AS user_labels, JSON_BUILD_ARRAY('note') AS rel_keys FROM users AS u ORDER BY user_props, user_labels, rel_keys"
+    "name": "relational_metadata_projection",
+    "category": "projection",
+    "query": "SELECT u.id AS user_id, 'KNOWS' AS rel_type, r.from_id AS start_id, r.to_id AS end_id FROM users AS u JOIN knows AS r ON r.from_id = u.id ORDER BY user_id, start_id, end_id"
   },
   {
     "name": "string_property_functions",
@@ -95,8 +105,8 @@
     "query": "SELECT id, created_at::TIMESTAMP AS created_ts FROM users WHERE email LIKE '%@example.com' ORDER BY created_ts DESC LIMIT 5"
   },
   {
-    "name": "json_text_projection",
-    "category": "json",
-    "query": "SELECT payload ->> 'city' AS city FROM events ORDER BY city"
+    "name": "relational_text_projection",
+    "category": "computed-projection",
+    "query": "SELECT LOWER(u.city) AS city FROM users AS u ORDER BY city"
   }
 ]

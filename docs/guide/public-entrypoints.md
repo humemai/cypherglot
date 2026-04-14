@@ -92,9 +92,12 @@ What each step is doing:
 - `to_sqlglot_ast(...)` lowers that admitted read into one SQLGlot expression.
 - `to_sql(...)` renders that expression to SQL text.
 
-For this query family, the rendered SQL is a single `SELECT ...` statement over
-the current graph-to-table contract. One checked-in test expects output in this
-shape:
+For this query family, the rendered SQL is a single `SELECT ...` statement.
+For this particular admitted path, the checked-in compatibility rendering still
+uses the legacy `nodes` / `node_labels` layout even though the long-term schema
+direction is the generated type-aware contract described in the
+[Schema Contract](schema-contract.md) guide. One checked-in test currently
+expects output in this shape:
 
 ```sql
 SELECT JSON_EXTRACT(u.properties, '$.name') AS "u.name"
@@ -106,7 +109,8 @@ LIMIT 1
 ```
 
 The generated SQLGlot AST for this example is a `Select` expression. Written via
-`expression.to_s()`, it looks like this:
+`expression.to_s()`, it currently looks like this on that same legacy
+compatibility path:
 
 ```python
 Select(
@@ -215,7 +219,10 @@ That is why `to_sql(...)` rejects these shapes. A multi-step write cannot be
 represented honestly as one flat SQL string without losing structure.
 
 For this example, the generated program contains one loop with one source query
-AST and three body-statement ASTs.
+AST and three body-statement ASTs. As with the earlier single-statement read,
+this concrete example still reflects the currently emitted legacy compatibility
+layout for the admitted path shown here, not the intended long-term type-aware
+storage contract.
 
 Loop source AST via `loop.source.to_s()`:
 

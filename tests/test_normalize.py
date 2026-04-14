@@ -1158,6 +1158,27 @@ class TestNormalize(unittest.TestCase):
         self.assertEqual(normalized.right_match.properties, (("name", "Bob"),))
         self.assertEqual(normalized.relationship.type_name, "KNOWS")
 
+    def test_normalize_cypher_text_normalizes_match_merge_self_loop_relationship(self) -> None:
+        normalized = cypherglot.normalize_cypher_text(
+            "MATCH (a:User) MERGE (a)-[:KNOWS]->(a)"
+        )
+
+        self.assertEqual(type(normalized).__name__, "NormalizedMatchMergeRelationshipOnNode")
+        self.assertEqual(normalized.match_node.alias, "a")
+        self.assertEqual(normalized.match_node.label, "User")
+        self.assertEqual(normalized.relationship.type_name, "KNOWS")
+
+    def test_normalize_cypher_text_normalizes_match_merge_with_new_endpoint(self) -> None:
+        normalized = cypherglot.normalize_cypher_text(
+            "MATCH (a:User) MERGE (a)-[:INTRODUCED]->(:Person {name: 'Cara'})"
+        )
+
+        self.assertEqual(type(normalized).__name__, "NormalizedMatchMergeRelationshipOnNode")
+        self.assertEqual(normalized.match_node.alias, "a")
+        self.assertEqual(normalized.right.label, "Person")
+        self.assertEqual(normalized.right.properties, (("name", "Cara"),))
+        self.assertEqual(normalized.relationship.type_name, "INTRODUCED")
+
     def test_normalize_cypher_text_normalizes_traversal_backed_match_create(self) -> None:
         normalized = cypherglot.normalize_cypher_text(
             "MATCH (a:User)-[r:KNOWS]->(b:User) CREATE (a)-[:INTRODUCED]->(b)"

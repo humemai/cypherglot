@@ -173,6 +173,7 @@ class OrderItem:
     alias: str
     field: str
     direction: Literal["asc", "desc"] = "asc"
+    expression: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1779,16 +1780,22 @@ def _parse_order_items(text: str) -> tuple[OrderItem, ...]:
             continue
 
         scalar_match = _SCALAR_ITEM_RE.fullmatch(target.strip())
-        if scalar_match is None:
-            raise ValueError(
-                "HumemCypher v0 ORDER BY items must look like alias.field or alias "
-                "optionally followed by ASC or DESC."
+        if scalar_match is not None:
+            items.append(
+                OrderItem(
+                    alias=scalar_match.group("alias"),
+                    field="__value__",
+                    direction=direction,
+                )
             )
+            continue
+
         items.append(
             OrderItem(
-                alias=scalar_match.group("alias"),
-                field="__value__",
+                alias="",
+                field="__expression__",
                 direction=direction,
+                expression=target.strip(),
             )
         )
 
@@ -2457,6 +2464,38 @@ def _validate_match_create_relationship_endpoints(
         if endpoint.label is None:
             raise ValueError(
                 "HumemCypher v0 MATCH ... CREATE new endpoint nodes currently "
+                "require a label unless they reuse the matched node alias."
+            )
+
+
+def _validate_match_merge_relationship_endpoints(
+    match_node: NodePattern,
+    left: NodePattern,
+    right: NodePattern,
+) -> None:
+    if left.alias != match_node.alias and right.alias != match_node.alias:
+        raise ValueError(
+            "HumemCypher v0 MATCH ... MERGE with one matched node pattern currently "
+            "requires the MERGE relationship pattern to reuse the matched node alias on at least one endpoint."
+        )
+
+    for endpoint in (left, right):
+        if endpoint.alias == match_node.alias:
+            if endpoint.label is not None and endpoint.label != match_node.label:
+                raise ValueError(
+                    "HumemCypher v0 MATCH ... MERGE reused-node endpoints must use "
+                    "the same label as the matched node alias."
+                )
+            if endpoint.properties:
+                raise ValueError(
+                    "HumemCypher v0 MATCH ... MERGE reused-node endpoints cannot "
+                    "redeclare inline properties for the matched node alias."
+                )
+            continue
+
+        if endpoint.label is None:
+            raise ValueError(
+                "HumemCypher v0 MATCH ... MERGE new endpoint nodes currently "
                 "require a label unless they reuse the matched node alias."
             )
 

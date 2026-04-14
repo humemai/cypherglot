@@ -1,3 +1,11 @@
+"""Benchmark SQLite schema-shape scaling costs for graph-oriented storage.
+
+This script generates synthetic multi-type node and edge schemas, measures how
+query and setup costs change across the supported schema layouts, and writes a
+JSON baseline with scale parameters, derived edge specifications, environment
+metadata, and per-schema benchmark results.
+"""
+
 from __future__ import annotations
 
 import argparse

@@ -1403,6 +1403,12 @@ class TestValidate(unittest.TestCase):
 
     def test_validate_cypher_text_accepts_narrow_merge(self) -> None:
         merge_node = cypherglot.validate_cypher_text("MERGE (u:User {name: 'Alice'})")
+        match_merge_self_loop = cypherglot.validate_cypher_text(
+            "MATCH (a:User) MERGE (a)-[:KNOWS]->(a)"
+        )
+        match_merge_with_new = cypherglot.validate_cypher_text(
+            "MATCH (a:User) MERGE (a)-[:INTRODUCED]->(:Person {name: 'Cara'})"
+        )
         match_merge = cypherglot.validate_cypher_text(
             "MATCH (a:User), (b:User) MERGE (a)-[:KNOWS]->(b)"
         )
@@ -1439,8 +1445,16 @@ class TestValidate(unittest.TestCase):
         variable_length_grouped_count = cypherglot.validate_cypher_text(
             "MATCH (a:User)-[:KNOWS*1..2]->(b:User) RETURN b.name AS friend, count(b) AS total ORDER BY total DESC"
         )
+        variable_length_grouped_entity = cypherglot.validate_cypher_text(
+            "MATCH (a:User)-[:KNOWS*1..2]->(b:User) RETURN b AS friend, count(b) AS total"
+        )
+        variable_length_grouped_scalar = cypherglot.validate_cypher_text(
+            "MATCH (a:User)-[:KNOWS*1..2]->(b:User) RETURN lower(b.name) AS friend, sum(b.score) AS total"
+        )
 
         self.assertEqual(type(merge_node).__name__, "OC_SinglePartQueryContext")
+        self.assertEqual(type(match_merge_self_loop).__name__, "OC_SinglePartQueryContext")
+        self.assertEqual(type(match_merge_with_new).__name__, "OC_SinglePartQueryContext")
         self.assertEqual(type(match_merge).__name__, "OC_SinglePartQueryContext")
         self.assertEqual(type(traversal_create).__name__, "OC_SinglePartQueryContext")
         self.assertEqual(type(traversal_create_with_new).__name__, "OC_SinglePartQueryContext")
@@ -1453,6 +1467,8 @@ class TestValidate(unittest.TestCase):
         self.assertEqual(type(variable_length_star_count).__name__, "OC_SinglePartQueryContext")
         self.assertEqual(type(variable_length_sum).__name__, "OC_SinglePartQueryContext")
         self.assertEqual(type(variable_length_grouped_count).__name__, "OC_SinglePartQueryContext")
+        self.assertEqual(type(variable_length_grouped_entity).__name__, "OC_SinglePartQueryContext")
+        self.assertEqual(type(variable_length_grouped_scalar).__name__, "OC_SinglePartQueryContext")
 
     def test_validate_cypher_text_rejects_merge_actions_for_now(self) -> None:
         with self.assertRaisesRegex(
@@ -1480,14 +1496,6 @@ class TestValidate(unittest.TestCase):
             (
                 "MATCH (a:User)-[:KNOWS*1..]->(b:User) RETURN b.name",
                 "admits only bounded non-negative-length variable-length relationship patterns",
-            ),
-            (
-                "MATCH (a:User)-[:KNOWS*1..2]->(b:User) RETURN b AS friend, count(b) AS total",
-                r"admits variable-length relationship MATCH ... RETURN only with non-aggregate RETURN projections, or with endpoint-field grouped aggregate projections built from count\(\*\) / count\(endpoint_alias\) / aggregate\(endpoint.field\)",
-            ),
-            (
-                "MATCH (a:User)-[:KNOWS*1..2]->(b:User) RETURN lower(b.name) AS friend, sum(b.score) AS total",
-                r"admits variable-length relationship MATCH ... RETURN only with non-aggregate RETURN projections, or with endpoint-field grouped aggregate projections built from count\(\*\) / count\(endpoint_alias\) / aggregate\(endpoint.field\)",
             ),
             (
                 "MATCH (a:User)-[:KNOWS]->(b:User)-[:KNOWS]->(c:User) SET c.name = 'Carol'",

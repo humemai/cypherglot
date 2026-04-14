@@ -6,177 +6,171 @@ that assumes one concrete graph-to-table layout.
 If a host runtime wants to execute CypherGlot output directly, it should expose
 this physical contract or a compatibility layer that behaves the same way.
 
-## Current physical layout
+## Migration status
 
-CypherGlot is currently tested and supported against SQLite-backed runtimes, and
-the current downstream SQLite schema contract is:
+CypherGlot is moving away from the legacy generic JSON-backed `nodes` / `edges`
+/ `node_labels` contract and toward a generated type-aware schema.
+
+The compiler is not fully switched yet, but this guide now describes the target
+contract the repo is migrating toward. The generic JSON-backed layout should be
+treated as legacy compatibility rather than the intended long-term backend.
+
+## Target physical layout
+
+The target SQLite contract is generated from graph schema metadata:
+
+- one table per node type
+- one table per edge type
+- typed property columns instead of a single JSON `properties` blob
+- foreign keys from edge tables to their source and target node tables
+- indexes that match one-hop and multi-hop traversal directions
+
+For a graph schema with node types `User` and `Company`, and an edge type
+`WORKS_AT(User -> Company)`, the generated SQLite contract looks like:
 
 ```sql
 PRAGMA foreign_keys = ON;
+PRAGMA journal_mode = WAL;
+PRAGMA synchronous = NORMAL;
 
-CREATE TABLE nodes (
+CREATE TABLE cg_node_user (
   id INTEGER PRIMARY KEY,
-  properties TEXT NOT NULL DEFAULT '{}',
-  CHECK (json_valid(properties)),
-  CHECK (json_type(properties) = 'object')
+  name TEXT NOT NULL,
+  age INTEGER
 ) STRICT;
 
-CREATE TABLE edges (
+CREATE TABLE cg_node_company (
   id INTEGER PRIMARY KEY,
-  type TEXT NOT NULL,
+  name TEXT NOT NULL
+) STRICT;
+
+CREATE TABLE cg_edge_works_at (
+  id INTEGER PRIMARY KEY,
   from_id INTEGER NOT NULL,
   to_id INTEGER NOT NULL,
-  properties TEXT NOT NULL DEFAULT '{}',
-  CHECK (json_valid(properties)),
-  CHECK (json_type(properties) = 'object'),
-  FOREIGN KEY (from_id) REFERENCES nodes(id) ON DELETE CASCADE,
-  FOREIGN KEY (to_id) REFERENCES nodes(id) ON DELETE CASCADE
+  since INTEGER,
+  FOREIGN KEY (from_id) REFERENCES cg_node_user(id) ON DELETE CASCADE,
+  FOREIGN KEY (to_id) REFERENCES cg_node_company(id) ON DELETE CASCADE
 ) STRICT;
 
-CREATE TABLE node_labels (
-  node_id INTEGER NOT NULL,
-  label TEXT NOT NULL,
-  PRIMARY KEY (node_id, label),
-  FOREIGN KEY (node_id) REFERENCES nodes(id) ON DELETE CASCADE
-) STRICT;
-
-CREATE INDEX idx_node_labels_label_node_id ON node_labels(label, node_id);
-CREATE INDEX idx_node_labels_node_id_label ON node_labels(node_id, label);
-
-CREATE INDEX idx_edges_from_id ON edges(from_id);
-CREATE INDEX idx_edges_to_id ON edges(to_id);
-CREATE INDEX idx_edges_type ON edges(type);
-CREATE INDEX idx_edges_type_from_id ON edges(type, from_id);
-CREATE INDEX idx_edges_type_to_id ON edges(type, to_id);
+CREATE INDEX idx_cg_edge_works_at_from_id ON cg_edge_works_at(from_id);
+CREATE INDEX idx_cg_edge_works_at_to_id ON cg_edge_works_at(to_id);
+CREATE INDEX idx_cg_edge_works_at_from_to ON cg_edge_works_at(from_id, to_id);
+CREATE INDEX idx_cg_edge_works_at_to_from ON cg_edge_works_at(to_id, from_id);
 ```
-
-`properties` is physically stored as `TEXT` in SQLite, but it is logically part
-of the JSON-object contract. SQLite's JSON functions operate over that stored
-text.
 
 ## Column semantics
 
-`nodes`
+Node tables such as `cg_node_user`
 
 - `id`: stable node identifier used in joins, predicates, and whole-entity returns
-- `properties`: JSON object for node properties such as `{"name": "Alice"}`
+- one column per declared property, using the declared logical type
 
-`edges`
+Edge tables such as `cg_edge_works_at`
 
 - `id`: stable relationship identifier
-- `type`: relationship type name such as `KNOWS`
 - `from_id`: source node id for outgoing relationships
 - `to_id`: target node id for outgoing relationships
-- `properties`: JSON object for relationship properties
+- one column per declared edge property, using the declared logical type
 
-`node_labels`
+Type identity is carried by table selection itself. There is no separate
+canonical `node_labels` table in the target contract, because node type filters
+resolve to the appropriate typed table directly.
 
-- `node_id`: foreign-key-like reference to `nodes.id`
-- `label`: one node label value
+## Result shape contract
 
-## Why labels are separate
+The physical schema is fixed and relational, but Cypher return values can still
+be shaped in different ways.
 
-`node_labels` is the canonical label store.
+CypherGlot's long-term type-aware target is strict relational SQL output:
 
-That is intentional:
+- emitted SQL should return plain scalar values and typed columns
+- whole entities should expand into stable dotted columns such as `user.id` and
+  `user.name`
+- SQL should not rely on `JSON_OBJECT(...)`, `JSON_ARRAY(...)`, or other
+  dialect-specific object or list constructors for the target path
 
-- it keeps the layout multi-label capable
-- it gives label filtering a clean relational shape
-- it is the index-friendly layout for `MATCH (n:Label)` and label existence checks
-- it avoids packing labels into one serialized column and then fighting that shape
-  later with ad hoc indexing
+The current JSON-shaped output mode exists only as transitional compatibility
+while the compiler migration is still in flight. It is not the intended
+long-term contract for broad SQL-dialect support via SQLGlot.
 
-If a runtime wants an extra cached label column on `nodes` for a hot path, that
-should be treated as denormalized derived data, not as the canonical source of
-truth.
+This distinction matters because the storage schema can be fully fixed and
+type-aware while some return helpers still try to package values back into one
+structured SQL value. For the portable target path, that packaging should happen
+outside emitted SQL or be rejected when it cannot be represented as ordinary
+columns.
 
-## How CypherGlot uses the schema
+## How CypherGlot should use the target schema
 
-The current compiler assumes these access patterns:
+The migrated compiler should assume these access patterns:
 
-- node scans read from `nodes`
-- relationship scans read from `edges`
-- node label filters use joins or `EXISTS` probes against `node_labels`
-- relationship traversal joins `edges.from_id` and `edges.to_id` to `nodes.id`
-- property access reads `nodes.properties` or `edges.properties`
-- whole-node returns reconstruct `{id, label, properties}`
-- whole-relationship returns reconstruct `{id, type, properties}`
+- node scans read from the node table selected by the node type
+- relationship scans read from the edge table selected by the relationship type
+- node type filters resolve through table choice, not a `node_labels` join
+- relationship traversal joins edge tables to their declared source and target
+  node tables
+- property access reads typed columns directly
+- whole-node returns reconstruct entity objects from `id`, type identity, and
+  the typed property columns
+- whole-relationship returns reconstruct entity objects from `id`, edge type,
+  endpoints, and the typed property columns
+
+Helpers that naturally want list or object outputs, such as `labels(...)` and
+`keys(...)`, do not map cleanly to portable SQL columns across dialects. For
+the strict relational target path, they should therefore be handled by an upper
+runtime layer or remain unsupported rather than forcing JSON back into emitted
+SQL.
 
 Examples:
 
 ```sql
-SELECT JSON_EXTRACT(u.properties, '$.name')
-FROM nodes AS u
-JOIN node_labels AS u_label_0
-  ON u_label_0.node_id = u.id
- AND u_label_0.label = 'User'
+SELECT u.name
+FROM cg_node_user AS u
 ```
 
 ```sql
-SELECT JSON_EXTRACT(a.properties, '$.name'), JSON_EXTRACT(r.properties, '$.note')
-FROM edges AS r
-JOIN nodes AS a ON a.id = r.from_id
-JOIN nodes AS b ON b.id = r.to_id
+SELECT a.name, r.since
+FROM cg_edge_works_at AS r
+JOIN cg_node_user AS a ON a.id = r.from_id
+JOIN cg_node_company AS b ON b.id = r.to_id
 ```
 
 ## Recommended indexes
 
-The current emitted query shapes strongly benefit from these indexes:
+The target emitted query shapes strongly benefit from:
 
 ```sql
-CREATE INDEX idx_node_labels_label_node_id ON node_labels(label, node_id);
-CREATE INDEX idx_node_labels_node_id_label ON node_labels(node_id, label);
-
-CREATE INDEX idx_edges_from_id ON edges(from_id);
-CREATE INDEX idx_edges_to_id ON edges(to_id);
-CREATE INDEX idx_edges_type ON edges(type);
-CREATE INDEX idx_edges_type_from_id ON edges(type, from_id);
-CREATE INDEX idx_edges_type_to_id ON edges(type, to_id);
+CREATE INDEX idx_cg_edge_works_at_from_id ON cg_edge_works_at(from_id);
+CREATE INDEX idx_cg_edge_works_at_to_id ON cg_edge_works_at(to_id);
+CREATE INDEX idx_cg_edge_works_at_from_to ON cg_edge_works_at(from_id, to_id);
+CREATE INDEX idx_cg_edge_works_at_to_from ON cg_edge_works_at(to_id, from_id);
 ```
 
-## Property indexing
-
-CypherGlot assumes JSON-property access semantics, but it does not require one
-single portable property-index strategy.
-
-That part is backend-specific and workload-specific.
-
-Typical options include:
-
-- generated columns for hot properties such as `name`, `score`, or `region`
-- expression indexes over JSON extraction expressions
-- materialized side tables if one runtime wants stricter relational typing
-
-Those optimizations are valid as long as they preserve the logical contract:
-
-- `nodes.properties` behaves like a JSON object
-- `edges.properties` behaves like a JSON object
-- the visible label/type/id semantics remain unchanged
+Additional indexes over typed property columns remain workload-specific, but the
+main difference from the legacy contract is that hot property access is now
+indexable directly without JSON extraction wrappers.
 
 ## Logical types
 
-CypherGlot currently assumes these logical value families at the schema boundary:
+CypherGlot's target type-aware contract assumes these logical value families at
+the schema boundary:
 
 - ids: integer-like values
-- labels: text
-- relationship types: text
-- properties: JSON objects containing scalar values that map cleanly to the
-  admitted Cypher subset
-
-If a runtime needs stricter physical typing for indexing, it can project those
-values into generated columns or indexed expressions, but the logical contract
-above should stay stable.
+- node type names: text carried in schema metadata and table selection
+- relationship type names: text carried in schema metadata and table selection
+- properties: declared scalar or JSON-like fields materialized as typed columns
 
 ## Contract vs implementation detail
 
-The important contract is:
+The important target contract is:
 
-- three logical tables: nodes, edges, node_labels
-- endpoint columns: `from_id`, `to_id`
-- relationship type column: `type`
-- JSON-like property columns: `properties`
-- canonical label storage in `node_labels`
+- generated node and edge tables derived from graph schema metadata
+- stable endpoint columns: `from_id`, `to_id`
+- stable primary key column: `id`
+- type identity resolved through table choice
+- typed property columns instead of one catch-all JSON blob
 
-The exact DDL details around extra generated columns or additional backend-local
-accelerators remain runtime choices, but the SQLite contract above is the current
-tested and documented baseline.
+The exact naming scheme and extra backend-local accelerators remain
+implementation choices. In this repo, the first source-level contract for that
+target now lives in `cypherglot.schema`, which owns table naming, validation,
+and baseline SQLite DDL generation for the type-aware layout.
