@@ -683,6 +683,70 @@ in the same latency class. The OLAP suite summary is dominated by
 remain in the `1 ms` to low-seconds range, while that one grouped variable-length
 traversal lands around `131` to `139` seconds per measured execution.
 
+### Large runtime dataset
+
+The current large full-runtime run was executed with:
+
+- `10` node types
+- `10` edge types
+- `1000000` nodes per node type
+- `8` outgoing edges per source node per edge type
+- skewed out-degree profile with effective average fanout `7.779`
+- `8` extra text properties, `18` extra numeric properties, and `8` extra boolean properties per node type
+- `4` extra text properties, `10` extra numeric properties, and `4` extra boolean properties per edge type
+- `8` maximum variable-hop depth
+- `100` measured OLTP iterations with `5` warmup iterations
+- `5` measured OLAP iterations with `1` warmup iteration
+
+That corresponds to roughly:
+
+- `10,000,000` total nodes
+- `77,790,000` total edges
+
+Result summary from `scripts/benchmarks/results/runtime-large.json`:
+
+| Suite | Ingest | Analyze | RSS Ingest | Size | Compile p50 | Execute p50 | End-to-End p50 | End-to-End p95 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `oltp/sqlite_indexed` | `2,523,162.99 ms` | `39,969.58 ms` | `161.88 MiB` | `32,676.91 MiB` | `0.89 ms` | `0.08 ms` | `0.97 ms` | `1.02 ms` |
+| `oltp/sqlite_unindexed` | `1,331,835.37 ms` | `5,161.58 ms` | `158.66 MiB` | `24,665.96 MiB` | `1.47 ms` | `1,322.49 ms` | `1,323.98 ms` | `1,342.57 ms` |
+| `olap/sqlite_indexed` | `2,523,162.99 ms` | `39,969.58 ms` | `161.88 MiB` | `32,676.91 MiB` | `2.18 ms` | `166,886.38 ms` | `166,888.63 ms` | `168,485.86 ms` |
+| `olap/sqlite_unindexed` | `1,331,835.37 ms` | `5,161.58 ms` | `158.66 MiB` | `24,665.96 MiB` | `2.50 ms` | `165,199.82 ms` | `165,202.30 ms` | `169,128.83 ms` |
+| `olap/duckdb` | `attach 12,622.02 ms` | `n/a` | `96.47 MiB` | `32,676.91 MiB` | `5.48 ms` | `1,136.15 ms` | `1,141.60 ms` | `1,225.66 ms` |
+
+For DuckDB, that `attach 12,622.02 ms` entry is the one-time OLAP session setup
+cost to connect, load the SQLite extension, attach the SQLite fixture, and
+create DuckDB views over the attached tables. The per-query DuckDB latency
+columns below exclude that setup step.
+
+Representative OLAP per-query end-to-end latency from the same run:
+
+| Query | SQLite Indexed p50 | SQLite Indexed p95 | SQLite Unindexed p50 | SQLite Unindexed p95 | DuckDB p50 | DuckDB p95 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `olap_type1_active_leaderboard` | `3.69 ms` | `5.26 ms` | `200.15 ms` | `200.78 ms` | `99.95 ms` | `111.81 ms` |
+| `olap_type1_age_rollup` | `1,953.79 ms` | `1,990.67 ms` | `486.73 ms` | `487.44 ms` | `96.16 ms` | `103.38 ms` |
+| `olap_cross_type_edge_rollup` | `18,194.89 ms` | `18,396.52 ms` | `4,401.65 ms` | `4,416.23 ms` | `731.87 ms` | `776.38 ms` |
+| `olap_variable_length_reachability` | `4.89 ms` | `5.04 ms` | `131,908.86 ms` | `133,223.78 ms` | `skipped` | `skipped` |
+| `olap_three_type_path_count` | `30,254.90 ms` | `30,315.65 ms` | `22,790.49 ms` | `23,042.84 ms` | `1,489.54 ms` | `1,632.91 ms` |
+| `olap_type2_score_distribution` | `185.38 ms` | `188.30 ms` | `542.92 ms` | `555.79 ms` | `96.09 ms` | `124.51 ms` |
+| `olap_fixed_length_path_projection` | `34,381.79 ms` | `34,477.16 ms` | `33,025.65 ms` | `33,296.15 ms` | `1,601.05 ms` | `1,834.47 ms` |
+| `olap_graph_introspection_rollup` | `1.63 ms` | `1.86 ms` | `2,212.31 ms` | `2,247.29 ms` | `771.15 ms` | `887.02 ms` |
+| `olap_with_scalar_rebinding` | `1,970.58 ms` | `1,980.38 ms` | `574.09 ms` | `581.79 ms` | `110.04 ms` | `153.95 ms` |
+| `olap_variable_length_grouped_rollup` | `1,581,934.76 ms` | `1,597,497.77 ms` | `1,455,880.15 ms` | `1,493,236.19 ms` | `5,278.55 ms` | `5,406.54 ms` |
+
+At this large scale, the benchmark splits much more sharply by workload family:
+
+- SQLite indexed OLTP still stays around `1 ms` end to end, while the
+  unindexed OLTP path moves into multi-second territory for the broader suite.
+- The SQLite OLAP suite is dominated by the fixed-length and grouped
+  variable-length path shapes, with suite-level pooled p50 around `165` to
+  `167` seconds.
+- DuckDB remains far stronger for the broad analytical joins, grouped rollups,
+  and fixed-length path projections over the attached SQLite fixture, but the
+  current attached-SQLite DuckDB path now skips
+  `olap_variable_length_reachability` at this scale because that selective
+  bounded variable-length traversal is not a good fit for the current DuckDB
+  benchmark architecture.
+
 ### Neo4j small comparison run
 
 The repository also includes
