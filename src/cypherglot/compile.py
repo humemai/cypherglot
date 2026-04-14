@@ -4632,15 +4632,7 @@ def _compile_with_non_aggregate_expression(
                 node_id_expression=node_id_expression,
                 field=item.field,
             )
-        properties_expression = (
-            f'(SELECT {node_alias}.properties FROM nodes AS {node_alias} '
-            f'WHERE {node_alias}.id = {node_id_expression})'
-        )
-        return _compile_node_json_object_from_id_expression(
-            entity_alias=f"{binding.output_alias}_start",
-            node_id_expression=node_id_expression,
-            properties_expression=properties_expression,
-        )
+        return _raise_whole_node_return_removed()
 
     if item.kind == "end_node":
         prefix = _with_entity_prefix(binding.output_alias)
@@ -4657,15 +4649,7 @@ def _compile_with_non_aggregate_expression(
                 node_id_expression=node_id_expression,
                 field=item.field,
             )
-        properties_expression = (
-            f'(SELECT {node_alias}.properties FROM nodes AS {node_alias} '
-            f'WHERE {node_alias}.id = {node_id_expression})'
-        )
-        return _compile_node_json_object_from_id_expression(
-            entity_alias=f"{binding.output_alias}_end",
-            node_id_expression=node_id_expression,
-            properties_expression=properties_expression,
-        )
+        return _raise_whole_node_return_removed()
 
     if item.kind in {"lower", "upper", "trim", "ltrim", "rtrim", "reverse"}:
         function_name = item.kind.upper()
@@ -5754,7 +5738,7 @@ def _compile_match_create_relationship_sql(
                 statement.left.alias,
                 statement.right.alias,
             )}, "
-            f"{_compile_json_object(statement.relationship.properties)}"
+            f"{_removed_schema_less_write_sql()}"
         ),
         from_sql=f"FROM nodes AS {alias}",
         where_parts=where_parts,
@@ -5981,7 +5965,7 @@ def _compile_match_merge_relationship_sql(
                 statement.left.alias,
                 statement.right.alias,
             )}, "
-            f"{_compile_json_object(statement.relationship.properties)}"
+            f"{_removed_schema_less_write_sql()}"
         ),
         from_sql=f"FROM nodes AS {left_alias}, nodes AS {right_alias}",
         where_parts=where_parts,
@@ -6128,7 +6112,7 @@ def _compile_match_merge_relationship_on_node_sql(
         target_sql="INSERT INTO edges (type, from_id, to_id, properties)",
         select_sql=(
             f"SELECT {_sql_literal(statement.relationship.type_name)}, "
-            f"{alias}.id, {alias}.id, {_compile_json_object(statement.relationship.properties)}"
+            f"{alias}.id, {alias}.id, {_removed_schema_less_write_sql()}"
         ),
         from_sql=f"FROM nodes AS {alias}",
         where_parts=where_parts,
@@ -6192,7 +6176,7 @@ def _compile_match_merge_relationship_on_node_program(
             CompiledCypherStatement(
                 sql=parse_one(
                     "INSERT INTO nodes (properties) VALUES "
-                    f"({_compile_json_object(new_endpoint.properties)}) RETURNING id"
+                    f"({_removed_schema_less_write_sql()}) RETURNING id"
                 ),
                 bind_columns=("created_node_id",),
             ),
@@ -6467,7 +6451,7 @@ def _compile_match_create_relationship_program(
             CompiledCypherStatement(
                 sql=parse_one(
                     "INSERT INTO nodes (properties) VALUES "
-                    f"({_compile_json_object(new_endpoint.properties)}) RETURNING id"
+                    f"({_removed_schema_less_write_sql()}) RETURNING id"
                 ),
                 bind_columns=("created_node_id",),
             ),
@@ -6893,7 +6877,7 @@ def _compile_merge_self_loop_edge_insert_statement(
         sql=parse_one(
             "INSERT INTO edges (type, from_id, to_id, properties) "
             f"SELECT {_sql_literal(_require_single_relationship_type(relationship))}, "
-            f"{binding_sql}, {binding_sql}, {_compile_json_object(relationship.properties)} "
+            f"{binding_sql}, {binding_sql}, {_removed_schema_less_write_sql()} "
             "WHERE "
             + _compile_relationship_absence_predicate(
                 relationship=relationship,
@@ -7250,7 +7234,7 @@ def _compile_match_create_relationship_between_nodes_sql(
                 statement.left.alias,
                 statement.right.alias,
             )}, "
-            f"{_compile_json_object(statement.relationship.properties)}"
+            f"{_removed_schema_less_write_sql()}"
         ),
         from_sql=f"FROM nodes AS {left_alias}, nodes AS {right_alias}",
         where_parts=where_parts,
@@ -7333,7 +7317,7 @@ def _compile_match_create_relationship_from_traversal_sql(
                 alias_map[statement.left.alias],
                 alias_map[statement.right.alias],
             )}, "
-            f"{_compile_json_object(statement.relationship.properties)}"
+            f"{_removed_schema_less_write_sql()}"
         ),
         from_sql=from_sql,
         joins=joins,
@@ -7386,12 +7370,12 @@ def _compile_match_create_relationship_from_traversal_program(
     if graph_schema is None:
         create_node_sql = parse_one(
             "INSERT INTO nodes (properties) VALUES "
-            f"({_compile_json_object(new_endpoint.properties)}) RETURNING id"
+            f"({_removed_schema_less_write_sql()}) RETURNING id"
         )
         insert_edge_sql = parse_one(
             "INSERT INTO edges (type, from_id, to_id, properties) VALUES "
             f"({_sql_literal(statement.relationship.type_name)}, {from_value}, {to_value}, "
-            f"{_compile_json_object(statement.relationship.properties)})"
+            f"{_removed_schema_less_write_sql()})"
         )
 
         body = [
@@ -7573,7 +7557,7 @@ def _compile_match_merge_relationship_from_traversal_sql(
                 alias_map[statement.left.alias],
                 alias_map[statement.right.alias],
             )}, "
-            f"{_compile_json_object(statement.relationship.properties)}"
+            f"{_removed_schema_less_write_sql()}"
         ),
         from_sql=from_sql,
         joins=joins,
@@ -7631,12 +7615,12 @@ def _compile_match_merge_relationship_from_traversal_program(
     if graph_schema is None:
         create_node_sql = parse_one(
             "INSERT INTO nodes (properties) VALUES "
-            f"({_compile_json_object(new_endpoint.properties)}) RETURNING id"
+            f"({_removed_schema_less_write_sql()}) RETURNING id"
         )
         insert_edge_sql = parse_one(
             "INSERT INTO edges (type, from_id, to_id, properties) VALUES "
             f"({_sql_literal(statement.relationship.type_name)}, {from_value}, {to_value}, "
-            f"{_compile_json_object(statement.relationship.properties)})"
+            f"{_removed_schema_less_write_sql()})"
         )
 
         body = [
@@ -8556,14 +8540,7 @@ def _compile_return_expression(
                 node_id_expression=f"{table_alias}.from_id",
                 field=item.field,
             )
-        return _compile_node_json_object_from_id_expression(
-            entity_alias=f"{item.alias}_start",
-            node_id_expression=f"{table_alias}.from_id",
-            properties_expression=(
-                f"(SELECT {start_node_alias}.properties FROM nodes AS {start_node_alias} "
-                f"WHERE {start_node_alias}.id = {table_alias}.from_id)"
-            ),
-        )
+        return _raise_whole_node_return_removed()
 
     if item.kind == "end_node":
         end_node_alias = f"{item.alias}_end_node"
@@ -8574,21 +8551,10 @@ def _compile_return_expression(
                 node_id_expression=f"{table_alias}.to_id",
                 field=item.field,
             )
-        return _compile_node_json_object_from_id_expression(
-            entity_alias=f"{item.alias}_end",
-            node_id_expression=f"{table_alias}.to_id",
-            properties_expression=(
-                f"(SELECT {end_node_alias}.properties FROM nodes AS {end_node_alias} "
-                f"WHERE {end_node_alias}.id = {table_alias}.to_id)"
-            ),
-        )
+        return _raise_whole_node_return_removed()
 
     if item.field is None:
-        return _compile_entity_json_object(
-            entity_alias=item.alias,
-            table_alias=table_alias,
-            alias_kind=alias_kind,
-        )
+        return _raise_whole_entity_return_removed()
 
     if item.field == "id":
         return f"{table_alias}.id"
@@ -8651,11 +8617,10 @@ def _compile_type_aware_set_assignments(
     )
 
 
-def _compile_json_object(properties: tuple[tuple[str, CypherValue], ...]) -> str:
-    _ = properties
+def _removed_schema_less_write_sql() -> str:
     raise ValueError(
-        "CypherGlot no longer supports the legacy generic JSON-backed write path. "
-        "Supply an explicit type-aware schema context."
+        "CypherGlot write compilation now requires an explicit type-aware "
+        "CompilerSchemaContext."
     )
 
 
@@ -8779,7 +8744,7 @@ def _compile_create_node_steps(
         CompiledCypherStatement(
             sql=parse_one(
                 "INSERT INTO nodes (properties) VALUES "
-                f"({_compile_json_object(node.properties)}) RETURNING id"
+                f"({_removed_schema_less_write_sql()}) RETURNING id"
             ),
             bind_columns=(binding_name,),
         ),
@@ -8837,7 +8802,7 @@ def _compile_edge_insert_statement(
             "INSERT INTO edges (type, from_id, to_id, properties) VALUES "
             f"({_sql_literal(_require_single_relationship_type(relationship))}, "
             f"{from_value}, {to_value}, "
-            f"{_compile_json_object(relationship.properties)})"
+            f"{_removed_schema_less_write_sql()})"
         )
     )
 
@@ -9129,25 +9094,13 @@ def _property_expression(
     return f"JSON_EXTRACT({_properties_column(alias, alias_kind)}, '$.{field}')"
 
 
-def _compile_entity_json_object(
-    *,
-    entity_alias: str,
-    table_alias: str,
-    alias_kind: Literal["node", "relationship"],
-) -> str:
-    _ = (entity_alias, table_alias, alias_kind)
+def _raise_whole_entity_return_removed() -> str:
     raise ValueError(
         "CypherGlot relational output no longer supports whole-entity returns."
     )
 
 
-def _compile_node_json_object_from_id_expression(
-    *,
-    entity_alias: str,
-    node_id_expression: str,
-    properties_expression: str,
-) -> str:
-    _ = (entity_alias, node_id_expression, properties_expression)
+def _raise_whole_node_return_removed() -> str:
     raise ValueError(
         "CypherGlot relational output no longer supports whole-node helper returns."
     )

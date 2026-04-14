@@ -4557,6 +4557,15 @@ class CompileTests(unittest.TestCase):
                 schema_context=_public_api_schema_context(),
             )
 
+    def test_compile_program_create_node_requires_type_aware_schema_context(self) -> None:
+        with self.assertRaisesRegex(
+            ValueError,
+            "requires an explicit type-aware CompilerSchemaContext",
+        ):
+            cypherglot.compile_cypher_program_text(
+                "CREATE (:User {name: 'Alice'})",
+            )
+
     def test_compile_program_create_node(self) -> None:
         program = cypherglot.compile_cypher_program_text(
             "CREATE (:User {name: 'Alice'})",

@@ -18,10 +18,11 @@ import resource
 import subprocess
 import sys
 import time
+import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import cypherglot
 
@@ -54,6 +55,7 @@ DEFAULT_OUTPUT_PATH = (
     / "neo4j_runtime_benchmark.json"
 )
 SKEWED_EDGE_DEGREE_CYCLE = 1_000
+RuntimeProgressCallback = Callable[[dict[str, object], int], None]
 
 
 @dataclass(frozen=True, slots=True)
@@ -481,6 +483,13 @@ def _pool_summaries(
         "mean_of_p99_ms": sum(result[key]["p99_ms"] for result in successful)
         / len(successful),
     }
+
+
+def _write_json_atomic(path: Path, payload: dict[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = path.with_name(f"{path.name}.{uuid.uuid4().hex}.tmp")
+    temp_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    temp_path.replace(path)
 
 
 def _load_corpus(path: Path) -> list[CorpusQuery]:
@@ -1135,6 +1144,7 @@ def _benchmark_result(
     scale: RuntimeScale,
     index_mode: str,
     iteration_progress: bool,
+    progress_callback: RuntimeProgressCallback | None = None,
 ) -> tuple[dict[str, object], int]:
     graph_schema, edge_plans = _build_graph_schema(scale)
     token_map = _token_map(scale, graph_schema, edge_plans)
@@ -1150,6 +1160,12 @@ def _benchmark_result(
     index_modes = [index_mode] if index_mode != "both" else ["indexed", "unindexed"]
     workloads: dict[str, object] = {}
     failure_count = 0
+
+    if progress_callback is not None:
+        progress_callback(
+            {"workloads": workloads, "token_map": token_map},
+            failure_count,
+        )
 
     for mode in index_modes:
         setup = _setup_mode(
@@ -1183,6 +1199,11 @@ def _benchmark_result(
             )
             workloads["oltp"][f"neo4j_{mode}"] = suite
             failure_count += int(suite["fail_count"])
+            if progress_callback is not None:
+                progress_callback(
+                    {"workloads": workloads, "token_map": token_map},
+                    failure_count,
+                )
 
         if olap_queries:
             workloads.setdefault(
@@ -1207,11 +1228,121 @@ def _benchmark_result(
             )
             workloads["olap"][f"neo4j_{mode}"] = suite
             failure_count += int(suite["fail_count"])
+            if progress_callback is not None:
+                progress_callback(
+                    {"workloads": workloads, "token_map": token_map},
+                    failure_count,
+                )
 
     return {
         "workloads": workloads,
         "token_map": token_map,
     }, failure_count
+
+
+def _build_payload(
+    *,
+    started_at: datetime,
+    neo4j_uri: str,
+    neo4j_database: str,
+    neo4j_user: str,
+    docker_config: DockerNeo4jConfig | None,
+    corpus_path: Path,
+    queries: list[CorpusQuery],
+    scale: RuntimeScale,
+    graph_schema: cypherglot.GraphSchema,
+    index_mode: str,
+    default_iterations: int,
+    default_warmup: int,
+    oltp_iterations: int,
+    oltp_warmup: int,
+    olap_iterations: int,
+    olap_warmup: int,
+    connect_ms: float | None,
+    result: dict[str, object],
+    failure_count: int,
+    status: str,
+    completed_at: datetime | None = None,
+) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "generated_at": started_at.isoformat(),
+        "updated_at": datetime.now(UTC).isoformat(),
+        "run_status": status,
+        "python_version": platform.python_version(),
+        "platform": platform.platform(),
+        "cypherglot_version": cypherglot.__version__,
+        "neo4j": {
+            "uri": neo4j_uri,
+            "database": neo4j_database,
+            "user": neo4j_user,
+            "docker": (
+                {
+                    "image": docker_config.image,
+                    "container_name": docker_config.container_name,
+                    "bolt_port": docker_config.bolt_port,
+                    "http_port": docker_config.http_port,
+                    "keep_container": docker_config.keep_container,
+                }
+                if docker_config is not None
+                else None
+            ),
+        },
+        "corpus_path": str(corpus_path),
+        "workload_counts": {
+            "oltp": len([query for query in queries if query.workload == "oltp"]),
+            "olap": len([query for query in queries if query.workload == "olap"]),
+        },
+        "graph_scale": {
+            "node_type_count": scale.node_type_count,
+            "edge_type_count": scale.edge_type_count,
+            "nodes_per_type": scale.nodes_per_type,
+            "edges_per_source": scale.edges_per_source,
+            "edge_degree_profile": scale.edge_degree_profile,
+            "average_edges_per_source": _average_edges_per_source(scale),
+            "total_nodes": scale.total_nodes,
+            "total_edges": scale.total_edges,
+            "node_extra_text_property_count": scale.node_extra_text_property_count,
+            "node_extra_numeric_property_count": (
+                scale.node_extra_numeric_property_count
+            ),
+            "node_extra_boolean_property_count": (
+                scale.node_extra_boolean_property_count
+            ),
+            "edge_extra_text_property_count": scale.edge_extra_text_property_count,
+            "edge_extra_numeric_property_count": (
+                scale.edge_extra_numeric_property_count
+            ),
+            "edge_extra_boolean_property_count": (
+                scale.edge_extra_boolean_property_count
+            ),
+            "ingest_batch_size": scale.ingest_batch_size,
+            "variable_hop_max": scale.variable_hop_max,
+        },
+        "schema_contract": {
+            "layout": "property-graph",
+            "node_labels": [node_type.name for node_type in graph_schema.node_types],
+            "relationship_types": [
+                edge_type.name for edge_type in graph_schema.edge_types
+            ],
+        },
+        "index_mode": index_mode,
+        "workload_controls": {
+            "default_iterations": default_iterations,
+            "default_warmup": default_warmup,
+            "oltp_iterations": oltp_iterations,
+            "oltp_warmup": oltp_warmup,
+            "olap_iterations": olap_iterations,
+            "olap_warmup": olap_warmup,
+        },
+        "setup": {
+            "connect_ms": connect_ms,
+        },
+        "results": result,
+        "failure_count": failure_count,
+    }
+    if completed_at is not None:
+        payload["completed_at"] = completed_at.isoformat()
+    return payload
 
 
 def _print_suite(name: str, suite: dict[str, object]) -> None:
@@ -1366,6 +1497,7 @@ def _parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = _parse_args()
+    started_at = datetime.now(UTC)
     if args.iterations <= 0:
         raise ValueError("--iterations must be positive.")
     if args.warmup < 0:
@@ -1437,6 +1569,59 @@ def main() -> int:
         f"({len(queries)} queries, iterations={args.iterations}, "
         f"warmup={args.warmup}, index_mode={args.index_mode})"
     )
+
+    graph_schema, _ = _build_graph_schema(scale)
+    connect_ms: float | None = None
+
+    def write_checkpoint(
+        result: dict[str, object],
+        *,
+        failure_count: int,
+        status: str,
+    ) -> None:
+        payload = _build_payload(
+            started_at=started_at,
+            neo4j_uri=neo4j_uri,
+            neo4j_database=args.neo4j_database,
+            neo4j_user=args.neo4j_user,
+            docker_config=docker_config,
+            corpus_path=args.corpus,
+            queries=queries,
+            scale=scale,
+            graph_schema=graph_schema,
+            index_mode=args.index_mode,
+            default_iterations=args.iterations,
+            default_warmup=args.warmup,
+            oltp_iterations=(
+                args.oltp_iterations
+                if args.oltp_iterations is not None
+                else args.iterations
+            ),
+            oltp_warmup=(
+                args.oltp_warmup if args.oltp_warmup is not None else args.warmup
+            ),
+            olap_iterations=(
+                args.olap_iterations
+                if args.olap_iterations is not None
+                else args.iterations
+            ),
+            olap_warmup=(
+                args.olap_warmup if args.olap_warmup is not None else args.warmup
+            ),
+            connect_ms=connect_ms,
+            result=result,
+            failure_count=failure_count,
+            status=status,
+            completed_at=datetime.now(UTC) if status == "completed" else None,
+        )
+        _write_json_atomic(args.output, payload)
+
+    write_checkpoint(
+        {"workloads": {}, "token_map": {}},
+        failure_count=0,
+        status="running",
+    )
+
     if docker_config is not None:
         _start_docker_neo4j(docker_config, args.neo4j_password)
         _wait_for_docker_server_ready(
@@ -1456,6 +1641,7 @@ def main() -> int:
                 ),
             )
         )
+        connect_ms = connect_ns / 1_000_000.0
     except Exception:
         if docker_config is not None:
             logs = _docker_logs(docker_config)
@@ -1483,101 +1669,24 @@ def main() -> int:
             scale=scale,
             index_mode=args.index_mode,
             iteration_progress=args.iteration_progress,
+            progress_callback=lambda partial_result, partial_failure_count: (
+                write_checkpoint(
+                    partial_result,
+                    failure_count=partial_failure_count,
+                    status="running",
+                )
+            ),
         )
     finally:
         driver.close()
         if docker_config is not None and not docker_config.keep_container:
             _stop_docker_neo4j(docker_config)
 
-    graph_schema, _ = _build_graph_schema(scale)
-    payload = {
-        "generated_at": datetime.now(UTC).isoformat(),
-        "python_version": platform.python_version(),
-        "platform": platform.platform(),
-        "cypherglot_version": cypherglot.__version__,
-        "neo4j": {
-            "uri": neo4j_uri,
-            "database": args.neo4j_database,
-            "user": args.neo4j_user,
-            "docker": (
-                {
-                    "image": docker_config.image,
-                    "container_name": docker_config.container_name,
-                    "bolt_port": docker_config.bolt_port,
-                    "http_port": docker_config.http_port,
-                    "keep_container": docker_config.keep_container,
-                }
-                if docker_config is not None
-                else None
-            ),
-        },
-        "corpus_path": str(args.corpus),
-        "workload_counts": {
-            "oltp": len([query for query in queries if query.workload == "oltp"]),
-            "olap": len([query for query in queries if query.workload == "olap"]),
-        },
-        "graph_scale": {
-            "node_type_count": scale.node_type_count,
-            "edge_type_count": scale.edge_type_count,
-            "nodes_per_type": scale.nodes_per_type,
-            "edges_per_source": scale.edges_per_source,
-            "edge_degree_profile": scale.edge_degree_profile,
-            "average_edges_per_source": _average_edges_per_source(scale),
-            "total_nodes": scale.total_nodes,
-            "total_edges": scale.total_edges,
-            "node_extra_text_property_count": scale.node_extra_text_property_count,
-            "node_extra_numeric_property_count": (
-                scale.node_extra_numeric_property_count
-            ),
-            "node_extra_boolean_property_count": (
-                scale.node_extra_boolean_property_count
-            ),
-            "edge_extra_text_property_count": scale.edge_extra_text_property_count,
-            "edge_extra_numeric_property_count": (
-                scale.edge_extra_numeric_property_count
-            ),
-            "edge_extra_boolean_property_count": (
-                scale.edge_extra_boolean_property_count
-            ),
-            "ingest_batch_size": scale.ingest_batch_size,
-            "variable_hop_max": scale.variable_hop_max,
-        },
-        "schema_contract": {
-            "layout": "property-graph",
-            "node_labels": [node_type.name for node_type in graph_schema.node_types],
-            "relationship_types": [
-                edge_type.name for edge_type in graph_schema.edge_types
-            ],
-        },
-        "index_mode": args.index_mode,
-        "workload_controls": {
-            "default_iterations": args.iterations,
-            "default_warmup": args.warmup,
-            "oltp_iterations": (
-                args.oltp_iterations
-                if args.oltp_iterations is not None
-                else args.iterations
-            ),
-            "oltp_warmup": (
-                args.oltp_warmup if args.oltp_warmup is not None else args.warmup
-            ),
-            "olap_iterations": (
-                args.olap_iterations
-                if args.olap_iterations is not None
-                else args.iterations
-            ),
-            "olap_warmup": (
-                args.olap_warmup if args.olap_warmup is not None else args.warmup
-            ),
-        },
-        "setup": {
-            "connect_ms": connect_ns / 1_000_000.0,
-        },
-        "results": result,
-        "failure_count": failure_count,
-    }
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    write_checkpoint(
+        result,
+        failure_count=failure_count,
+        status="completed",
+    )
 
     _progress(f"neo4j runtime benchmark: wrote baseline to {args.output}")
     print(f"Wrote Neo4j runtime benchmark baseline to {args.output}")
