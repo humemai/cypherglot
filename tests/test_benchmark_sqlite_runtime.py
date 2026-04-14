@@ -464,6 +464,29 @@ class BenchmarkSQLiteRuntimeScriptTests(unittest.TestCase):
         self.assertIn("sqlite_unindexed", snapshots[4]["workloads"]["olap"])
         self.assertEqual(snapshots[-1], result)
 
+    def test_filter_duckdb_olap_queries_skips_variable_length_reachability(self) -> None:
+        filter_duckdb_olap_queries = getattr(
+            benchmark_sqlite_runtime,
+            "_filter_duckdb_olap_queries",
+        )
+        load_corpus = getattr(benchmark_sqlite_runtime, "_load_corpus")
+        select_queries = getattr(benchmark_sqlite_runtime, "_select_queries")
+
+        queries = select_queries(
+            load_corpus(CORPUS_PATH),
+            [
+                "olap_variable_length_reachability",
+                "olap_cross_type_edge_rollup",
+            ],
+        )
+
+        filtered = filter_duckdb_olap_queries(queries)
+
+        self.assertEqual(
+            [query.name for query in filtered],
+            ["olap_cross_type_edge_rollup"],
+        )
+
     def test_write_json_atomic_replaces_destination(self) -> None:
         write_json_atomic = getattr(benchmark_sqlite_runtime, "_write_json_atomic")
 

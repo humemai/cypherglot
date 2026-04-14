@@ -1138,6 +1138,77 @@ Status: planned.
       after the final type-aware migration cleanup, so the remaining work is the
       actual green-light, tag, publish, and GitHub release step.
 
+## Phase 13
+
+Refactor CypherGlot for equal multi-dialect SQL support.
+
+Status: planned.
+
+Goal for this phase:
+
+- make equal full-support ambitions for SQLite, PostgreSQL, and DuckDB the
+      primary compiler architecture constraint
+- stop treating SQLite-shaped lowering plus dialect rewrite patches as the
+      long-term product path
+- introduce a backend-neutral graph-relational IR between normalized Cypher and
+      SQLGlot AST generation so new SQL targets do not require reshaping the
+      whole compiler each time
+- keep support claims strict: a backend counts as supported only when the
+      admitted subset executes correctly against that backend's schema/runtime
+      contract, not merely when SQLGlot can render SQL text for it
+
+- [ ] Freeze the new architecture decision clearly in docs and roadmap text:
+      multi-dialect SQL support now comes first, and the compiler should evolve
+      from `Cypher AST -> mostly SQLite-oriented SQLGlot AST -> dialect tweaks`
+      toward `Cypher AST -> logical graph-relational IR -> backend-aware
+      lowering -> SQLGlot AST -> dialect SQL text`.
+- [ ] Keep the parse, validation, and normalization boundary stable where
+      practical while this phase lands; the main refactor target is the SQL
+      compilation architecture after normalization, not a broad churn of the
+      upstream frontend seam.
+- [ ] Define a small backend-neutral logical graph-relational IR for the
+      admitted subset instead of lowering normalized Cypher directly into a
+      mostly SQLite-shaped SQLGlot AST.
+- [ ] Keep that IR driven by real admitted Cypher semantics rather than generic
+      SQL completeness: typed node scans, typed edge scans, traversal,
+      filtering, projection, aggregation, optional flow, admitted variable-
+      length expansion, and the currently admitted write families.
+- [ ] Define a backend capability model that makes backend differences explicit
+      in one place rather than leaking them through ad hoc dialect conditionals,
+      including recursion strategy, write-program shape, returning/id behavior,
+      JSON/cast semantics, and other execution-relevant backend differences.
+- [ ] Refactor the current SQLite path into an explicit backend lowerer from the
+      logical IR to backend-specific SQLGlot AST so SQLite remains the reference
+      executable backend without staying the hidden default shape of the whole
+      compiler.
+- [ ] Replace the current narrow DuckDB strategy of mostly reusing the
+      SQLite-shaped AST plus renderer rewrite patches with an explicit DuckDB
+      lowering path from the same logical IR, then grow it until DuckDB reaches
+      full admitted-subset parity instead of a read-only carveout.
+- [ ] Add a full PostgreSQL lowering path from the same logical IR rather than
+      treating PostgreSQL support as a mere SQLGlot rendering target, including
+      a backend-specific schema/runtime contract for the admitted subset.
+- [ ] Add backend-specific schema-generation and DDL support where needed so the
+      backend story is complete for SQLite, PostgreSQL, and DuckDB instead of
+      assuming one SQLite-first DDL contract underneath all rendered SQL.
+- [ ] Keep SQLGlot as the emitted SQL AST and dialect-rendering layer, but make
+      backend-specific AST shaping an explicit lowering concern instead of
+      relying mainly on renderer-time tweak passes.
+- [ ] Retain small backend-specific SQLGlot rewrite passes only where they are
+      still the clearest final cleanup step after backend lowering, and do not
+      let rewrite growth become the primary multi-backend architecture.
+- [ ] Add backend-parity regression layers for the admitted subset:
+      normalized-Cypher-to-IR tests, IR-to-backend-SQLGlot lowering tests, and
+      direct execution/runtime parity tests for SQLite, PostgreSQL, and DuckDB.
+- [ ] Update the public backend support policy and docs so CypherGlot stops
+      presenting DuckDB as read-only if that parity work lands, and instead
+      documents equal supported-backend expectations across SQLite,
+      PostgreSQL, and DuckDB.
+- [ ] Revisit benchmark coverage after the IR/lowering split lands so compile
+      latency, backend-lowering cost, and backend-specific runtime parity are
+      all measured against the new architecture instead of the older
+      SQLite-shaped pipeline.
+
 ## Future phases
 
 - [ ] Revisit the broader write-side traversal semantics and the remaining

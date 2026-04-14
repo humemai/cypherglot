@@ -53,6 +53,7 @@ DEFAULT_OUTPUT_PATH = (
 )
 SQLITE_SAVEPOINT = "benchmark_iteration"
 RuntimeProgressCallback = Callable[[dict[str, object]], None]
+DUCKDB_OLAP_QUERY_SKIP_NAMES = frozenset({"olap_variable_length_reachability"})
 
 
 def _progress(message: str) -> None:
@@ -1346,6 +1347,14 @@ def _load_corpus(path: Path) -> list[CorpusQuery]:
     return queries
 
 
+def _filter_duckdb_olap_queries(queries: list[CorpusQuery]) -> list[CorpusQuery]:
+    return [
+        query
+        for query in queries
+        if "duckdb" in query.backends and query.name not in DUCKDB_OLAP_QUERY_SKIP_NAMES
+    ]
+
+
 def _render_corpus_queries(
     queries: list[CorpusQuery],
     token_map: dict[str, str],
@@ -1455,14 +1464,13 @@ def _benchmark_result(
                 "description": (
                     "Analytical read queries measured on indexed and unindexed "
                     "SQLite fixtures plus DuckDB over the same generated graph."
-                )
+                ),
+                "duckdb_skipped_queries": sorted(DUCKDB_OLAP_QUERY_SKIP_NAMES),
             }
             sqlite_olap_queries = [
                 query for query in olap_queries if "sqlite" in query.backends
             ]
-            duckdb_olap_queries = [
-                query for query in olap_queries if "duckdb" in query.backends
-            ]
+            duckdb_olap_queries = _filter_duckdb_olap_queries(olap_queries)
             for mode, fixture in sqlite_fixtures.items():
                 workloads["olap"][f"sqlite_{mode}"] = _run_backend_suite(
                     "sqlite",
@@ -1482,6 +1490,18 @@ def _benchmark_result(
                 duckdb_source = sqlite_fixtures.get("indexed")
                 if duckdb_source is None:
                     duckdb_source = next(iter(sqlite_fixtures.values()))
+                skipped_names = sorted(
+                    query.name
+                    for query in olap_queries
+                    if "duckdb" in query.backends
+                    and query.name in DUCKDB_OLAP_QUERY_SKIP_NAMES
+                )
+                if skipped_names:
+                    _progress(
+                        "olap/duckdb: skipping query/queries not admitted for the "
+                        "attached-SQLite DuckDB benchmark path: "
+                        + ", ".join(skipped_names)
+                    )
                 workloads["olap"]["duckdb"] = _run_backend_suite(
                     "duckdb",
                     duckdb_olap_queries,
