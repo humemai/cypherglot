@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 import tempfile
 import unittest
@@ -430,6 +431,54 @@ class BenchmarkSQLiteRuntimeScriptTests(unittest.TestCase):
             self.assertTrue((root_dir / "oltp-sqlite-unindexed-suite").exists())
             self.assertTrue((root_dir / "olap-sqlite-indexed-suite").exists())
             self.assertTrue((root_dir / "olap-sqlite-unindexed-suite").exists())
+
+    def test_benchmark_result_reports_incremental_progress(self) -> None:
+        benchmark_result = getattr(benchmark_sqlite_runtime, "_benchmark_result")
+        load_corpus = getattr(benchmark_sqlite_runtime, "_load_corpus")
+        select_queries = getattr(benchmark_sqlite_runtime, "_select_queries")
+
+        snapshots: list[dict[str, object]] = []
+
+        result = benchmark_result(
+            select_queries(
+                load_corpus(CORPUS_PATH),
+                ["oltp_type1_point_lookup", "olap_type1_age_rollup"],
+            ),
+            iterations=1,
+            warmup=0,
+            include_duckdb=False,
+            scale=SMALL_SCALE,
+            index_mode="both",
+            progress_callback=lambda partial: snapshots.append(
+                json.loads(json.dumps(partial))
+            ),
+        )
+
+        self.assertGreaterEqual(len(snapshots), 5)
+        self.assertEqual(snapshots[0]["workloads"], {})
+        self.assertIn("oltp", snapshots[1]["workloads"])
+        self.assertIn("sqlite_indexed", snapshots[1]["workloads"]["oltp"])
+        self.assertIn("sqlite_unindexed", snapshots[2]["workloads"]["oltp"])
+        self.assertIn("olap", snapshots[3]["workloads"])
+        self.assertIn("sqlite_indexed", snapshots[3]["workloads"]["olap"])
+        self.assertIn("sqlite_unindexed", snapshots[4]["workloads"]["olap"])
+        self.assertEqual(snapshots[-1], result)
+
+    def test_write_json_atomic_replaces_destination(self) -> None:
+        write_json_atomic = getattr(benchmark_sqlite_runtime, "_write_json_atomic")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / "runtime.json"
+
+            write_json_atomic(output_path, {"status": "running", "value": 1})
+            first_payload = json.loads(output_path.read_text(encoding="utf-8"))
+
+            write_json_atomic(output_path, {"status": "completed", "value": 2})
+            second_payload = json.loads(output_path.read_text(encoding="utf-8"))
+
+            self.assertEqual(first_payload, {"status": "running", "value": 1})
+            self.assertEqual(second_payload, {"status": "completed", "value": 2})
+            self.assertEqual(list(Path(temp_dir).glob("runtime.json.*.tmp")), [])
 
     def test_print_suite_includes_rss_and_storage(self) -> None:
         print_suite = getattr(benchmark_sqlite_runtime, "_print_suite")

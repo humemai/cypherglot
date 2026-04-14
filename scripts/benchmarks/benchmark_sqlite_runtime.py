@@ -19,10 +19,11 @@ import sqlite3
 import sys
 import tempfile
 import time
+import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import cypherglot
 
@@ -51,6 +52,7 @@ DEFAULT_OUTPUT_PATH = (
     / "sqlite_runtime_benchmark_baseline.json"
 )
 SQLITE_SAVEPOINT = "benchmark_iteration"
+RuntimeProgressCallback = Callable[[dict[str, object]], None]
 
 
 def _progress(message: str) -> None:
@@ -995,8 +997,8 @@ def _measure_query(
     *,
     iterations: int,
     warmup: int,
-    progress_label: str,
-    iteration_progress: bool,
+    progress_label: str = "",
+    iteration_progress: bool = False,
 ) -> dict[str, object]:
     for warmup_index in range(1, warmup + 1):
         if iteration_progress:
@@ -1158,6 +1160,96 @@ def _run_backend_suite(
         runner.close()
 
 
+def _write_json_atomic(path: Path, payload: dict[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = path.with_name(f"{path.name}.{uuid.uuid4().hex}.tmp")
+    temp_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    temp_path.replace(path)
+
+
+def _build_payload(
+    *,
+    started_at: datetime,
+    corpus_path: Path,
+    queries: list[CorpusQuery],
+    scale: RuntimeScale,
+    graph_schema: cypherglot.GraphSchema,
+    index_mode: str,
+    default_iterations: int,
+    default_warmup: int,
+    oltp_iterations: int,
+    oltp_warmup: int,
+    olap_iterations: int,
+    olap_warmup: int,
+    db_root_dir: Path | None,
+    result: dict[str, object],
+    status: str,
+    completed_at: datetime | None = None,
+) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "generated_at": started_at.isoformat(),
+        "updated_at": datetime.now(UTC).isoformat(),
+        "run_status": status,
+        "python_version": platform.python_version(),
+        "platform": platform.platform(),
+        "cypherglot_version": cypherglot.__version__,
+        "corpus_path": str(corpus_path),
+        "workload_counts": {
+            "oltp": len([query for query in queries if query.workload == "oltp"]),
+            "olap": len([query for query in queries if query.workload == "olap"]),
+        },
+        "graph_scale": {
+            "node_type_count": scale.node_type_count,
+            "edge_type_count": scale.edge_type_count,
+            "nodes_per_type": scale.nodes_per_type,
+            "edges_per_source": scale.edges_per_source,
+            "edge_degree_profile": scale.edge_degree_profile,
+            "average_edges_per_source": _average_edges_per_source(scale),
+            "total_nodes": scale.total_nodes,
+            "total_edges": scale.total_edges,
+            "node_extra_text_property_count": scale.node_extra_text_property_count,
+            "node_extra_numeric_property_count": (
+                scale.node_extra_numeric_property_count
+            ),
+            "node_extra_boolean_property_count": (
+                scale.node_extra_boolean_property_count
+            ),
+            "edge_extra_text_property_count": scale.edge_extra_text_property_count,
+            "edge_extra_numeric_property_count": (
+                scale.edge_extra_numeric_property_count
+            ),
+            "edge_extra_boolean_property_count": (
+                scale.edge_extra_boolean_property_count
+            ),
+            "ingest_batch_size": scale.ingest_batch_size,
+            "variable_hop_max": scale.variable_hop_max,
+        },
+        "schema_contract": {
+            "layout": "type-aware",
+            "node_tables": [
+                node_type.table_name for node_type in graph_schema.node_types
+            ],
+            "edge_tables": [
+                edge_type.table_name for edge_type in graph_schema.edge_types
+            ],
+        },
+        "index_mode": index_mode,
+        "workload_controls": {
+            "default_iterations": default_iterations,
+            "default_warmup": default_warmup,
+            "oltp_iterations": oltp_iterations,
+            "oltp_warmup": oltp_warmup,
+            "olap_iterations": olap_iterations,
+            "olap_warmup": olap_warmup,
+        },
+        "db_root_dir": str(db_root_dir) if db_root_dir is not None else None,
+        "results": result,
+    }
+    if completed_at is not None:
+        payload["completed_at"] = completed_at.isoformat()
+    return payload
+
+
 def _token_map(
     scale: RuntimeScale,
     graph_schema: cypherglot.GraphSchema,
@@ -1301,6 +1393,7 @@ def _benchmark_result(
     index_mode: str,
     db_root_dir: Path | None = None,
     iteration_progress: bool = False,
+    progress_callback: RuntimeProgressCallback | None = None,
 ) -> dict[str, object]:
     graph_schema, edge_plans = _build_graph_schema(scale)
     schema_context = cypherglot.CompilerSchemaContext.type_aware(graph_schema)
@@ -1318,6 +1411,8 @@ def _benchmark_result(
     index_modes = [index_mode] if index_mode != "both" else ["indexed", "unindexed"]
 
     workloads: dict[str, object] = {}
+    if progress_callback is not None:
+        progress_callback({"workloads": workloads, "token_map": token_map})
     sqlite_fixtures = {
         mode: _prepare_shared_sqlite_fixture(
             scale=scale,
@@ -1352,6 +1447,8 @@ def _benchmark_result(
                     db_root_dir=db_root_dir,
                     iteration_progress=iteration_progress,
                 )
+                if progress_callback is not None:
+                    progress_callback({"workloads": workloads, "token_map": token_map})
 
         if olap_queries:
             workloads["olap"] = {
@@ -1379,6 +1476,8 @@ def _benchmark_result(
                     db_root_dir=db_root_dir,
                     iteration_progress=iteration_progress,
                 )
+                if progress_callback is not None:
+                    progress_callback({"workloads": workloads, "token_map": token_map})
             if include_duckdb and duckdb_olap_queries:
                 duckdb_source = sqlite_fixtures.get("indexed")
                 if duckdb_source is None:
@@ -1395,6 +1494,8 @@ def _benchmark_result(
                     db_root_dir=db_root_dir,
                     iteration_progress=iteration_progress,
                 )
+                if progress_callback is not None:
+                    progress_callback({"workloads": workloads, "token_map": token_map})
     finally:
         for fixture in sqlite_fixtures.values():
             fixture.close()
@@ -1576,6 +1677,7 @@ def _parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = _parse_args()
+    started_at = datetime.now(UTC)
     if args.iterations <= 0:
         raise ValueError("--iterations must be positive.")
     if args.warmup < 0:
@@ -1631,6 +1733,42 @@ def main() -> int:
     )
 
     queries = _select_queries(_load_corpus(args.corpus), args.query_names)
+    graph_schema, _ = _build_graph_schema(scale)
+
+    def write_checkpoint(result: dict[str, object], *, status: str) -> None:
+        payload = _build_payload(
+            started_at=started_at,
+            corpus_path=args.corpus,
+            queries=queries,
+            scale=scale,
+            graph_schema=graph_schema,
+            index_mode=args.index_mode,
+            default_iterations=args.iterations,
+            default_warmup=args.warmup,
+            oltp_iterations=(
+                args.oltp_iterations
+                if args.oltp_iterations is not None
+                else args.iterations
+            ),
+            oltp_warmup=(
+                args.oltp_warmup if args.oltp_warmup is not None else args.warmup
+            ),
+            olap_iterations=(
+                args.olap_iterations
+                if args.olap_iterations is not None
+                else args.iterations
+            ),
+            olap_warmup=(
+                args.olap_warmup if args.olap_warmup is not None else args.warmup
+            ),
+            db_root_dir=db_root_dir,
+            result=result,
+            status=status,
+            completed_at=datetime.now(UTC) if status == "completed" else None,
+        )
+        _write_json_atomic(args.output, payload)
+
+    write_checkpoint({"workloads": {}, "token_map": {}}, status="running")
     _progress(
         "runtime benchmark: starting "
         f"({len(queries)} queries, iterations={args.iterations}, "
@@ -1669,79 +1807,12 @@ def main() -> int:
         index_mode=args.index_mode,
         db_root_dir=db_root_dir,
         iteration_progress=args.iteration_progress,
+        progress_callback=lambda partial_result: write_checkpoint(
+            partial_result,
+            status="running",
+        ),
     )
-    graph_schema, _ = _build_graph_schema(scale)
-    payload = {
-        "generated_at": datetime.now(UTC).isoformat(),
-        "python_version": platform.python_version(),
-        "platform": platform.platform(),
-        "cypherglot_version": cypherglot.__version__,
-        "corpus_path": str(args.corpus),
-        "workload_counts": {
-            "oltp": len([query for query in queries if query.workload == "oltp"]),
-            "olap": len([query for query in queries if query.workload == "olap"]),
-        },
-        "graph_scale": {
-            "node_type_count": scale.node_type_count,
-            "edge_type_count": scale.edge_type_count,
-            "nodes_per_type": scale.nodes_per_type,
-            "edges_per_source": scale.edges_per_source,
-            "edge_degree_profile": scale.edge_degree_profile,
-            "average_edges_per_source": _average_edges_per_source(scale),
-            "total_nodes": scale.total_nodes,
-            "total_edges": scale.total_edges,
-            "node_extra_text_property_count": scale.node_extra_text_property_count,
-            "node_extra_numeric_property_count": (
-                scale.node_extra_numeric_property_count
-            ),
-            "node_extra_boolean_property_count": (
-                scale.node_extra_boolean_property_count
-            ),
-            "edge_extra_text_property_count": scale.edge_extra_text_property_count,
-            "edge_extra_numeric_property_count": (
-                scale.edge_extra_numeric_property_count
-            ),
-            "edge_extra_boolean_property_count": (
-                scale.edge_extra_boolean_property_count
-            ),
-            "ingest_batch_size": scale.ingest_batch_size,
-            "variable_hop_max": scale.variable_hop_max,
-        },
-        "schema_contract": {
-            "layout": "type-aware",
-            "node_tables": [
-                node_type.table_name for node_type in graph_schema.node_types
-            ],
-            "edge_tables": [
-                edge_type.table_name for edge_type in graph_schema.edge_types
-            ],
-        },
-        "index_mode": args.index_mode,
-        "workload_controls": {
-            "default_iterations": args.iterations,
-            "default_warmup": args.warmup,
-            "oltp_iterations": (
-                args.oltp_iterations
-                if args.oltp_iterations is not None
-                else args.iterations
-            ),
-            "oltp_warmup": (
-                args.oltp_warmup if args.oltp_warmup is not None else args.warmup
-            ),
-            "olap_iterations": (
-                args.olap_iterations
-                if args.olap_iterations is not None
-                else args.iterations
-            ),
-            "olap_warmup": (
-                args.olap_warmup if args.olap_warmup is not None else args.warmup
-            ),
-        },
-        "db_root_dir": str(db_root_dir) if db_root_dir is not None else None,
-        "results": result,
-    }
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    write_checkpoint(result, status="completed")
     _progress(f"runtime benchmark: wrote baseline to {args.output}")
 
     print(f"Wrote runtime benchmark baseline to {args.output}")
