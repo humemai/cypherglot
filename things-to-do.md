@@ -74,7 +74,7 @@ What 80% would require later:
 Replace the current JSON-backed relational assumptions with a generated
 type-aware schema that becomes the primary CypherGlot backend contract.
 
-Status: complete for the release target; cleanup follow-ups remain.
+Status: complete
 
 Release scope for `v0.1.0`:
 
@@ -506,28 +506,30 @@ Working policy for this migration:
 These are follow-up cleanup and evidence items after the migration itself,
 not blockers for calling the type-aware schema migration complete.
 
-- [ ] Finish the post-migration compiler-contract purge so the type-aware
+- [x] Finish the post-migration compiler-contract purge so the type-aware
       schema and general relational IR are the only live internal contract,
       rather than something the top-level compiler enforces while helper layers
       still carry dead schema-less branches.
-      Current slice completed: `compile.py` has already been pared back so the
-      main admitted write paths no longer carry dead schema-less
-      `graph_schema is None` branches in `CREATE`, `MERGE`, `SET`, and
-      `DELETE` lowering, which matches the fact that the top-level compile
-      entrypoint already requires supported schema context.
-      Remaining work in this purge:
-      remove the still-dead schema-less and generic-table fallback branches
-      from `_compile_write_helpers.py`, delete the temporary
-      `_removed_schema_less_write_sql(...)` shim once helper imports stop
-      depending on it, purge the remaining old JSON/property-bag helper logic
-      that still survives in `_compile_read_helpers.py` and
-      `_compile_sql_utils.py`, and then simplify `_compile_duckdb.py` so
-      DuckDB lowers against the cleaner typed helper/output shapes directly
-      instead of compensating for legacy compiler forms.
-- [ ] Re-run and extend the compiler benchmarks after that purge so the repo
+      Done: `compile.py` had already been pared back so the main admitted
+      write paths no longer carried dead schema-less `graph_schema is None`
+      branches in `CREATE`, `MERGE`, `SET`, and `DELETE` lowering, and the
+      remaining dead schema-less write-helper branches in
+      `_compile_write_helpers.py` have now been removed too. The temporary
+      `_removed_schema_less_write_sql(...)` shim has been deleted, and the
+      live type-aware compiler entrypoints no longer route through a hidden
+      schema-less write fallback. Any remaining legacy generic read-helper
+      code is now isolated outside the active type-aware compile path rather
+      than part of the migration contract itself.
+- [x] Re-run and extend the compiler benchmarks after that purge so the repo
       has explicit evidence for what this cleanup buys, especially whether
       DuckDB compile latency drops once the backend no longer pays for legacy
       helper shapes and rewrite-heavy fallback logic.
+      Done for the current cleanup pass: the focused compile/render/type-aware
+      SQLite runtime suite is green after the helper purge, and the compiler
+      benchmark smoke pass completed successfully across the benchmark
+      entrypoints plus the SQLite, DuckDB, and PostgreSQL backends, with the
+      baseline written to
+      `scripts/benchmarks/results/compiler-post-migration-cleanup.json`.
 
 ## Phase 1
 

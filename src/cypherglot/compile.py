@@ -868,13 +868,6 @@ def _compile_type_aware_set_assignments(
     )
 
 
-def _removed_schema_less_write_sql() -> str:
-    raise ValueError(
-        "CypherGlot write compilation now requires an explicit type-aware "
-        "CompilerSchemaContext."
-    )
-
-
 def _match_create_endpoint_id_sql(
     direction: Literal["out", "in"],
     side: Literal["from", "to"],
