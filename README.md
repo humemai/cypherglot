@@ -21,7 +21,8 @@ raw Cypher string
 → parse
 → validate admitted subset
 → normalize
-→ compile
+→ graph-relational IR
+→ backend-aware lowering
 → SQLGlot AST or SQL-backed program
 ```
 
@@ -38,21 +39,29 @@ CypherGlot is intentionally compiler-only.
 - a stable boundary between Cypher parsing and host-runtime execution
 - SQLGlot-backed output for embedded runtimes such as HumemDB
 
-## Current SQL target
+## Current backend direction
 
-CypherGlot currently lowers admitted queries to SQL that is tested and supported
-for SQLite-backed host runtimes, with a narrow DuckDB read-only rendering path
-for analytical experiments over the same graph-to-table contract.
+Phase 12 changes the compiler architecture target on purpose: equal
+multi-dialect SQL support now comes first, and the compiler is moving away from
+`Cypher AST -> mostly SQLite-oriented SQLGlot AST -> dialect tweaks` toward a
+backend-neutral IR plus backend-aware lowering path.
 
-- the current supported backend target is SQLite-first, with narrow DuckDB
-  read-only support for admitted analytical reads
-- HumemDB is the reference host runtime for that contract
-- the current runtime validation in this repo is SQLite-first, with narrow
-  DuckDB read-only runtime coverage
-- `dialect=...` rendering support is useful for string output experiments and host
-  integration work, but it is not a portability guarantee across backends today
-- DuckDB support is currently limited to read-only graph-query families; write
-  programs and full backend neutrality are still out of scope
+- the intended compiler path is now `Cypher AST -> normalize ->
+  graph-relational IR -> backend-aware lowering -> SQLGlot AST/program -> SQL`
+- SQLite-through-IR is the first landed executable milestone, not the long-term
+  hidden shape of the whole compiler
+- DuckDB now has an explicit lowering path from the same shared architecture;
+  parity work is still in progress and support claims remain strict
+- PostgreSQL is a planned first-class backend from the same IR path rather than
+  a renderer-only afterthought
+- `dialect=...` rendering support remains useful for string output experiments
+  and host integration work, but rendering alone is still not a portability
+  guarantee
+- a backend counts as supported only when admitted Cypher shapes execute
+  correctly against that backend's schema and runtime contract
+
+HumemDB remains the main reference host runtime for the current SQLite-backed
+execution contract while the broader multi-dialect pass is in flight.
 
 ## Graph-to-table schema contract
 
@@ -160,6 +169,8 @@ The stable entrypoints are:
 - `parse_cypher_text(text)`
 - `validate_cypher_text(text)`
 - `normalize_cypher_text(text)`
+- `graph_schema_from_text(text)`
+- `schema_ddl_from_text(text, backend)`
 - `to_sqlglot_ast(text)`
 - `to_sqlglot_program(text)`
 - `to_sql(text, dialect=...)`
@@ -167,6 +178,38 @@ The stable entrypoints are:
 
 Lower-level `compile_*`, `normalize_*`, and `render_compiled_*` helpers remain
 available for implementation-facing use.
+
+## Schema definition surface
+
+CypherGlot now also accepts a small graph-native schema-definition surface above
+the raw `GraphSchema(...)` Python API. That lets hosts define graph types in
+graph terms and lower them through the same generated backend DDL path.
+
+```python
+import cypherglot
+
+schema = cypherglot.graph_schema_from_text(
+  """
+  CREATE NODE User (name STRING NOT NULL, age INTEGER);
+  CREATE NODE Company (name STRING NOT NULL);
+  CREATE EDGE WORKS_AT FROM User TO Company (since INTEGER);
+  """
+)
+
+ddl = cypherglot.schema_ddl_from_text(
+  """
+  CREATE NODE User (name STRING NOT NULL, age INTEGER);
+  CREATE NODE Company (name STRING NOT NULL);
+  CREATE EDGE WORKS_AT FROM User TO Company (since INTEGER);
+  CREATE INDEX user_name_idx ON NODE User(name);
+  """,
+  backend="sqlite",
+)
+```
+
+`CREATE INDEX` is admitted only for workload-specific property indexes on typed
+node or edge properties. Baseline edge traversal indexes are still generated
+automatically and should not be re-declared through this surface.
 
 ## Logging
 
@@ -309,6 +352,12 @@ Run the tests:
 
 ```bash
 uv run pytest
+```
+
+Run the PostgreSQL runtime suite against a disposable local container:
+
+```bash
+scripts/dev/run_postgresql_runtime_docker.sh
 ```
 
 Check the generated frontend state:

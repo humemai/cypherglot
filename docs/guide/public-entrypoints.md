@@ -6,6 +6,8 @@ host runtime or integration layer should usually start from:
 - `parse_cypher_text(...)`
 - `validate_cypher_text(...)`
 - `normalize_cypher_text(...)`
+- `graph_schema_from_text(...)`
+- `schema_ddl_from_text(...)`
 - `to_sqlglot_ast(...)`
 - `to_sql(...)`
 - `to_sqlglot_program(...)`
@@ -30,6 +32,8 @@ like as they move through the API.
 | `parse_cypher_text(text)` | `CypherParseResult` | You want the raw parse result and syntax errors | Parsing does not enforce the admitted subset by itself. |
 | `validate_cypher_text(text)` | `None` or raises `ValueError` | You want an explicit admitted-subset check | Good boundary check before relying on compilation. |
 | `normalize_cypher_text(text)` | A repo-owned normalized statement object | You need a stable host-runtime handoff shape | This is also the main public surface for vector-aware queries. |
+| `graph_schema_from_text(text)` | `GraphSchema` | You want to define graph types via `CREATE NODE` / `CREATE EDGE` text instead of raw Python object construction | This is the graph-native schema-definition surface above `GraphSchema(...)`. |
+| `schema_ddl_from_text(text, backend)` | `list[str]` | You want backend DDL from that schema-definition text | Reuses the checked-in type-aware schema DDL generator. |
 | `to_sqlglot_ast(text)` | one SQLGlot `Expression` | The admitted query lowers to one SQL statement | Rejects multi-step shapes. |
 | `to_sql(text, dialect=...)` | rendered SQL text | You want string SQL for one admitted statement | Thin rendering helper over `to_sqlglot_ast(...)`. |
 | `to_sqlglot_program(text)` | `CompiledCypherProgram` | The admitted query lowers to multiple SQL-backed steps | Used for writes and other program-shaped flows. |
@@ -45,10 +49,45 @@ Use the highest-level public entrypoint that matches your actual need.
   boundary check.
 - Use `normalize_cypher_text(...)` when a host runtime needs structured Cypher
   intent, especially for vector-aware queries.
+- Use `graph_schema_from_text(...)` when a host wants graph-native schema input
+  without constructing `GraphSchema(...)` manually.
+- Use `schema_ddl_from_text(...)` when that schema-definition text should lower
+  directly to backend DDL.
 - Use `to_sqlglot_ast(...)` or `to_sql(...)` for admitted single-statement
   shapes.
 - Use `to_sqlglot_program(...)` or `render_cypher_program_text(...)` for
   admitted multi-step shapes.
+
+## Walkthrough: schema-definition text
+
+CypherGlot also exposes a small graph-native schema-definition surface for the
+type-aware storage contract.
+
+```python
+import cypherglot
+
+schema_text = """
+CREATE NODE User (name STRING NOT NULL, age INTEGER);
+CREATE NODE Company (name STRING NOT NULL);
+CREATE EDGE WORKS_AT FROM User TO Company (since INTEGER);
+CREATE INDEX user_name_idx ON NODE User(name);
+"""
+
+graph_schema = cypherglot.graph_schema_from_text(schema_text)
+sqlite_ddl = cypherglot.schema_ddl_from_text(schema_text, backend="sqlite")
+```
+
+This layer is intentionally narrow.
+
+- `CREATE NODE <Type> (...)` defines one node type and its typed properties.
+- `CREATE EDGE <Type> FROM <Source> TO <Target> (...)` defines one edge type,
+  endpoint contract, and typed properties.
+- `CREATE INDEX <Name> ON NODE|EDGE <Type> (...)` adds workload-specific
+  property indexes on declared typed properties.
+- baseline edge traversal indexes still come from the generated DDL layer
+  automatically
+- baseline edge endpoint indexes stay implicit and generated rather than
+  becoming explicit schema commands every host must repeat
 
 ## Walkthrough: single-statement read
 

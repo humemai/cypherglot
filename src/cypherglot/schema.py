@@ -5,18 +5,45 @@ import re
 from typing import Literal
 
 
+SchemaBackend = Literal["sqlite", "duckdb", "postgresql"]
+
 _IDENTIFIER_PART_RE = re.compile(r"[^a-z0-9]+")
-_SQLITE_TYPE_BY_LOGICAL_TYPE = {
-    "string": "TEXT",
-    "integer": "INTEGER",
-    "float": "REAL",
-    "boolean": "INTEGER",
-    "json": "TEXT",
+_TYPE_BY_LOGICAL_TYPE_BY_BACKEND: dict[SchemaBackend, dict[str, str]] = {
+    "sqlite": {
+        "string": "TEXT",
+        "integer": "INTEGER",
+        "float": "REAL",
+        "boolean": "INTEGER",
+        "json": "TEXT",
+    },
+    "duckdb": {
+        "string": "VARCHAR",
+        "integer": "BIGINT",
+        "float": "DOUBLE",
+        "boolean": "BOOLEAN",
+        "json": "JSON",
+    },
+    "postgresql": {
+        "string": "TEXT",
+        "integer": "BIGINT",
+        "float": "DOUBLE PRECISION",
+        "boolean": "BOOLEAN",
+        "json": "JSONB",
+    },
 }
 
 
 class SchemaContractError(ValueError):
     pass
+
+
+def _validated_backend(backend: SchemaBackend) -> SchemaBackend:
+    if backend not in _TYPE_BY_LOGICAL_TYPE_BY_BACKEND:
+        supported = ", ".join(sorted(_TYPE_BY_LOGICAL_TYPE_BY_BACKEND))
+        raise SchemaContractError(
+            f"Unsupported schema backend {backend!r}. Supported: {supported}."
+        )
+    return backend
 
 
 def _identifier_suffix(name: str) -> str:
@@ -38,6 +65,10 @@ def property_column_name(property_name: str) -> str:
     return _identifier_suffix(property_name)
 
 
+def _id_sequence_name(table_name: str) -> str:
+    return f"{table_name}_id_seq"
+
+
 @dataclass(frozen=True)
 class PropertyField:
     name: str
@@ -48,22 +79,25 @@ class PropertyField:
     def column_name(self) -> str:
         return property_column_name(self.name)
 
-    def sqlite_column_sql(self) -> str:
-        sqlite_type = _SQLITE_TYPE_BY_LOGICAL_TYPE.get(self.logical_type)
-        if sqlite_type is None:
-            supported = ", ".join(sorted(_SQLITE_TYPE_BY_LOGICAL_TYPE))
+    def column_sql(self, backend: SchemaBackend) -> str:
+        backend = _validated_backend(backend)
+        sql_type = _TYPE_BY_LOGICAL_TYPE_BY_BACKEND[backend].get(self.logical_type)
+        if sql_type is None:
+            supported = ", ".join(
+                sorted(_TYPE_BY_LOGICAL_TYPE_BY_BACKEND[backend])
+            )
             raise SchemaContractError(
                 "Unsupported logical type "
                 f"{self.logical_type!r}. Supported: {supported}."
             )
 
         column_name = self.column_name
-        constraints = [f"{column_name} {sqlite_type}"]
+        constraints = [f"{column_name} {sql_type}"]
         if not self.nullable:
             constraints.append("NOT NULL")
-        if self.logical_type == "boolean":
+        if backend == "sqlite" and self.logical_type == "boolean":
             constraints.append(f"CHECK ({column_name} IN (0, 1))")
-        if self.logical_type == "json":
+        if backend == "sqlite" and self.logical_type == "json":
             constraints.append(f"CHECK (json_valid({column_name}))")
         return " ".join(constraints)
 
@@ -91,9 +125,22 @@ class EdgeTypeSpec:
 
 
 @dataclass(frozen=True)
+class PropertyIndexSpec:
+    name: str
+    target_kind: Literal["node", "edge"]
+    target_type: str
+    property_names: tuple[str, ...]
+
+    @property
+    def index_name(self) -> str:
+        return _identifier_suffix(self.name)
+
+
+@dataclass(frozen=True)
 class GraphSchema:
     node_types: tuple[NodeTypeSpec, ...]
     edge_types: tuple[EdgeTypeSpec, ...]
+    property_indexes: tuple[PropertyIndexSpec, ...] = field(default_factory=tuple)
 
     def node_type(self, name: str) -> NodeTypeSpec:
         for node_type in self.node_types:
@@ -136,50 +183,111 @@ class GraphSchema:
                     f"node type {edge_type.target_type!r}."
                 )
 
-    def sqlite_ddl(self) -> list[str]:
-        self.validate()
+        normalized_index_names = [
+            property_index.index_name for property_index in self.property_indexes
+        ]
+        if len(set(normalized_index_names)) != len(normalized_index_names):
+            raise SchemaContractError(
+                "Property index names must be unique after identifier normalization."
+            )
 
-        ddl: list[str] = ["PRAGMA foreign_keys = ON;"]
+        node_types_by_name = {
+            node_type.name: node_type for node_type in self.node_types
+        }
+        edge_types_by_name = {
+            edge_type.name: edge_type for edge_type in self.edge_types
+        }
+        for property_index in self.property_indexes:
+            if not property_index.property_names:
+                raise SchemaContractError(
+                    f"Property index {property_index.name!r} must target at least "
+                    "one property column."
+                )
+
+            if property_index.target_kind == "node":
+                target_spec = node_types_by_name.get(property_index.target_type)
+                if target_spec is None:
+                    raise SchemaContractError(
+                        f"Property index {property_index.name!r} references "
+                        f"unknown node type {property_index.target_type!r}."
+                    )
+            else:
+                target_spec = edge_types_by_name.get(property_index.target_type)
+                if target_spec is None:
+                    raise SchemaContractError(
+                        f"Property index {property_index.name!r} references "
+                        f"unknown edge type {property_index.target_type!r}."
+                    )
+
+            defined_property_names = {
+                property_field.name for property_field in target_spec.properties
+            }
+            for property_name in property_index.property_names:
+                if property_name not in defined_property_names:
+                    raise SchemaContractError(
+                        f"Property index {property_index.name!r} references "
+                        f"unknown {property_index.target_kind} property "
+                        f"{property_name!r} on {property_index.target_type!r}."
+                    )
+
+    def ddl(self, backend: SchemaBackend) -> list[str]:
+        self.validate()
+        backend = _validated_backend(backend)
+
+        ddl: list[str] = []
+        if backend == "sqlite":
+            ddl.append("PRAGMA foreign_keys = ON;")
         node_table_by_name = {
             node_type.name: node_type.table_name for node_type in self.node_types
         }
 
         for node_type in self.node_types:
-            column_lines = ["id INTEGER PRIMARY KEY"]
+            ddl.extend(self._pre_table_ddl(node_type.table_name, backend))
+            column_lines = [self._id_column_sql(node_type.table_name, backend)]
             column_lines.extend(
-                property_field.sqlite_column_sql()
+                property_field.column_sql(backend)
                 for property_field in node_type.properties
             )
             ddl.append(
-                "CREATE TABLE "
-                f"{node_type.table_name} (\n  "
-                + ",\n  ".join(column_lines)
-                + "\n) STRICT;"
+                self._create_table_sql(
+                    node_type.table_name,
+                    column_lines,
+                    backend,
+                )
             )
+            ddl.extend(self._property_index_ddl(node_type))
 
         for edge_type in self.edge_types:
+            ddl.extend(self._pre_table_ddl(edge_type.table_name, backend))
             column_lines = [
-                "id INTEGER PRIMARY KEY",
-                "from_id INTEGER NOT NULL",
-                "to_id INTEGER NOT NULL",
+                self._id_column_sql(edge_type.table_name, backend),
+                self._reference_id_column_sql(backend, "from_id"),
+                self._reference_id_column_sql(backend, "to_id"),
             ]
             column_lines.extend(
-                property_field.sqlite_column_sql()
+                property_field.column_sql(backend)
                 for property_field in edge_type.properties
             )
-            column_lines.append(
-                "FOREIGN KEY (from_id) REFERENCES "
-                f"{node_table_by_name[edge_type.source_type]}(id) ON DELETE CASCADE"
+            column_lines.extend(
+                self._foreign_key_sql(
+                    backend,
+                    column_name="from_id",
+                    referenced_table=node_table_by_name[edge_type.source_type],
+                )
             )
-            column_lines.append(
-                "FOREIGN KEY (to_id) REFERENCES "
-                f"{node_table_by_name[edge_type.target_type]}(id) ON DELETE CASCADE"
+            column_lines.extend(
+                self._foreign_key_sql(
+                    backend,
+                    column_name="to_id",
+                    referenced_table=node_table_by_name[edge_type.target_type],
+                )
             )
             ddl.append(
-                "CREATE TABLE "
-                f"{edge_type.table_name} (\n  "
-                + ",\n  ".join(column_lines)
-                + "\n) STRICT;"
+                self._create_table_sql(
+                    edge_type.table_name,
+                    column_lines,
+                    backend,
+                )
             )
             ddl.append(
                 f"CREATE INDEX idx_{edge_type.table_name}_from_id "
@@ -197,8 +305,81 @@ class GraphSchema:
                 f"CREATE INDEX idx_{edge_type.table_name}_to_from "
                 f"ON {edge_type.table_name}(to_id, from_id);"
             )
+            ddl.extend(self._property_index_ddl(edge_type))
 
         return ddl
+
+    def _property_index_ddl(
+        self,
+        graph_type: NodeTypeSpec | EdgeTypeSpec,
+    ) -> list[str]:
+        target_kind = "node" if isinstance(graph_type, NodeTypeSpec) else "edge"
+        statements: list[str] = []
+        for property_index in self.property_indexes:
+            if property_index.target_kind != target_kind:
+                continue
+            if property_index.target_type != graph_type.name:
+                continue
+
+            column_list = ", ".join(
+                property_column_name(property_name)
+                for property_name in property_index.property_names
+            )
+            statements.append(
+                f"CREATE INDEX {property_index.index_name} "
+                f"ON {graph_type.table_name}({column_list});"
+            )
+
+        return statements
+
+    def _pre_table_ddl(self, table_name: str, backend: SchemaBackend) -> list[str]:
+        if backend == "sqlite":
+            return []
+        return [f"CREATE SEQUENCE {_id_sequence_name(table_name)} START 1;"]
+
+    def _id_column_sql(self, table_name: str, backend: SchemaBackend) -> str:
+        if backend == "sqlite":
+            return "id INTEGER PRIMARY KEY"
+        return (
+            "id BIGINT PRIMARY KEY DEFAULT "
+            f"nextval('{_id_sequence_name(table_name)}')"
+        )
+
+    def _reference_id_column_sql(
+        self,
+        backend: SchemaBackend,
+        column_name: str,
+    ) -> str:
+        if backend == "sqlite":
+            return f"{column_name} INTEGER NOT NULL"
+        return f"{column_name} BIGINT NOT NULL"
+
+    def _foreign_key_sql(
+        self,
+        backend: SchemaBackend,
+        column_name: str,
+        referenced_table: str,
+    ) -> list[str]:
+        if backend == "duckdb":
+            return []
+        return [
+            "FOREIGN KEY "
+            f"({column_name}) REFERENCES {referenced_table}(id) ON DELETE CASCADE"
+        ]
+
+    def _create_table_sql(
+        self,
+        table_name: str,
+        column_lines: list[str],
+        backend: SchemaBackend,
+    ) -> str:
+        table_suffix = " STRICT" if backend == "sqlite" else ""
+        return (
+            "CREATE TABLE "
+            f"{table_name} (\n  "
+            + ",\n  ".join(column_lines)
+            + f"\n){table_suffix};"
+        )
 
 
 @dataclass(frozen=True)

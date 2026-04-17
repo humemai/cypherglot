@@ -464,7 +464,185 @@ class BenchmarkSQLiteRuntimeScriptTests(unittest.TestCase):
         self.assertIn("sqlite_unindexed", snapshots[4]["workloads"]["olap"])
         self.assertEqual(snapshots[-1], result)
 
-    def test_filter_duckdb_olap_queries_skips_variable_length_reachability(self) -> None:
+    def test_benchmark_result_reports_postgresql_suites_when_configured(self) -> None:
+        benchmark_result = getattr(benchmark_sqlite_runtime, "_benchmark_result")
+        load_corpus = getattr(benchmark_sqlite_runtime, "_load_corpus")
+        select_queries = getattr(benchmark_sqlite_runtime, "_select_queries")
+
+        backend_calls: list[tuple[str, str, str]] = []
+
+        class FakeFixture:
+            def __init__(self, index_mode: str) -> None:
+                self.index_mode = index_mode
+                self.db_path = Path("/tmp/runtime.sqlite3")
+                self.row_counts = {"node_count": 1, "edge_count": 1}
+                self.db_size_mib = 1.0
+                self.wal_size_mib = 0.5
+                self.rss_snapshots_mib = {}
+                self.setup_metrics = {
+                    "connect_ns": 1,
+                    "schema_ns": 1,
+                    "index_ns": 1,
+                    "ingest_ns": 1,
+                    "analyze_ns": 1,
+                }
+
+            def close(self) -> None:
+                return None
+
+        def fake_prepare_fixture(
+            *,
+            scale: object,
+            graph_schema: object,
+            edge_plans: object,
+            index_mode: str,
+            db_root_dir: Path | None = None,
+        ) -> FakeFixture:
+            self.assertIsNotNone(scale)
+            self.assertIsNotNone(graph_schema)
+            self.assertIsNotNone(edge_plans)
+            self.assertIsNone(db_root_dir)
+            return FakeFixture(index_mode)
+
+        def fake_run_backend_suite(
+            backend: str,
+            queries: list[object],
+            *,
+            workload: str,
+            iterations: int,
+            warmup: int,
+            graph_schema: object,
+            schema_context: object,
+            sqlite_source: FakeFixture,
+            postgres_dsn: str | None = None,
+            db_root_dir: Path | None = None,
+            iteration_progress: bool = False,
+        ) -> dict[str, object]:
+            self.assertFalse(iteration_progress)
+            self.assertIsNotNone(graph_schema)
+            self.assertIsNotNone(schema_context)
+            self.assertIsNone(db_root_dir)
+            backend_calls.append((workload, backend, sqlite_source.index_mode))
+            if backend == "postgresql":
+                self.assertEqual(postgres_dsn, "postgresql://bench")
+            return {
+                "backend": backend,
+                "index_mode": sqlite_source.index_mode,
+                "iterations": iterations,
+                "warmup": warmup,
+                "query_count": len(queries),
+                "setup": {
+                    "connect_ms": 0.1,
+                    "schema_ms": 0.2,
+                    "index_ms": 0.3,
+                    "ingest_ms": 0.4,
+                    "analyze_ms": 0.5,
+                },
+                "row_counts": sqlite_source.row_counts,
+                "rss_snapshots_mib": {"after_connect": 1.0},
+                "storage": {"db_size_mib": 1.0, "wal_size_mib": 0.0},
+                "db_path": "/tmp/runtime.sqlite3",
+                "compile": {
+                    "mean_of_mean_ms": 1.0,
+                    "mean_of_p50_ms": 1.0,
+                    "mean_of_p95_ms": 1.0,
+                    "mean_of_p99_ms": 1.0,
+                },
+                "execute": {
+                    "mean_of_mean_ms": 2.0,
+                    "mean_of_p50_ms": 2.0,
+                    "mean_of_p95_ms": 2.0,
+                    "mean_of_p99_ms": 2.0,
+                },
+                "reset": {
+                    "mean_of_mean_ms": 0.5,
+                    "mean_of_p50_ms": 0.5,
+                    "mean_of_p95_ms": 0.5,
+                    "mean_of_p99_ms": 0.5,
+                },
+                "end_to_end": {
+                    "mean_of_mean_ms": 3.0,
+                    "mean_of_p50_ms": 3.0,
+                    "mean_of_p95_ms": 3.0,
+                    "mean_of_p99_ms": 3.0,
+                },
+                "queries": [
+                    {
+                        "name": query.name,
+                        "category": query.category,
+                        "compile": {
+                            "mean_ms": 1.0,
+                            "p50_ms": 1.0,
+                            "p95_ms": 1.0,
+                            "p99_ms": 1.0,
+                        },
+                        "execute": {
+                            "mean_ms": 2.0,
+                            "p50_ms": 2.0,
+                            "p95_ms": 2.0,
+                            "p99_ms": 2.0,
+                        },
+                        "reset": {
+                            "mean_ms": 0.5,
+                            "p50_ms": 0.5,
+                            "p95_ms": 0.5,
+                            "p99_ms": 0.5,
+                        },
+                        "end_to_end": {
+                            "mean_ms": 3.0,
+                            "p50_ms": 3.0,
+                            "p95_ms": 3.0,
+                            "p99_ms": 3.0,
+                        },
+                    }
+                    for query in queries
+                ],
+            }
+
+        with mock.patch.object(
+            benchmark_sqlite_runtime,
+            "_prepare_shared_sqlite_fixture",
+            side_effect=fake_prepare_fixture,
+        ), mock.patch.object(
+            benchmark_sqlite_runtime,
+            "_run_backend_suite",
+            side_effect=fake_run_backend_suite,
+        ):
+            result = benchmark_result(
+                select_queries(
+                    load_corpus(CORPUS_PATH),
+                    ["oltp_type1_point_lookup", "olap_type1_age_rollup"],
+                ),
+                iterations=1,
+                warmup=0,
+                include_duckdb=False,
+                postgres_dsn="postgresql://bench",
+                scale=SMALL_SCALE,
+                index_mode="both",
+            )
+
+        workloads = result["workloads"]
+        self.assertIn("postgresql_indexed", workloads["oltp"])
+        self.assertIn("postgresql_unindexed", workloads["oltp"])
+        self.assertIn("postgresql_indexed", workloads["olap"])
+        self.assertIn("postgresql_unindexed", workloads["olap"])
+        self.assertEqual(
+            backend_calls,
+            [
+                ("oltp", "sqlite", "indexed"),
+                ("oltp", "postgresql", "indexed"),
+                ("oltp", "sqlite", "unindexed"),
+                ("oltp", "postgresql", "unindexed"),
+                ("olap", "sqlite", "indexed"),
+                ("olap", "postgresql", "indexed"),
+                ("olap", "sqlite", "unindexed"),
+                ("olap", "postgresql", "unindexed"),
+            ],
+        )
+
+    def test_filter_duckdb_olap_queries_skips_variable_length_reachability(
+        self,
+    ) -> None:
         filter_duckdb_olap_queries = getattr(
             benchmark_sqlite_runtime,
             "_filter_duckdb_olap_queries",
@@ -533,6 +711,12 @@ class BenchmarkSQLiteRuntimeScriptTests(unittest.TestCase):
                 "mean_of_p95_ms": 2.2,
                 "mean_of_p99_ms": 2.3,
             },
+            "reset": {
+                "mean_of_mean_ms": 0.4,
+                "mean_of_p50_ms": 0.4,
+                "mean_of_p95_ms": 0.5,
+                "mean_of_p99_ms": 0.6,
+            },
             "end_to_end": {
                 "mean_of_mean_ms": 3.1,
                 "mean_of_p50_ms": 3.0,
@@ -547,16 +731,25 @@ class BenchmarkSQLiteRuntimeScriptTests(unittest.TestCase):
                         "mean_ms": 1.1,
                         "p50_ms": 1.0,
                         "p95_ms": 1.2,
+                        "p99_ms": 1.3,
                     },
                     "execute": {
                         "mean_ms": 2.1,
                         "p50_ms": 2.0,
                         "p95_ms": 2.2,
+                        "p99_ms": 2.3,
+                    },
+                    "reset": {
+                        "mean_ms": 0.4,
+                        "p50_ms": 0.4,
+                        "p95_ms": 0.5,
+                        "p99_ms": 0.6,
                     },
                     "end_to_end": {
                         "mean_ms": 3.1,
                         "p50_ms": 3.0,
                         "p95_ms": 3.2,
+                        "p99_ms": 3.3,
                     },
                 }
             ],
@@ -569,7 +762,8 @@ class BenchmarkSQLiteRuntimeScriptTests(unittest.TestCase):
         self.assertIn("analyze=5.00 ms", rendered)
         self.assertIn("after_ingest=20.00 MiB", rendered)
         self.assertIn("db=12.50 MiB", rendered)
-        self.assertIn("p50=1.00 ms", rendered)
+        self.assertIn("p99=1.30 ms", rendered)
+        self.assertIn("reset_p99=0.60 ms", rendered)
         self.assertIn("end_to_end_p95=3.20 ms", rendered)
 
 

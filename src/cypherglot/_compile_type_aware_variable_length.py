@@ -1,30 +1,75 @@
 from __future__ import annotations
 
-from ._normalize_support import OrderItem, ReturnItem
-from .compile import (
-    GraphSchema,
-    NormalizedMatchChain,
-    NormalizedMatchRelationship,
-    NormalizedMatchWithReturn,
+from ._compile_sql_utils import _AGGREGATE_SQL_NAMES, _assemble_select_sql
+from ._compile_type_aware_common import (
     _TypeAwareAliasSpec,
     _TypeAwareWithBindingSpec,
-    _assemble_select_sql,
-    _compile_type_aware_chain_return_expression,
-    _compile_type_aware_chain_select_expressions,
-    _compile_type_aware_chain_source_components,
     _compile_type_aware_match_node_predicate,
     _compile_type_aware_node_field_expression,
     _compile_type_aware_predicate,
     _compile_type_aware_with_binding_columns,
-    _compile_variable_length_outer_projection,
-    _expand_type_aware_variable_length_relationship_branches,
-    _projected_order_column_name,
-    _supports_direct_variable_length_aggregate_return,
-    _supports_type_aware_zero_hop_variable_length_branch,
-    _variable_length_aggregate_hidden_column,
     _with_scalar_prefix,
-    _AGGREGATE_SQL_NAMES,
 )
+from ._compile_type_aware_reads import (
+    _compile_type_aware_chain_return_expression,
+    _compile_type_aware_chain_select_expressions,
+    _compile_type_aware_chain_source_components,
+    _expand_type_aware_variable_length_relationship_branches,
+    _supports_type_aware_zero_hop_variable_length_branch,
+)
+from ._normalize_support import OrderItem, ReturnItem
+from .ir import GraphRelationalReadIR
+from .normalize import NormalizedMatchChain, NormalizedMatchRelationship
+from .schema import GraphSchema
+
+
+def _supports_direct_variable_length_aggregate_return(
+    returns: tuple[ReturnItem, ...],
+) -> bool:
+    return any(item.kind in _AGGREGATE_SQL_NAMES for item in returns) and all(
+        item.kind in _AGGREGATE_SQL_NAMES
+        or item.kind not in {"type", "start_node", "end_node"}
+        for item in returns
+    )
+
+
+def _compile_variable_length_outer_projection(
+    item: ReturnItem,
+    index: int,
+) -> str:
+    if item.kind not in _AGGREGATE_SQL_NAMES:
+        return f'variable_length_q."{item.column_name}" AS "{item.column_name}"'
+    aggregate_column = _variable_length_aggregate_hidden_column(index)
+    aggregate_sql = (
+        "COUNT(*)"
+        if item.kind == "count" and item.alias == "*"
+        else f'{_AGGREGATE_SQL_NAMES[item.kind]}(variable_length_q."{aggregate_column}")'
+    )
+    return f'{aggregate_sql} AS "{item.column_name}"'
+
+
+def _variable_length_aggregate_hidden_column(index: int) -> str:
+    return f"__cg_aggregate_{index}"
+
+
+def _projected_order_column_name(
+    item: OrderItem,
+    returns: tuple[ReturnItem, ...],
+) -> str:
+    for return_item in returns:
+        if item.field == "__value__" and return_item.output_alias == item.alias:
+            return return_item.column_name
+        if (
+            return_item.alias == item.alias
+            and return_item.field == item.field
+            and return_item.kind == "field"
+        ):
+            return return_item.column_name
+
+    raise ValueError(
+        "Unknown projected ORDER BY item for variable-length relationship read: "
+        f"{item.alias}.{item.field}"
+    )
 
 
 def _compile_type_aware_zero_hop_variable_length_source_components(
@@ -435,11 +480,12 @@ def _compile_type_aware_variable_length_order_by(
 
 
 def compile_type_aware_variable_length_with_source_sql(
-    statement: NormalizedMatchWithReturn,
+    statement: GraphRelationalReadIR,
     graph_schema: GraphSchema,
 ) -> tuple[str, dict[str, _TypeAwareWithBindingSpec]]:
     source = statement.source
-    assert isinstance(source, NormalizedMatchRelationship)
+    assert source is not None
+    assert source.source_kind == "relationship"
 
     branch_sql: list[str] = []
     binding_specs: dict[str, _TypeAwareWithBindingSpec] = {}
