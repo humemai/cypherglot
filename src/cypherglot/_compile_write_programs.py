@@ -21,7 +21,7 @@ from .schema import GraphSchema
 
 def _compile_create_relationship_program(
     statement: GraphRelationalCreateRelationshipWriteIR,
-    graph_schema: GraphSchema | None = None,
+    graph_schema: GraphSchema,
 ) -> CompiledCypherProgram:
     from .compile import (
         _compile_create_node_steps,
@@ -67,7 +67,7 @@ def _compile_create_relationship_program(
 
 def _compile_create_relationship_from_separate_patterns_program(
     statement: GraphRelationalCreateRelationshipFromSeparatePatternsWriteIR,
-    graph_schema: GraphSchema | None = None,
+    graph_schema: GraphSchema,
 ) -> CompiledCypherProgram:
     from .compile import _compile_create_node_steps, _compile_edge_insert_statement
 
@@ -498,6 +498,7 @@ def _compile_match_merge_relationship_sql(
         ),
         where_parts=where_parts,
     )
+
 
 
 
