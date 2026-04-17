@@ -60,6 +60,45 @@ class BenchmarkCompilerScriptTests(unittest.TestCase):
         self.assertEqual(suite["dialect_pair"]["write"], "sqlite")
         self.assertEqual(len(suite["results"]), 4)
 
+    def test_backend_lowering_result_reports_all_stages(self) -> None:
+        load_corpus = getattr(benchmark_compiler, "_load_corpus")
+        backend_lowering_result = getattr(
+            benchmark_compiler,
+            "_backend_lowering_result",
+        )
+
+        result = backend_lowering_result(
+            load_corpus(benchmark_compiler.DEFAULT_CORPUS_PATH)[:1],
+            backend=benchmark_compiler.SQLBackend.SQLITE,
+            iterations=1,
+            warmup=0,
+        )
+
+        self.assertEqual(result["backend"], "sqlite")
+        self.assertEqual(result["query_count"], 1)
+        self.assertEqual(
+            set(result["overall"].keys()),
+            {
+                "build_ir",
+                "bind_backend",
+                "lower_backend",
+                "render_program",
+                "end_to_end",
+            },
+        )
+        self.assertEqual(
+            set(result["queries"][0].keys()),
+            {
+                "name",
+                "category",
+                "build_ir",
+                "bind_backend",
+                "lower_backend",
+                "render_program",
+                "end_to_end",
+            },
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

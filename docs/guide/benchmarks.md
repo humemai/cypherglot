@@ -222,6 +222,16 @@ SQL corpus using:
 - `parse_one(...).sql(dialect="sqlite")`
 - `transpile(..., read="postgres", write="sqlite")`
 
+In addition to those public entrypoints, the harness also records backend-aware
+compiler pipeline timings for SQLite, DuckDB, and PostgreSQL across these
+stages:
+
+- IR build
+- backend bind
+- backend lower
+- rendered-program emission
+- backend-specific end-to-end raw Cypher to rendered target SQL/program text
+
 The compiler corpus intentionally mixes query families rather than timing only a
 single read shape. It currently includes ordinary reads, optional reads, `WITH`
 queries, grouped aggregation, bounded variable-length reads including zero-hop
@@ -268,6 +278,7 @@ That baseline records:
 - stage-level latency summaries
 - per-entrypoint summaries
 - per-query summaries
+- backend-aware lowering and end-to-end summaries for SQLite, DuckDB, and PostgreSQL
 - vector-only normalization summaries
 - SQLGlot comparison results for compiled and pure-Python installs when enabled
 
@@ -308,134 +319,58 @@ Vector-aware normalization queries from the same baseline:
 
 ## Runtime benchmark
 
-Script:
+This benchmark measures end-to-end runtime over the current type-aware graph
+contract. The workload is corpus-driven from
+`scripts/benchmarks/corpora/sqlite_runtime_benchmark_corpus.json` and split
+into two families:
 
-- `scripts/benchmarks/benchmark_sqlite_runtime.py`
+- OLTP: point reads, adjacency reads, cross-type reads, and mutation paths
+- OLAP: leaderboard scans, grouped aggregates, multi-hop projections,
+  introspection queries, and `WITH`-based rollups
 
-Supporting files:
+Read the backends this way:
 
-- `scripts/benchmarks/results/sqlite_runtime_benchmark_baseline.json`
+- SQLite suites are compile-plus-execute timings through CypherGlot, reported
+  for indexed and unindexed layouts.
+- DuckDB is OLAP-only and reads the SQLite-ingested dataset through the SQLite
+  extension.
+- Neo4j runs the same Cypher corpus directly, so its timings are direct
+  execution timings rather than compiler-plus-runtime timings.
 
-### Runtime scope
+Not every suite is present at every scale. The medium and large Neo4j runs omit
+`olap/neo4j_unindexed`, and the large DuckDB run skips
+`olap_variable_length_reachability`.
 
-This harness is for end-to-end runtime cost over the documented graph schema,
-not just compilation. It compiles admitted Cypher queries, executes them on the
-target backend, and records timing splits for each phase.
+### Runtime shape and output
 
-The runtime workload is now corpus-driven. The authoritative query catalog lives
-in `scripts/benchmarks/corpora/sqlite_runtime_benchmark_corpus.json` and is
-expanded against a generated type-aware schema at runtime.
+Common harness behavior:
 
-The OLTP mix is intentionally broader than reads now. It covers:
+- generated type-aware schema with configurable type counts, property counts,
+  and degree profile
+- streamed ingest batches so large runs do not materialize the full graph in
+  memory first
+- SQLite source database with `journal_mode=WAL`, `synchronous=NORMAL`, and
+  `foreign_keys=ON`
+- post-ingest `ANALYZE` for SQLite so planner statistics are available
+- global `--variable-hop-max`, with
+  `olap_variable_length_grouped_rollup` capped separately at `3` hops
+- JSON output with setup timings, RSS snapshots, storage sizes, pooled
+  workload summaries, and per-query timings
 
-- point and adjacency reads
-- cross-type join reads
-- multi-step write paths
-- create operations
-- update operations
-- delete operations
+Local result artifacts used below:
 
-The OLAP mix is intentionally broader than plain scan-and-aggregate reads. It
-now covers:
+- SQLite and DuckDB: `runtime-small.json`, `runtime-medium.json`,
+  `runtime-large.json`
+- Neo4j: `runtime-small-neo4j.json`, `runtime-medium-neo4j.json`,
+  `runtime-large-neo4j.json`
 
-- scan-and-order leaderboard reads
-- grouped aggregates
-- cross-type join aggregates
-- bounded variable-length traversals
-- fixed-length multi-hop projections
-- graph introspection reads
-- `WITH` rebinding plus aggregate rollups
-
-For each backend it:
-
-- generates a configurable multi-type type-aware graph schema
-- creates a temporary file-backed SQLite database
-- creates the graph tables
-- benchmarks both query-driven indexed and unindexed SQLite layouts
-- ingests a synthetic graph fixture into SQLite
-- runs `ANALYZE` on the SQLite source after ingest so the planner has real statistics
-- lets DuckDB attach and read that SQLite-ingested dataset for OLAP reads
-- records setup timing for connect, schema, index, ingest, and analyze
-- captures RSS snapshots across setup milestones
-- records SQLite database and WAL sizes after ingest
-
-For each query it records:
-
-- CypherGlot compile latency
-- backend execution latency
-- end-to-end compile-plus-execute latency
-- reset latency
-
-Mutation-oriented OLTP queries run inside a SQLite savepoint and are rolled back
-after each iteration, so `reset` now measures the rollback cost needed to keep
-the seeded graph stable across repeated create, update, and delete samples.
-
-### Runtime shape and scale
-
-The runtime harness currently uses:
-
-- `journal_mode=WAL` for SQLite
-- `synchronous=NORMAL` for SQLite
-- `foreign_keys=ON` for SQLite
-- a file-backed SQLite source database plus a DuckDB reader over that SQLite data
-- the current type-aware runtime contract generated from configurable node and
-  edge type counts
-
-The runtime benchmark is now aligned with the repository's type-aware migration
-direction. It keeps the focus on end-to-end Cypher runtime cost, while the
-separate schema-shape benchmark remains the place for broader storage-layout
-comparisons.
-
-The scale is configurable with:
-
-- `--node-type-count`
-- `--edge-type-count`
-- `--nodes-per-type`
-- `--edges-per-source`
-- `--edge-degree-profile`
-- `--node-extra-text-property-count`
-- `--node-extra-numeric-property-count`
-- `--node-extra-boolean-property-count`
-- `--edge-extra-text-property-count`
-- `--edge-extra-numeric-property-count`
-- `--edge-extra-boolean-property-count`
-- `--variable-hop-max`
-- `--ingest-batch-size`
-
-The generator supports both uniform and skewed out-degree profiles. In skewed
-mode, most source nodes stay low-degree while a  tail becomes
-high-connectivity, which is useful for surfacing supernode and p95/p99 latency
-effects.
-
-The benchmark keeps `--variable-hop-max` as the global traversal bound for the
-ordinary variable-length queries, but the `olap_variable_length_grouped_rollup`
-stress query is capped separately at `3` hops. That keeps one intentionally
-hard OLAP shape in the corpus without letting medium and large full-suite runs
-be dominated by a single grouped variable-length expansion.
-
-The SQLite ingest path now streams bounded batches instead of materializing the
-entire synthetic graph in memory before insertion. That keeps large runs
-practical while preserving the same logical dataset shape.
-
-DuckDB is required for the default full OLAP comparison run. Pass
-`--skip-duckdb` if you only want the SQLite portion.
-
-DuckDB is not separately seeded anymore for the OLAP benchmark path. SQLite is
-the single ingest path, and DuckDB reads the SQLite-ingested tables.
-
-For SQLite specifically, the benchmark now treats post-ingest `ANALYZE` as part
-of normal setup. Without planner statistics, selective graph reads can fall
-into much worse edge-first plans and produce misleading execution timings.
-
-SQLite benchmarking defaults to `--index-mode both`, which produces separate
-indexed and unindexed suites. Use `--index-mode indexed` or
-`--index-mode unindexed` if you only want one layout.
+The checked-in SQLite baseline remains
+`scripts/benchmarks/results/sqlite_runtime_benchmark_baseline.json`, but the
+scale sections below reflect the current local comparison artifacts.
 
 ### Runtime commands
 
-Recommended small / medium / large full-runtime commands:
-
-Small:
+SQLite and DuckDB:
 
 ```bash
 uv run python scripts/benchmarks/benchmark_sqlite_runtime.py \
@@ -445,459 +380,199 @@ uv run python scripts/benchmarks/benchmark_sqlite_runtime.py \
   --olap-iterations 5 \
   --olap-warmup 1 \
   --index-mode both \
-  --node-type-count 4 \
-  --edge-type-count 4 \
-  --nodes-per-type 1000 \
-  --edges-per-source 3 \
-  --edge-degree-profile uniform \
-  --node-extra-text-property-count 2 \
-  --node-extra-numeric-property-count 6 \
-  --node-extra-boolean-property-count 2 \
-  --edge-extra-text-property-count 1 \
-  --edge-extra-numeric-property-count 3 \
-  --edge-extra-boolean-property-count 1 \
-  --variable-hop-max 2 \
-  --ingest-batch-size 1000 \
+  <scale flags> \
   --db-root-dir my_test_databases \
-  --output scripts/benchmarks/results/runtime-small.json
+  --output scripts/benchmarks/results/runtime-<scale>.json
 ```
 
-Medium:
-
-```bash
-uv run python scripts/benchmarks/benchmark_sqlite_runtime.py \
-  --iteration-progress \
-  --iterations 100 \
-  --warmup 5 \
-  --olap-iterations 5 \
-  --olap-warmup 1 \
-  --index-mode both \
-  --node-type-count 6 \
-  --edge-type-count 8 \
-  --nodes-per-type 100000 \
-  --edges-per-source 4 \
-  --edge-degree-profile skewed \
-  --node-extra-text-property-count 4 \
-  --node-extra-numeric-property-count 10 \
-  --node-extra-boolean-property-count 4 \
-  --edge-extra-text-property-count 2 \
-  --edge-extra-numeric-property-count 6 \
-  --edge-extra-boolean-property-count 2 \
-  --variable-hop-max 5 \
-  --ingest-batch-size 5000 \
-  --db-root-dir my_test_databases \
-  --output scripts/benchmarks/results/runtime-medium.json
-```
-
-Large:
-
-```bash
-uv run python scripts/benchmarks/benchmark_sqlite_runtime.py \
-  --iteration-progress \
-  --iterations 100 \
-  --warmup 5 \
-  --olap-iterations 5 \
-  --olap-warmup 1 \
-  --index-mode both \
-  --node-type-count 10 \
-  --edge-type-count 10 \
-  --nodes-per-type 1000000 \
-  --edges-per-source 8 \
-  --edge-degree-profile skewed \
-  --node-extra-text-property-count 8 \
-  --node-extra-numeric-property-count 18 \
-  --node-extra-boolean-property-count 8 \
-  --edge-extra-text-property-count 4 \
-  --edge-extra-numeric-property-count 10 \
-  --edge-extra-boolean-property-count 4 \
-  --variable-hop-max 8 \
-  --ingest-batch-size 10000 \
-  --db-root-dir my_test_databases \
-  --output scripts/benchmarks/results/runtime-large.json
-```
-
-### Runtime output and baseline
-
-The checked-in runtime baseline lives at
-`scripts/benchmarks/results/sqlite_runtime_benchmark_baseline.json`.
-
-That output is workload-oriented but corpus-backed. It records:
-
-- graph scale metadata
-- graph topology metadata such as edge-degree profile and effective average fanout
-- workload counts
-- token substitutions used to bind the generated schema to the corpus
-- per-backend setup summaries
-- per-backend RSS snapshots
-- per-backend SQLite storage summaries
-- per-backend pooled compile, execute, end-to-end, and reset summaries
-- per-query timing summaries inside each workload/backend suite
-
-Runtime timing summaries are emitted in milliseconds throughout the JSON output
-and CLI summary. The CLI summary now prints mean, p50, p95, and p99 for the
-pooled suites and for each query entry.
-
-If you need visibility into a long-running query while the benchmark is still
-executing, pass `--iteration-progress` to either runtime harness. That prints
-per-query warmup and measured iteration counters such as `warmup 3/5` and
-`iteration 7/10`.
-
-At the moment the runtime page should be read as documenting the current output
-shape and workflow, not as promising a stable cross-machine performance claim.
-The important comparison is repo-local regression tracking under the same setup.
-
-### Small runtime dataset
-
-The current small full-runtime run was executed with:
-
-- `4` node types
-- `4` edge types
-- `1000` nodes per node type
-- `3` outgoing edges per source node per edge type
-- uniform out-degree profile
-- `2` extra text properties, `6` extra numeric properties, and `2` extra boolean properties per node type
-- `1` extra text property, `3` extra numeric properties, and `1` extra boolean property per edge type
-- `2` maximum variable-hop depth
-- `100` measured OLTP iterations with `5` warmup iterations
-- `5` measured OLAP iterations with `1` warmup iteration
-
-That corresponds to roughly:
-
-- `4,000` total nodes
-- `12,000` total edges
-
-Result summary from `scripts/benchmarks/results/runtime-small.json`:
-
-| Suite | Ingest | Analyze | RSS Ingest | Size | Compile p50 | Execute p50 | End-to-End p50 | End-to-End p95 |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `oltp/sqlite_indexed` | `119.93 ms` | `6.19 ms` | `90.73 MiB` | `3.21 MiB` | `0.86 ms` | `0.04 ms` | `0.90 ms` | `0.92 ms` |
-| `oltp/sqlite_unindexed` | `84.10 ms` | `0.21 ms` | `90.80 MiB` | `1.92 MiB` | `0.88 ms` | `0.26 ms` | `1.14 ms` | `1.20 ms` |
-| `olap/sqlite_indexed` | `119.93 ms` | `6.19 ms` | `90.73 MiB` | `3.21 MiB` | `1.47 ms` | `1.90 ms` | `3.37 ms` | `3.54 ms` |
-| `olap/sqlite_unindexed` | `84.10 ms` | `0.21 ms` | `90.80 MiB` | `1.92 MiB` | `1.41 ms` | `1.96 ms` | `3.38 ms` | `3.59 ms` |
-| `olap/duckdb` | `attach 51.30 ms` | `n/a` | `115.78 MiB` | `3.21 MiB` | `4.62 ms` | `3.99 ms` | `8.83 ms` | `9.29 ms` |
-
-For DuckDB, that `attach 51.30 ms` entry is the one-time OLAP session setup
-cost to connect, load the SQLite extension, attach the SQLite fixture, and
-create DuckDB views over the attached tables. The per-query DuckDB latency
-columns below exclude that setup step.
-
-Representative OLTP per-query latency from the same run:
-
-| Query | Indexed Compile p50 | Indexed Execute p50 | Indexed End-to-End p50 | Indexed End-to-End p95 | Unindexed Compile p50 | Unindexed Execute p50 | Unindexed End-to-End p50 | Unindexed End-to-End p95 |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `oltp_type1_point_lookup` | `0.83 ms` | `0.01 ms` | `0.84 ms` | `0.91 ms` | `0.82 ms` | `0.07 ms` | `0.89 ms` | `0.97 ms` |
-| `oltp_type1_neighbors` | `0.88 ms` | `0.02 ms` | `0.90 ms` | `0.92 ms` | `0.89 ms` | `0.23 ms` | `1.13 ms` | `1.15 ms` |
-| `oltp_cross_type_lookup` | `1.04 ms` | `0.02 ms` | `1.06 ms` | `1.09 ms` | `1.06 ms` | `0.23 ms` | `1.29 ms` | `1.31 ms` |
-| `oltp_update_type1_score` | `0.62 ms` | `0.02 ms` | `0.64 ms` | `0.65 ms` | `0.62 ms` | `0.07 ms` | `0.70 ms` | `0.71 ms` |
-| `oltp_create_type1_node` | `0.61 ms` | `0.03 ms` | `0.63 ms` | `0.65 ms` | `0.61 ms` | `0.02 ms` | `0.63 ms` | `0.64 ms` |
-| `oltp_create_cross_type_edge` | `1.22 ms` | `0.03 ms` | `1.25 ms` | `1.27 ms` | `1.23 ms` | `0.14 ms` | `1.37 ms` | `1.44 ms` |
-| `oltp_delete_type1_edge` | `0.65 ms` | `0.04 ms` | `0.69 ms` | `0.70 ms` | `0.66 ms` | `0.23 ms` | `0.89 ms` | `0.90 ms` |
-| `oltp_delete_type1_node` | `0.43 ms` | `0.11 ms` | `0.54 ms` | `0.56 ms` | `0.45 ms` | `1.28 ms` | `1.74 ms` | `1.82 ms` |
-| `oltp_program_create_and_link` | `1.51 ms` | `0.05 ms` | `1.56 ms` | `1.59 ms` | `1.58 ms` | `0.10 ms` | `1.69 ms` | `1.91 ms` |
-| `oltp_update_cross_type_edge_rank` | `0.81 ms` | `0.04 ms` | `0.85 ms` | `0.89 ms` | `0.83 ms` | `0.24 ms` | `1.07 ms` | `1.15 ms` |
-
-Representative OLAP per-query end-to-end latency from the same run:
-
-| Query | SQLite Indexed p50 | SQLite Indexed p95 | SQLite Unindexed p50 | SQLite Unindexed p95 | DuckDB p50 | DuckDB p95 |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `olap_type1_active_leaderboard` | `1.35 ms` | `1.52 ms` | `1.29 ms` | `1.41 ms` | `4.39 ms` | `4.58 ms` |
-| `olap_type1_age_rollup` | `2.11 ms` | `2.46 ms` | `1.42 ms` | `1.54 ms` | `5.59 ms` | `5.62 ms` |
-| `olap_cross_type_edge_rollup` | `3.49 ms` | `3.61 ms` | `2.34 ms` | `2.44 ms` | `7.66 ms` | `8.24 ms` |
-| `olap_variable_length_reachability` | `1.49 ms` | `1.52 ms` | `3.27 ms` | `3.65 ms` | `10.41 ms` | `11.05 ms` |
-| `olap_three_type_path_count` | `4.32 ms` | `4.76 ms` | `4.26 ms` | `4.71 ms` | `7.75 ms` | `7.98 ms` |
-| `olap_type2_score_distribution` | `1.54 ms` | `1.73 ms` | `1.64 ms` | `1.99 ms` | `6.13 ms` | `7.51 ms` |
-| `olap_fixed_length_path_projection` | `5.93 ms` | `6.03 ms` | `5.72 ms` | `5.76 ms` | `10.87 ms` | `10.98 ms` |
-| `olap_graph_introspection_rollup` | `1.48 ms` | `1.53 ms` | `2.08 ms` | `2.15 ms` | `7.90 ms` | `8.31 ms` |
-| `olap_with_scalar_rebinding` | `1.97 ms` | `2.02 ms` | `1.81 ms` | `1.84 ms` | `7.44 ms` | `8.01 ms` |
-| `olap_variable_length_grouped_rollup` | `10.03 ms` | `10.17 ms` | `9.97 ms` | `10.45 ms` | `20.18 ms` | `20.64 ms` |
-
-### Medium runtime dataset
-
-The current medium full-runtime run was executed with:
-
-- `6` node types
-- `8` edge types
-- `100000` nodes per node type
-- `4` outgoing edges per source node per edge type
-- skewed out-degree profile with effective average fanout `7.779`
-- `4` extra text properties, `10` extra numeric properties, and `4` extra boolean properties per node type
-- `2` extra text properties, `6` extra numeric properties, and `2` extra boolean properties per edge type
-- `5` maximum variable-hop depth
-- `100` measured OLTP iterations with `5` warmup iterations
-- `5` measured OLAP iterations with `1` warmup iteration
-
-That corresponds to roughly:
-
-- `600,000` total nodes
-- `6,223,200` total edges
-
-Result summary from `scripts/benchmarks/results/runtime-medium.json`:
-
-| Suite | Ingest | Analyze | RSS Ingest | Size | Compile p50 | Execute p50 | End-to-End p50 | End-to-End p95 |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `oltp/sqlite_indexed` | `91,165.27 ms` | `3,199.75 ms` | `98.57 MiB` | `1,749.66 MiB` | `0.89 ms` | `0.08 ms` | `0.97 ms` | `1.08 ms` |
-| `oltp/sqlite_unindexed` | `52,330.56 ms` | `279.39 ms` | `99.05 MiB` | `1,165.93 MiB` | `1.41 ms` | `120.07 ms` | `121.49 ms` | `125.43 ms` |
-| `olap/sqlite_indexed` | `91,165.27 ms` | `3,199.75 ms` | `98.57 MiB` | `1,749.66 MiB` | `1.86 ms` | `14,565.03 ms` | `14,566.95 ms` | `14,667.89 ms` |
-| `olap/sqlite_unindexed` | `52,330.56 ms` | `279.39 ms` | `99.05 MiB` | `1,165.93 MiB` | `2.08 ms` | `14,161.18 ms` | `14,163.25 ms` | `14,234.34 ms` |
-| `olap/duckdb` | `attach 1,972.56 ms` | `n/a` | `117.70 MiB` | `1,749.66 MiB` | `5.01 ms` | `236.33 ms` | `241.35 ms` | `245.80 ms` |
-
-For DuckDB, that `attach 1,972.56 ms` entry is the one-time OLAP session setup
-cost to connect, load the SQLite extension, attach the SQLite fixture, and
-create DuckDB views over the attached tables. The per-query DuckDB latency
-columns below exclude that setup step.
-
-Representative OLTP per-query latency from the same run:
-
-| Query | Indexed Compile p50 | Indexed Execute p50 | Indexed End-to-End p50 | Indexed End-to-End p95 | Unindexed Compile p50 | Unindexed Execute p50 | Unindexed End-to-End p50 | Unindexed End-to-End p95 |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `oltp_type1_point_lookup` | `0.86 ms` | `0.01 ms` | `0.87 ms` | `0.99 ms` | `1.35 ms` | `11.81 ms` | `13.17 ms` | `13.42 ms` |
-| `oltp_type1_neighbors` | `0.91 ms` | `0.02 ms` | `0.93 ms` | `1.03 ms` | `1.63 ms` | `90.08 ms` | `91.71 ms` | `96.32 ms` |
-| `oltp_cross_type_lookup` | `1.09 ms` | `0.02 ms` | `1.11 ms` | `1.47 ms` | `1.75 ms` | `88.49 ms` | `90.30 ms` | `94.81 ms` |
-| `oltp_update_type1_score` | `0.64 ms` | `0.02 ms` | `0.67 ms` | `1.02 ms` | `1.14 ms` | `11.97 ms` | `13.10 ms` | `13.46 ms` |
-| `oltp_create_type1_node` | `0.63 ms` | `0.03 ms` | `0.66 ms` | `0.69 ms` | `0.63 ms` | `0.02 ms` | `0.65 ms` | `0.66 ms` |
-| `oltp_create_cross_type_edge` | `1.25 ms` | `0.03 ms` | `1.29 ms` | `1.35 ms` | `1.90 ms` | `24.33 ms` | `26.29 ms` | `27.95 ms` |
-| `oltp_delete_type1_edge` | `0.67 ms` | `0.04 ms` | `0.71 ms` | `0.73 ms` | `1.27 ms` | `90.66 ms` | `91.96 ms` | `94.66 ms` |
-| `oltp_delete_type1_node` | `0.46 ms` | `0.50 ms` | `0.96 ms` | `0.98 ms` | `0.96 ms` | `779.04 ms` | `779.99 ms` | `798.73 ms` |
-| `oltp_program_create_and_link` | `1.55 ms` | `0.06 ms` | `1.60 ms` | `1.66 ms` | `2.00 ms` | `12.24 ms` | `14.25 ms` | `15.66 ms` |
-| `oltp_update_cross_type_edge_rank` | `0.83 ms` | `0.04 ms` | `0.87 ms` | `0.88 ms` | `1.45 ms` | `92.03 ms` | `93.51 ms` | `98.62 ms` |
-
-Representative OLAP per-query end-to-end latency from the same run:
-
-| Query | SQLite Indexed p50 | SQLite Indexed p95 | SQLite Unindexed p50 | SQLite Unindexed p95 | DuckDB p50 | DuckDB p95 |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `olap_type1_active_leaderboard` | `1.18 ms` | `1.33 ms` | `17.31 ms` | `17.79 ms` | `27.21 ms` | `27.95 ms` |
-| `olap_type1_age_rollup` | `144.53 ms` | `156.84 ms` | `42.74 ms` | `43.16 ms` | `27.70 ms` | `27.97 ms` |
-| `olap_cross_type_edge_rollup` | `1,420.15 ms` | `1,434.52 ms` | `363.59 ms` | `366.74 ms` | `96.85 ms` | `102.55 ms` |
-| `olap_variable_length_reachability` | `2.75 ms` | `3.15 ms` | `4,476.34 ms` | `4,500.33 ms` | `943.30 ms` | `961.17 ms` |
-| `olap_three_type_path_count` | `2,737.37 ms` | `2,743.31 ms` | `1,964.69 ms` | `1,969.14 ms` | `175.07 ms` | `186.94 ms` |
-| `olap_type2_score_distribution` | `20.14 ms` | `20.43 ms` | `45.25 ms` | `46.03 ms` | `25.62 ms` | `26.56 ms` |
-| `olap_fixed_length_path_projection` | `3,250.58 ms` | `3,266.84 ms` | `3,134.08 ms` | `3,246.84 ms` | `194.98 ms` | `197.29 ms` |
-| `olap_graph_introspection_rollup` | `1.48 ms` | `1.54 ms` | `181.45 ms` | `182.79 ms` | `84.28 ms` | `84.80 ms` |
-| `olap_with_scalar_rebinding` | `141.35 ms` | `145.76 ms` | `48.07 ms` | `49.47 ms` | `29.80 ms` | `30.95 ms` |
-| `olap_variable_length_grouped_rollup` | `137,949.96 ms` | `138,905.14 ms` | `131,358.92 ms` | `131,921.13 ms` | `808.74 ms` | `811.83 ms` |
-
-At this medium scale, the SQLite indexed OLTP path still stays close to
-single-digit milliseconds end to end, but the unindexed OLTP path is no longer
-in the same latency class. The OLAP suite summary is dominated by
-`olap_variable_length_grouped_rollup`: most of the other indexed OLAP queries
-remain in the `1 ms` to low-seconds range, while that one grouped variable-length
-traversal lands around `131` to `139` seconds per measured execution.
-
-### Large runtime dataset
-
-The current large full-runtime run was executed with:
-
-- `10` node types
-- `10` edge types
-- `1000000` nodes per node type
-- `8` outgoing edges per source node per edge type
-- skewed out-degree profile with effective average fanout `7.779`
-- `8` extra text properties, `18` extra numeric properties, and `8` extra boolean properties per node type
-- `4` extra text properties, `10` extra numeric properties, and `4` extra boolean properties per edge type
-- `8` maximum variable-hop depth
-- `100` measured OLTP iterations with `5` warmup iterations
-- `5` measured OLAP iterations with `1` warmup iteration
-
-That corresponds to roughly:
-
-- `10,000,000` total nodes
-- `77,790,000` total edges
-
-Result summary from `scripts/benchmarks/results/runtime-large.json`:
-
-| Suite | Ingest | Analyze | RSS Ingest | Size | Compile p50 | Execute p50 | End-to-End p50 | End-to-End p95 |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `oltp/sqlite_indexed` | `2,523,162.99 ms` | `39,969.58 ms` | `161.88 MiB` | `32,676.91 MiB` | `0.89 ms` | `0.08 ms` | `0.97 ms` | `1.02 ms` |
-| `oltp/sqlite_unindexed` | `1,331,835.37 ms` | `5,161.58 ms` | `158.66 MiB` | `24,665.96 MiB` | `1.47 ms` | `1,322.49 ms` | `1,323.98 ms` | `1,342.57 ms` |
-| `olap/sqlite_indexed` | `2,523,162.99 ms` | `39,969.58 ms` | `161.88 MiB` | `32,676.91 MiB` | `2.18 ms` | `166,886.38 ms` | `166,888.63 ms` | `168,485.86 ms` |
-| `olap/sqlite_unindexed` | `1,331,835.37 ms` | `5,161.58 ms` | `158.66 MiB` | `24,665.96 MiB` | `2.50 ms` | `165,199.82 ms` | `165,202.30 ms` | `169,128.83 ms` |
-| `olap/duckdb` | `attach 12,622.02 ms` | `n/a` | `96.47 MiB` | `32,676.91 MiB` | `5.48 ms` | `1,136.15 ms` | `1,141.60 ms` | `1,225.66 ms` |
-
-For DuckDB, that `attach 12,622.02 ms` entry is the one-time OLAP session setup
-cost to connect, load the SQLite extension, attach the SQLite fixture, and
-create DuckDB views over the attached tables. The per-query DuckDB latency
-columns below exclude that setup step.
-
-Representative OLAP per-query end-to-end latency from the same run:
-
-| Query | SQLite Indexed p50 | SQLite Indexed p95 | SQLite Unindexed p50 | SQLite Unindexed p95 | DuckDB p50 | DuckDB p95 |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `olap_type1_active_leaderboard` | `3.69 ms` | `5.26 ms` | `200.15 ms` | `200.78 ms` | `99.95 ms` | `111.81 ms` |
-| `olap_type1_age_rollup` | `1,953.79 ms` | `1,990.67 ms` | `486.73 ms` | `487.44 ms` | `96.16 ms` | `103.38 ms` |
-| `olap_cross_type_edge_rollup` | `18,194.89 ms` | `18,396.52 ms` | `4,401.65 ms` | `4,416.23 ms` | `731.87 ms` | `776.38 ms` |
-| `olap_variable_length_reachability` | `4.89 ms` | `5.04 ms` | `131,908.86 ms` | `133,223.78 ms` | `skipped` | `skipped` |
-| `olap_three_type_path_count` | `30,254.90 ms` | `30,315.65 ms` | `22,790.49 ms` | `23,042.84 ms` | `1,489.54 ms` | `1,632.91 ms` |
-| `olap_type2_score_distribution` | `185.38 ms` | `188.30 ms` | `542.92 ms` | `555.79 ms` | `96.09 ms` | `124.51 ms` |
-| `olap_fixed_length_path_projection` | `34,381.79 ms` | `34,477.16 ms` | `33,025.65 ms` | `33,296.15 ms` | `1,601.05 ms` | `1,834.47 ms` |
-| `olap_graph_introspection_rollup` | `1.63 ms` | `1.86 ms` | `2,212.31 ms` | `2,247.29 ms` | `771.15 ms` | `887.02 ms` |
-| `olap_with_scalar_rebinding` | `1,970.58 ms` | `1,980.38 ms` | `574.09 ms` | `581.79 ms` | `110.04 ms` | `153.95 ms` |
-| `olap_variable_length_grouped_rollup` | `1,581,934.76 ms` | `1,597,497.77 ms` | `1,455,880.15 ms` | `1,493,236.19 ms` | `5,278.55 ms` | `5,406.54 ms` |
-
-At this large scale, the benchmark splits much more sharply by workload family:
-
-- SQLite indexed OLTP still stays around `1 ms` end to end, while the
-  unindexed OLTP path moves into multi-second territory for the broader suite.
-- The SQLite OLAP suite is dominated by the fixed-length and grouped
-  variable-length path shapes, with suite-level pooled p50 around `165` to
-  `167` seconds.
-- DuckDB remains far stronger for the broad analytical joins, grouped rollups,
-  and fixed-length path projections over the attached SQLite fixture, but the
-  current attached-SQLite DuckDB path now skips
-  `olap_variable_length_reachability` at this scale because that selective
-  bounded variable-length traversal is not a good fit for the current DuckDB
-  benchmark architecture.
-
-### Neo4j small comparison run
-
-The repository also includes
-`scripts/benchmarks/benchmark_neo4j_runtime.py`, which runs the same runtime
-corpus directly against Neo4j Community Edition using the same synthetic graph
-shape and query-index toggle. This is useful for Cypher compatibility and
-direct-engine runtime checks, but it is not identical to the SQLite runtime
-harness: the Neo4j path does not measure CypherGlot compile latency because it
-sends the corpus Cypher text directly to Neo4j.
-
-A comparable small Neo4j run used:
+Neo4j:
 
 ```bash
 uv run python scripts/benchmarks/benchmark_neo4j_runtime.py \
   --docker \
   --neo4j-password benchmark-pass \
-  --docker-bolt-port 17689 \
-  --docker-http-port 17476 \
+  --docker-bolt-port <bolt-port> \
+  --docker-http-port <http-port> \
   --iteration-progress \
   --iterations 100 \
   --warmup 5 \
   --olap-iterations 5 \
   --olap-warmup 1 \
   --index-mode both \
-  --node-type-count 4 \
-  --edge-type-count 4 \
-  --nodes-per-type 1000 \
-  --edges-per-source 3 \
-  --edge-degree-profile uniform \
-  --node-extra-text-property-count 2 \
-  --node-extra-numeric-property-count 6 \
-  --node-extra-boolean-property-count 2 \
-  --edge-extra-text-property-count 1 \
-  --edge-extra-numeric-property-count 3 \
-  --edge-extra-boolean-property-count 1 \
-  --variable-hop-max 2 \
-  --ingest-batch-size 1000 \
-  --output scripts/benchmarks/results/runtime-small-neo4j.json
+  <scale flags> \
+  --output scripts/benchmarks/results/runtime-<scale>-neo4j.json
 ```
 
-Comparable medium and large Neo4j commands use the same shape as the SQLite
-examples, with the Neo4j-specific Docker and authentication flags added:
+Scale presets:
 
-Medium:
+| Scale | Shape | Extra properties | Traversal | Batch |
+| --- | --- | --- | --- | ---: |
+| small | `4` node types, `4` edge types, `1000` nodes per type, `3` edges per source, `uniform` degree | node: `2 text`, `6 numeric`, `2 boolean`; edge: `1 text`, `3 numeric`, `1 boolean` | `--variable-hop-max 2` | `1000` |
+| medium | `6` node types, `8` edge types, `100000` nodes per type, `4` edges per source, `skewed` degree | node: `4 text`, `10 numeric`, `4 boolean`; edge: `2 text`, `6 numeric`, `2 boolean` | `--variable-hop-max 5` | `5000` |
+| large | `10` node types, `10` edge types, `1000000` nodes per type, `8` edges per source, `skewed` degree | node: `8 text`, `18 numeric`, `8 boolean`; edge: `4 text`, `10 numeric`, `4 boolean` | `--variable-hop-max 8` | `10000` |
 
-```bash
-uv run python scripts/benchmarks/benchmark_neo4j_runtime.py \
-  --docker \
-  --neo4j-password benchmark-pass \
-  --docker-bolt-port 17689 \
-  --docker-http-port 17476 \
-  --iteration-progress \
-  --iterations 100 \
-  --warmup 5 \
-  --olap-iterations 5 \
-  --olap-warmup 1 \
-  --index-mode both \
-  --node-type-count 6 \
-  --edge-type-count 8 \
-  --nodes-per-type 100000 \
-  --edges-per-source 4 \
-  --edge-degree-profile skewed \
-  --node-extra-text-property-count 4 \
-  --node-extra-numeric-property-count 10 \
-  --node-extra-boolean-property-count 4 \
-  --edge-extra-text-property-count 2 \
-  --edge-extra-numeric-property-count 6 \
-  --edge-extra-boolean-property-count 2 \
-  --variable-hop-max 5 \
-  --ingest-batch-size 5000 \
-  --output scripts/benchmarks/results/runtime-medium-neo4j.json
-```
+If another local Neo4j instance is already using those ports, change the bolt
+and HTTP ports to a free pair before running.
 
-Large:
+All tables below use pooled suite-level end-to-end `p50` and `p95`. SQLite and
+DuckDB include compilation; Neo4j does not.
 
-```bash
-uv run python scripts/benchmarks/benchmark_neo4j_runtime.py \
-  --docker \
-  --neo4j-password benchmark-pass \
-  --docker-bolt-port 17690 \
-  --docker-http-port 17477 \
-  --iteration-progress \
-  --iterations 100 \
-  --warmup 5 \
-  --olap-iterations 5 \
-  --olap-warmup 1 \
-  --index-mode both \
-  --node-type-count 10 \
-  --edge-type-count 10 \
-  --nodes-per-type 1000000 \
-  --edges-per-source 8 \
-  --edge-degree-profile skewed \
-  --node-extra-text-property-count 8 \
-  --node-extra-numeric-property-count 18 \
-  --node-extra-boolean-property-count 8 \
-  --edge-extra-text-property-count 4 \
-  --edge-extra-numeric-property-count 10 \
-  --edge-extra-boolean-property-count 4 \
-  --variable-hop-max 8 \
-  --ingest-batch-size 10000 \
-  --output scripts/benchmarks/results/runtime-large-neo4j.json
-```
+### Small dataset
 
-If another local Neo4j instance is already using those ports, change
-`--docker-bolt-port` and `--docker-http-port` to a free pair before running.
+Shape: roughly `4,000` nodes and `12,000` edges.
 
-At the moment, only the small Neo4j result artifact is checked in. The medium
-and large commands above are included so the doc stays reproducible once those
-runs finish.
+| Suite | p50 | p95 |
+| --- | ---: | ---: |
+| `oltp/sqlite_indexed` | `0.90 ms` | `0.92 ms` |
+| `oltp/sqlite_unindexed` | `1.14 ms` | `1.20 ms` |
+| `oltp/neo4j_indexed` | `0.51 ms` | `0.81 ms` |
+| `oltp/neo4j_unindexed` | `0.45 ms` | `0.65 ms` |
+| `olap/sqlite_indexed` | `3.37 ms` | `3.54 ms` |
+| `olap/sqlite_unindexed` | `3.38 ms` | `3.59 ms` |
+| `olap/duckdb` | `8.83 ms` | `9.29 ms` |
+| `olap/neo4j_indexed` | `3.88 ms` | `5.00 ms` |
+| `olap/neo4j_unindexed` | `2.83 ms` | `3.43 ms` |
 
-That run used the same logical small dataset shape as the SQLite command above:
+At this scale, all engines stay in the same low-millisecond band on query
+latency. The main difference is setup cost: SQLite finishes ingest quickly,
+DuckDB adds only a small attach cost, and Neo4j pays noticeably more one-time
+work for disposable database reset, ingest, and index creation.
 
-- `4` node types
-- `4` edge types
-- `1000` nodes per node type
-- `3` outgoing edges per source node per edge type
-- uniform out-degree profile
-- `2` maximum variable-hop depth
-- `100` measured OLTP iterations with `5` warmup iterations
-- `5` measured OLAP iterations with `1` warmup iteration
+OLTP query breakdown, end-to-end `p50`:
 
-The resulting Neo4j run passed all `40` indexed and unindexed query executions
-across the `10`-query OLTP corpus and `10`-query OLAP corpus, with
-`failure_count = 0` in
-`scripts/benchmarks/results/runtime-small-neo4j.json`.
+| Query | SQLite Indexed | SQLite Unindexed | Neo4j Indexed | Neo4j Unindexed |
+| --- | ---: | ---: | ---: | ---: |
+| `oltp_type1_point_lookup` | `0.88 ms` | `0.99 ms` | `0.78 ms` | `0.46 ms` |
+| `oltp_type1_neighbors` | `0.96 ms` | `1.18 ms` | `0.69 ms` | `0.51 ms` |
+| `oltp_cross_type_lookup` | `1.12 ms` | `1.36 ms` | `0.54 ms` | `0.45 ms` |
+| `oltp_update_type1_score` | `0.68 ms` | `0.72 ms` | `0.46 ms` | `0.42 ms` |
+| `oltp_create_type1_node` | `0.69 ms` | `0.64 ms` | `0.46 ms` | `0.31 ms` |
+| `oltp_create_cross_type_edge` | `1.35 ms` | `1.40 ms` | `0.55 ms` | `0.64 ms` |
+| `oltp_delete_type1_edge` | `0.75 ms` | `0.94 ms` | `0.42 ms` | `0.48 ms` |
+| `oltp_delete_type1_node` | `0.61 ms` | `1.78 ms` | `0.42 ms` | `0.42 ms` |
+| `oltp_program_create_and_link` | `1.65 ms` | `1.63 ms` | `0.39 ms` | `0.43 ms` |
+| `oltp_update_cross_type_edge_rank` | `0.92 ms` | `1.06 ms` | `0.37 ms` | `0.40 ms` |
 
-Comparable suite summary:
+OLAP query breakdown, end-to-end `p50`:
 
-| Suite | Setup | End-to-End p50 | End-to-End p95 |
-| --- | ---: | ---: | ---: |
-| `oltp/sqlite_indexed` | ingest `119.93 ms`, analyze `6.19 ms` | `0.90 ms` | `0.92 ms` |
-| `oltp/sqlite_unindexed` | ingest `84.10 ms`, analyze `0.21 ms` | `1.14 ms` | `1.20 ms` |
-| `oltp/neo4j_indexed` | connect `58.16 ms`, reset `775.03 ms`, constraints `352.99 ms`, ingest `1695.26 ms`, index `820.43 ms` | `0.51 ms` | `0.81 ms` |
-| `oltp/neo4j_unindexed` | connect `58.16 ms`, reset `542.60 ms`, constraints `43.37 ms`, ingest `1041.82 ms` | `0.45 ms` | `0.65 ms` |
-| `olap/sqlite_indexed` | ingest `119.93 ms`, analyze `6.19 ms` | `3.37 ms` | `3.54 ms` |
-| `olap/sqlite_unindexed` | ingest `84.10 ms`, analyze `0.21 ms` | `3.38 ms` | `3.59 ms` |
-| `olap/duckdb` | attach `51.30 ms` on the SQLite-ingested dataset | `8.83 ms` | `9.29 ms` |
-| `olap/neo4j_indexed` | connect `58.16 ms`, reset `775.03 ms`, constraints `352.99 ms`, ingest `1695.26 ms`, index `820.43 ms` | `3.88 ms` | `5.00 ms` |
-| `olap/neo4j_unindexed` | connect `58.16 ms`, reset `542.60 ms`, constraints `43.37 ms`, ingest `1041.82 ms` | `2.83 ms` | `3.43 ms` |
+| Query | SQLite Indexed | SQLite Unindexed | DuckDB | Neo4j Indexed | Neo4j Unindexed |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `olap_type1_active_leaderboard` | `1.10 ms` | `1.31 ms` | `4.47 ms` | `3.45 ms` | `1.49 ms` |
+| `olap_type1_age_rollup` | `1.50 ms` | `1.45 ms` | `5.42 ms` | `1.81 ms` | `0.90 ms` |
+| `olap_cross_type_edge_rollup` | `2.97 ms` | `2.32 ms` | `7.40 ms` | `5.04 ms` | `3.01 ms` |
+| `olap_variable_length_reachability` | `1.65 ms` | `3.05 ms` | `10.49 ms` | `0.76 ms` | `0.57 ms` |
+| `olap_three_type_path_count` | `4.42 ms` | `4.27 ms` | `8.11 ms` | `3.02 ms` | `1.90 ms` |
+| `olap_type2_score_distribution` | `1.39 ms` | `1.58 ms` | `4.82 ms` | `1.06 ms` | `0.92 ms` |
+| `olap_fixed_length_path_projection` | `6.07 ms` | `5.82 ms` | `10.75 ms` | `5.45 ms` | `5.17 ms` |
+| `olap_graph_introspection_rollup` | `1.71 ms` | `2.14 ms` | `7.47 ms` | `3.91 ms` | `3.36 ms` |
+| `olap_with_scalar_rebinding` | `2.12 ms` | `1.90 ms` | `6.86 ms` | `1.23 ms` | `1.00 ms` |
+| `olap_variable_length_grouped_rollup` | `9.84 ms` | `9.40 ms` | `14.32 ms` | `13.12 ms` | `9.98 ms` |
 
-On this small dataset, Neo4j setup cost is substantially higher than the
-SQLite path, especially when the disposable Docker server startup and index
-creation cost are included. Query latency lands in the same general band,
-though the comparison should be read carefully:
+### Medium dataset
 
-- SQLite runtime numbers are compile-plus-execute end-to-end timings through
-  CypherGlot.
-- Neo4j runtime numbers are direct Cypher execution timings against Neo4j.
-- The Neo4j comparison is therefore best read as a compatibility and
-  direct-engine runtime check, not as a strict apples-to-apples compiler
-  benchmark.
+Shape: roughly `600,000` nodes and `6,223,200` edges.
+
+| Suite | p50 | p95 |
+| --- | ---: | ---: |
+| `oltp/sqlite_indexed` | `0.97 ms` | `1.08 ms` |
+| `oltp/sqlite_unindexed` | `121.49 ms` | `125.43 ms` |
+| `oltp/neo4j_indexed` | `0.37 ms` | `0.53 ms` |
+| `oltp/neo4j_unindexed` | `86.56 ms` | `98.72 ms` |
+| `olap/sqlite_indexed` | `14,566.95 ms` | `14,667.89 ms` |
+| `olap/sqlite_unindexed` | `14,163.25 ms` | `14,234.34 ms` |
+| `olap/duckdb` | `241.35 ms` | `245.80 ms` |
+| `olap/neo4j_indexed` | `15,664.60 ms` | `15,785.09 ms` |
+| `olap/neo4j_unindexed` | `not run` | `not run` |
+
+The split is much clearer here. Indexed OLTP stays near `1 ms` on SQLite and
+below that on direct Neo4j execution, while unindexed OLTP jumps into the
+double-digit to hundreds-of-milliseconds range. For OLAP, DuckDB moves into a
+different performance tier, while both SQLite and Neo4j are dominated by the
+same harder path and grouped-rollup shapes.
+
+OLTP query breakdown, end-to-end `p50`:
+
+| Query | SQLite Indexed | SQLite Unindexed | Neo4j Indexed | Neo4j Unindexed |
+| --- | ---: | ---: | ---: | ---: |
+| `oltp_type1_point_lookup` | `0.88 ms` | `14.52 ms` | `0.38 ms` | `22.78 ms` |
+| `oltp_type1_neighbors` | `0.93 ms` | `89.29 ms` | `0.41 ms` | `258.74 ms` |
+| `oltp_cross_type_lookup` | `1.10 ms` | `89.06 ms` | `0.38 ms` | `419.30 ms` |
+| `oltp_update_type1_score` | `0.68 ms` | `14.08 ms` | `0.36 ms` | `24.07 ms` |
+| `oltp_create_type1_node` | `0.66 ms` | `0.64 ms` | `0.32 ms` | `0.22 ms` |
+| `oltp_create_cross_type_edge` | `1.28 ms` | `26.74 ms` | `0.41 ms` | `46.31 ms` |
+| `oltp_delete_type1_edge` | `0.72 ms` | `91.09 ms` | `0.33 ms` | `22.60 ms` |
+| `oltp_delete_type1_node` | `0.95 ms` | `781.93 ms` | `0.43 ms` | `24.84 ms` |
+| `oltp_program_create_and_link` | `1.67 ms` | `15.42 ms` | `0.35 ms` | `22.54 ms` |
+| `oltp_update_cross_type_edge_rank` | `0.90 ms` | `94.01 ms` | `0.31 ms` | `24.19 ms` |
+
+OLAP query breakdown, end-to-end `p50`:
+
+| Query | SQLite Indexed | SQLite Unindexed | DuckDB | Neo4j Indexed | Neo4j Unindexed |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `olap_type1_active_leaderboard` | `1.18 ms` | `17.71 ms` | `26.99 ms` | `66.62 ms` | `n/a` |
+| `olap_type1_age_rollup` | `149.84 ms` | `45.44 ms` | `27.59 ms` | `77.04 ms` | `n/a` |
+| `olap_cross_type_edge_rollup` | `1462.29 ms` | `371.88 ms` | `94.79 ms` | `594.07 ms` | `n/a` |
+| `olap_variable_length_reachability` | `3.09 ms` | `4621.28 ms` | `920.06 ms` | `1.52 ms` | `n/a` |
+| `olap_three_type_path_count` | `2810.15 ms` | `2020.06 ms` | `167.24 ms` | `560.71 ms` | `n/a` |
+| `olap_type2_score_distribution` | `20.05 ms` | `46.30 ms` | `26.25 ms` | `64.04 ms` | `n/a` |
+| `olap_fixed_length_path_projection` | `3330.48 ms` | `3003.61 ms` | `192.15 ms` | `1471.02 ms` | `n/a` |
+| `olap_graph_introspection_rollup` | `1.82 ms` | `187.56 ms` | `95.80 ms` | `534.31 ms` | `n/a` |
+| `olap_with_scalar_rebinding` | `144.57 ms` | `50.13 ms` | `30.25 ms` | `83.01 ms` | `n/a` |
+| `olap_variable_length_grouped_rollup` | `137169.19 ms` | `132075.21 ms` | `792.34 ms` | `153193.65 ms` | `n/a` |
+
+### Large dataset
+
+Shape: roughly `10,000,000` nodes and `77,790,000` edges.
+
+| Suite | p50 | p95 |
+| --- | ---: | ---: |
+| `oltp/sqlite_indexed` | `0.97 ms` | `1.02 ms` |
+| `oltp/sqlite_unindexed` | `1,323.98 ms` | `1,342.57 ms` |
+| `oltp/neo4j_indexed` | `0.32 ms` | `0.51 ms` |
+| `oltp/neo4j_unindexed` | `1,467.51 ms` | `1,586.33 ms` |
+| `olap/sqlite_indexed` | `166,888.63 ms` | `168,485.86 ms` |
+| `olap/sqlite_unindexed` | `165,202.30 ms` | `169,128.83 ms` |
+| `olap/duckdb` | `1,141.60 ms` | `1,225.66 ms` |
+| `olap/neo4j_indexed` | `291,004.70 ms` | `300,428.69 ms` |
+| `olap/neo4j_unindexed` | `not run` | `not run` |
+
+At the large preset, workload family matters much more than engine branding.
+Indexed OLTP still stays around `1 ms` on SQLite and below that on direct
+Neo4j execution, while unindexed OLTP moves into multi-second territory for the
+broader suite. OLAP is dominated by large path and grouped variable-length
+expansions: DuckDB remains far stronger for the analytical suite, while the
+current DuckDB run skips `olap_variable_length_reachability` and the Neo4j run
+does not include `olap/neo4j_unindexed`.
+
+OLTP query breakdown, end-to-end `p50`:
+
+| Query | SQLite Indexed | SQLite Unindexed | Neo4j Indexed | Neo4j Unindexed |
+| --- | ---: | ---: | ---: | ---: |
+| `oltp_type1_point_lookup` | `0.85 ms` | `175.00 ms` | `0.34 ms` | `337.29 ms` |
+| `oltp_type1_neighbors` | `0.92 ms` | `1100.91 ms` | `0.33 ms` | `3023.03 ms` |
+| `oltp_cross_type_lookup` | `1.10 ms` | `1092.96 ms` | `0.38 ms` | `8903.84 ms` |
+| `oltp_update_type1_score` | `0.68 ms` | `177.14 ms` | `0.29 ms` | `347.21 ms` |
+| `oltp_create_type1_node` | `0.67 ms` | `0.64 ms` | `0.28 ms` | `0.29 ms` |
+| `oltp_create_cross_type_edge` | `1.30 ms` | `348.52 ms` | `0.37 ms` | `689.74 ms` |
+| `oltp_delete_type1_edge` | `0.72 ms` | `1136.78 ms` | `0.28 ms` | `335.39 ms` |
+| `oltp_delete_type1_node` | `0.94 ms` | `7868.18 ms` | `0.38 ms` | `353.68 ms` |
+| `oltp_program_create_and_link` | `1.61 ms` | `186.91 ms` | `0.28 ms` | `335.18 ms` |
+| `oltp_update_cross_type_edge_rank` | `0.88 ms` | `1152.76 ms` | `0.26 ms` | `349.46 ms` |
+
+OLAP query breakdown, end-to-end `p50`:
+
+| Query | SQLite Indexed | SQLite Unindexed | DuckDB | Neo4j Indexed | Neo4j Unindexed |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `olap_type1_active_leaderboard` | `3.69 ms` | `200.15 ms` | `99.95 ms` | `1257.72 ms` | `n/a` |
+| `olap_type1_age_rollup` | `1953.79 ms` | `486.73 ms` | `96.16 ms` | `1552.36 ms` | `n/a` |
+| `olap_cross_type_edge_rollup` | `18194.89 ms` | `4401.65 ms` | `731.87 ms` | `11335.02 ms` | `n/a` |
+| `olap_variable_length_reachability` | `4.89 ms` | `131908.86 ms` | `n/a` | `1.90 ms` | `n/a` |
+| `olap_three_type_path_count` | `30254.90 ms` | `22790.49 ms` | `1489.54 ms` | `5277.33 ms` | `n/a` |
+| `olap_type2_score_distribution` | `185.38 ms` | `542.92 ms` | `96.09 ms` | `1356.01 ms` | `n/a` |
+| `olap_fixed_length_path_projection` | `34381.79 ms` | `33025.65 ms` | `1601.05 ms` | `14813.58 ms` | `n/a` |
+| `olap_graph_introspection_rollup` | `1.63 ms` | `2212.31 ms` | `771.15 ms` | `7534.76 ms` | `n/a` |
+| `olap_with_scalar_rebinding` | `1970.58 ms` | `574.09 ms` | `110.04 ms` | `1530.02 ms` | `n/a` |
+| `olap_variable_length_grouped_rollup` | `1581934.76 ms` | `1455880.15 ms` | `5278.55 ms` | `2865388.33 ms` | `n/a` |
 
 ## Notes
 

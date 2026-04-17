@@ -12,13 +12,21 @@ import argparse
 import gc
 import json
 import platform
-import resource
 import sqlite3
 import tempfile
 import time
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+
+from _benchmark_cli_helpers import parse_sqlite_schema_shapes_args
+from _benchmark_common import (
+    _edge_type_name,
+    _node_name,
+    _node_type_name,
+    _rss_mib,
+    _summarize,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -69,14 +77,6 @@ class SchemaQuery:
     sql_by_schema: dict[str, str]
 
 
-def _node_type_name(type_index: int) -> str:
-    return f"NodeType{type_index:02d}"
-
-
-def _edge_type_name(type_index: int) -> str:
-    return f"EdgeType{type_index:02d}"
-
-
 def _node_table_name(type_index: int) -> str:
     return f"node_type_{type_index:02d}_nodes"
 
@@ -87,10 +87,6 @@ def _edge_table_name(type_index: int) -> str:
 
 def _node_id(scale: SchemaShapeScale, type_index: int, local_index: int) -> int:
     return (type_index - 1) * scale.nodes_per_type + local_index
-
-
-def _node_name(type_index: int, local_index: int) -> str:
-    return f"{_node_type_name(type_index).lower()}-{local_index:06d}"
 
 
 def _edge_specs(scale: SchemaShapeScale) -> list[EdgeTypeSpec]:
@@ -203,47 +199,6 @@ def _measure_ms(fn):
     result = fn()
     end = time.perf_counter_ns()
     return result, (end - start) / 1_000_000.0
-
-
-def _rss_mib() -> float:
-    status_path = Path("/proc/self/status")
-    if status_path.exists():
-        for line in status_path.read_text(encoding="utf-8").splitlines():
-            if line.startswith("VmRSS:"):
-                rss_kib = int(line.split()[1])
-                return rss_kib / 1024.0
-
-    usage = resource.getrusage(resource.RUSAGE_SELF)
-    rss = float(usage.ru_maxrss)
-    if platform.system() == "Darwin":
-        return rss / (1024.0 * 1024.0)
-    return rss / 1024.0
-
-
-def _percentile(sorted_values: list[int], percentile: float) -> float:
-    if not sorted_values:
-        raise ValueError("Cannot compute a percentile from an empty sample.")
-    if len(sorted_values) == 1:
-        return float(sorted_values[0])
-    position = (len(sorted_values) - 1) * (percentile / 100.0)
-    lower_index = int(position)
-    upper_index = min(lower_index + 1, len(sorted_values) - 1)
-    lower_value = sorted_values[lower_index]
-    upper_value = sorted_values[upper_index]
-    fraction = position - lower_index
-    return lower_value + (upper_value - lower_value) * fraction
-
-
-def _summarize(latencies_ns: list[int]) -> dict[str, float]:
-    sorted_ns = sorted(latencies_ns)
-    return {
-        "min_ms": min(sorted_ns) / 1_000_000.0,
-        "mean_ms": sum(sorted_ns) / len(sorted_ns) / 1_000_000.0,
-        "p50_ms": _percentile(sorted_ns, 50) / 1_000_000.0,
-        "p95_ms": _percentile(sorted_ns, 95) / 1_000_000.0,
-        "p99_ms": _percentile(sorted_ns, 99) / 1_000_000.0,
-        "max_ms": max(sorted_ns) / 1_000_000.0,
-    }
 
 
 def _benchmark_query(
@@ -1438,110 +1393,7 @@ def _print_schema_summary(schema_name: str, suite: dict[str, object]) -> None:
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description=(
-            "Benchmark three SQLite schema shapes for graph workloads: generic "
-            "JSON properties, generic typed-property tables, and type-aware "
-            "per-node/per-edge tables."
-        )
-    )
-    parser.add_argument(
-        "--output",
-        type=Path,
-        default=DEFAULT_OUTPUT_PATH,
-        help="Path to the JSON file where benchmark results will be written.",
-    )
-    parser.add_argument(
-        "--iterations",
-        type=int,
-        default=20,
-        help="Measured iterations to run per query.",
-    )
-    parser.add_argument(
-        "--warmup",
-        type=int,
-        default=3,
-        help="Warmup iterations to run per query before measuring.",
-    )
-    parser.add_argument(
-        "--batch-size",
-        type=int,
-        default=5_000,
-        help="Rows per executemany batch during synthetic ingestion.",
-    )
-    parser.add_argument(
-        "--schema",
-        action="append",
-        choices=("json", "typed", "typeaware"),
-        help="Optional schema shape to run. Repeat the flag to run multiple shapes.",
-    )
-    parser.add_argument(
-        "--node-type-count",
-        type=int,
-        default=10,
-        help="Number of synthetic node types to create.",
-    )
-    parser.add_argument(
-        "--edge-type-count",
-        type=int,
-        default=10,
-        help="Number of synthetic edge types to create.",
-    )
-    parser.add_argument(
-        "--nodes-per-type",
-        type=int,
-        default=5_000,
-        help="Synthetic node count to seed for each node type.",
-    )
-    parser.add_argument(
-        "--edges-per-source",
-        type=int,
-        default=4,
-        help="Outgoing edges to seed per source node for each edge type.",
-    )
-    parser.add_argument(
-        "--multi-hop-length",
-        type=int,
-        default=5,
-        help="Hop count for the multi-hop benchmark query.",
-    )
-    parser.add_argument(
-        "--node-numeric-property-count",
-        type=int,
-        default=10,
-        help="Numeric properties to seed on every node type.",
-    )
-    parser.add_argument(
-        "--node-text-property-count",
-        type=int,
-        default=2,
-        help="Extra text properties to seed on every node type in addition to name.",
-    )
-    parser.add_argument(
-        "--node-boolean-property-count",
-        type=int,
-        default=2,
-        help="Boolean properties to seed on every node type.",
-    )
-    parser.add_argument(
-        "--edge-numeric-property-count",
-        type=int,
-        default=6,
-        help="Numeric properties to seed on every edge type.",
-    )
-    parser.add_argument(
-        "--edge-text-property-count",
-        type=int,
-        default=2,
-        help="Extra text properties to seed on every edge type in addition to note.",
-    )
-    parser.add_argument(
-        "--edge-boolean-property-count",
-        type=int,
-        default=1,
-        help="Boolean properties to seed on every edge type.",
-    )
-    return parser.parse_args()
+    return parse_sqlite_schema_shapes_args(default_output_path=DEFAULT_OUTPUT_PATH)
 
 
 def main() -> int:

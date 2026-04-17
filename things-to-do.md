@@ -26,10 +26,10 @@ Near-term target: reach roughly 50% practical coverage before pushing for a much
 broader 80% claim.
 
 - [x] Add narrow `substring(...)` support for ordinary single-node/relationship
-  reads, narrow `OPTIONAL MATCH`, and final `WITH ... RETURN` projections,
-  restricted to exactly three arguments with an admitted field/scalar/literal
-  primary input plus literal/parameter start and length, with compiler,
-  validation, docs, and tests kept in sync.
+      reads, narrow `OPTIONAL MATCH`, and final `WITH ... RETURN` projections,
+      restricted to exactly three arguments with an admitted field/scalar/literal
+      primary input plus literal/parameter start and length, with compiler,
+      validation, docs, and tests kept in sync.
 - [x] Broaden narrow `substring(...)` support to also admit the two-argument
       form across ordinary reads, narrow `OPTIONAL MATCH`, and final
       `WITH ... RETURN` projections while keeping primary inputs and start values
@@ -55,11 +55,11 @@ broader 80% claim.
 What 50% means here:
 
 - cover the common single-user application query shapes that go beyond the
-      parser-only milestone
+  parser-only milestone
 - prioritize query composition, projection breadth, and read semantics before
-      harder long-path graph semantics
+  harder long-path graph semantics
 - keep admitted behavior documented, normalized, compiled or intentionally
-      carried forward, and defended by tests
+  carried forward, and defended by tests
 
 What 80% would require later:
 
@@ -74,7 +74,7 @@ What 80% would require later:
 Replace the current JSON-backed relational assumptions with a generated
 type-aware schema that becomes the primary CypherGlot backend contract.
 
-Status: complete.
+Status: complete for the release target; cleanup follow-ups remain.
 
 Release scope for `v0.1.0`:
 
@@ -85,11 +85,11 @@ Release scope for `v0.1.0`:
 Working policy for this migration:
 
 - no backward-compatibility work is required for the old generic JSON-backed
-      schema because there are no downstream users to preserve yet
+  schema because there are no downstream users to preserve yet
 - do not spend roadmap time preserving, documenting, or softening the old
-      schema as a supported fallback
+  schema as a supported fallback
 - when docs or code still mention the old schema, the goal is to delete or
-      replace that framing, not to present it as a long-term compatibility story
+  replace that framing, not to present it as a long-term compatibility story
 
 - [x] Freeze the architecture decision clearly in repo docs: CypherGlot's
       primary SQLite backend contract is a generated type-aware schema, not the
@@ -160,11 +160,11 @@ Working policy for this migration:
         expectations.
         Done: the admitted type-aware read surfaces now either emit typed
         relational columns or reject unsupported helper/entity shapes instead
-      of producing SQL-side JSON constructors, the old internal
-      `structured_output` switch has been removed from `compile.py`, and the
-      curated DuckDB parity corpus has been trimmed so no-longer-admitted
-      helper/entity queries are no longer presented as part of the current
-      release subset.
+        of producing SQL-side JSON constructors, the old internal
+        `structured_output` switch has been removed from `compile.py`, and the
+        curated DuckDB parity corpus has been trimmed so no-longer-admitted
+        helper/entity queries are no longer presented as part of the current
+        release subset.
   - [x] Hard-cut the public API default output for the type-aware path to
         strict relational output so whole-entity and helper returns no
         longer depend on SQL-side JSON materialization as the repo-wide
@@ -242,19 +242,19 @@ Working policy for this migration:
 - [x] Revisit write-path lowering assumptions for `CREATE`, `MERGE`, `SET`,
       and `DELETE` so emitted SQL stays correct when node and edge storage is
       split across per-type tables instead of one generic table family.
-            Done for the current admitted write subset: standalone labeled `CREATE` node and relationship programs plus
-            standalone labeled `MERGE` node and relationship programs plus the first
-            direct existing-endpoint and traversal-backed one-hop `MATCH ... CREATE`
-            slices plus the first direct existing-endpoint and traversal-backed
-            one-hop `MATCH ... MERGE` slices plus the first direct admitted
-            `MATCH ... SET` node and one-hop relationship slices plus the first
-            direct admitted `MATCH ... DELETE` node and one-hop relationship slices
-            now lower into generated `cg_node_*` / `cg_edge_*` tables. The type-aware
-            SQLite runtime now executes those admitted `MATCH ... CREATE`,
-            `MATCH ... MERGE`, `MATCH ... SET`, and `MATCH ... DELETE` families in
-            their current narrow forms, including standalone plus direct and
-            traversal-backed `MATCH ... MERGE` idempotence slices, the admitted
-            one-hop traversal-backed existing-endpoint `MATCH ... CREATE` /
+      Done for the current admitted write subset: standalone labeled `CREATE` node and relationship programs plus
+      standalone labeled `MERGE` node and relationship programs plus the first
+      direct existing-endpoint and traversal-backed one-hop `MATCH ... CREATE`
+      slices plus the first direct existing-endpoint and traversal-backed
+      one-hop `MATCH ... MERGE` slices plus the first direct admitted
+      `MATCH ... SET` node and one-hop relationship slices plus the first
+      direct admitted `MATCH ... DELETE` node and one-hop relationship slices
+      now lower into generated `cg_node_*` / `cg_edge_*` tables. The type-aware
+      SQLite runtime now executes those admitted `MATCH ... CREATE`,
+      `MATCH ... MERGE`, `MATCH ... SET`, and `MATCH ... DELETE` families in
+      their current narrow forms, including standalone plus direct and
+      traversal-backed `MATCH ... MERGE` idempotence slices, the admitted
+      one-hop traversal-backed existing-endpoint `MATCH ... CREATE` /
       `MATCH ... MERGE` forms now lower through the type-aware path too, the
       admitted traversal-backed one-reused-node plus one-fresh-endpoint
       `MATCH ... CREATE` / `MATCH ... MERGE` forms now also lower through the
@@ -272,59 +272,59 @@ Working policy for this migration:
       matched-node self-loop `MATCH ... CREATE` and `MATCH ... MERGE` shapes
       now also lower through the same type-aware path with repeated-alias
       self-loop source handling and now have focused compile plus SQLite
-            runtime proof too for both fresh-right and fresh-left endpoint forms plus
-            existing-endpoint SQL forms,
-            the admitted direct
+      runtime proof too for both fresh-right and fresh-left endpoint forms plus
+      existing-endpoint SQL forms,
+      the admitted direct
       one-matched-node plus one-fresh-endpoint `MATCH ... CREATE`
       relationship shape now lowers through that same path too in both
       fresh-right and fresh-left forms, the admitted standalone self-loop
       `MERGE` relationship shape now uses the same type-aware path with
       idempotent existing-node reuse, and the admitted direct matched-node
-            self-loop `MATCH ... MERGE` relationship shape now lowers through the
-            same type-aware path too, and the admitted direct one-matched-node plus
+      self-loop `MATCH ... MERGE` relationship shape now lowers through the
+      same type-aware path too, and the admitted direct one-matched-node plus
       one-fresh-endpoint `MATCH ... MERGE` relationship shape now lowers
       through the same type-aware path too in both fresh-right and fresh-left
       forms. The first direct one-matched-node plus one-fresh-endpoint
-            `MATCH ... CREATE` / `MATCH ... MERGE` program slices now also have
-            focused compile plus type-aware SQLite runtime proof for matched-node
-            property-filter source shapes in representative fresh-right and
-            fresh-left forms. The direct self-loop relationship
-            `MATCH ... SET` and `MATCH ... DELETE` shapes now also compile correctly
-            through the generic and type-aware paths instead of emitting duplicate
-            endpoint aliases, and now have focused type-aware SQLite runtime
-            proof too. The first direct one-hop relationship `MATCH ... SET` and
-            `MATCH ... DELETE` slices now also have focused compile plus
-            type-aware SQLite runtime proof when the admitted filter is on the
-            right endpoint properties instead of only the left endpoint, and
-            now also when the admitted filter is on relationship properties,
-            including the admitted combined right-endpoint-plus-relationship
-            filter forms, the admitted left-endpoint-plus-relationship forms,
-            the admitted both-endpoint property filter forms, and the
-            admitted all-three-filter forms.
-            The first one-hop traversal-backed existing-endpoint
-            `MATCH ... CREATE` slices now also have focused compile plus
-            type-aware SQLite runtime proof for admitted right-endpoint,
-            relationship-property, left-endpoint-plus-relationship,
-            both-endpoint, and all-filter source shapes, including a
-            representative filtered cross-edge-type slice where the source and
-            created relationship tables differ.
-            The first one-hop traversal-backed existing-endpoint
-            `MATCH ... MERGE` slices now also have focused compile plus
-            type-aware SQLite runtime proof for admitted right-endpoint,
-            relationship-property, left-endpoint-plus-relationship,
-            both-endpoint, and all-filter source shapes, including the same
-            representative filtered cross-edge-type slice.
-            The first direct separate-node existing-endpoint `MATCH ... CREATE`
-            and `MATCH ... MERGE` slices now also have focused compile plus
-            type-aware SQLite runtime proof for admitted left-endpoint,
-            right-endpoint, and both-endpoint property-filter source shapes.
-            The old generic SQLite runtime file now exercises these public write
-            entrypoints against generated `cg_node_*` / `cg_edge_*` tables too,
-            so the mainstream write-path smoke surface no longer depends on the
-            legacy generic schema. Broader traversal-heavy or otherwise
-            unadmitted write families can stay with the later broader write-side
-            traversal follow-up box instead of blocking this admitted-subset
-            migration milestone.
+      `MATCH ... CREATE` / `MATCH ... MERGE` program slices now also have
+      focused compile plus type-aware SQLite runtime proof for matched-node
+      property-filter source shapes in representative fresh-right and
+      fresh-left forms. The direct self-loop relationship
+      `MATCH ... SET` and `MATCH ... DELETE` shapes now also compile correctly
+      through the generic and type-aware paths instead of emitting duplicate
+      endpoint aliases, and now have focused type-aware SQLite runtime
+      proof too. The first direct one-hop relationship `MATCH ... SET` and
+      `MATCH ... DELETE` slices now also have focused compile plus
+      type-aware SQLite runtime proof when the admitted filter is on the
+      right endpoint properties instead of only the left endpoint, and
+      now also when the admitted filter is on relationship properties,
+      including the admitted combined right-endpoint-plus-relationship
+      filter forms, the admitted left-endpoint-plus-relationship forms,
+      the admitted both-endpoint property filter forms, and the
+      admitted all-three-filter forms.
+      The first one-hop traversal-backed existing-endpoint
+      `MATCH ... CREATE` slices now also have focused compile plus
+      type-aware SQLite runtime proof for admitted right-endpoint,
+      relationship-property, left-endpoint-plus-relationship,
+      both-endpoint, and all-filter source shapes, including a
+      representative filtered cross-edge-type slice where the source and
+      created relationship tables differ.
+      The first one-hop traversal-backed existing-endpoint
+      `MATCH ... MERGE` slices now also have focused compile plus
+      type-aware SQLite runtime proof for admitted right-endpoint,
+      relationship-property, left-endpoint-plus-relationship,
+      both-endpoint, and all-filter source shapes, including the same
+      representative filtered cross-edge-type slice.
+      The first direct separate-node existing-endpoint `MATCH ... CREATE`
+      and `MATCH ... MERGE` slices now also have focused compile plus
+      type-aware SQLite runtime proof for admitted left-endpoint,
+      right-endpoint, and both-endpoint property-filter source shapes.
+      The old generic SQLite runtime file now exercises these public write
+      entrypoints against generated `cg_node_*` / `cg_edge_*` tables too,
+      so the mainstream write-path smoke surface no longer depends on the
+      legacy generic schema. Broader traversal-heavy or otherwise
+      unadmitted write families can stay with the later broader write-side
+      traversal follow-up box instead of blocking this admitted-subset
+      migration milestone.
 - [x] Introduce a clean schema-generation layer in source code rather than
       scattering table-name and column-name derivation across compiler modules.
 - [x] Update fixtures, helper utilities, and test harness setup so compiler and
@@ -501,6 +501,33 @@ Working policy for this migration:
       target. The remaining generic compatibility runtimes are isolated legacy
       surfaces, not repo-wide disagreement about the intended relational
       contract.
+### Post-migration cleanup follow-up
+
+These are follow-up cleanup and evidence items after the migration itself,
+not blockers for calling the type-aware schema migration complete.
+
+- [ ] Finish the post-migration compiler-contract purge so the type-aware
+      schema and general relational IR are the only live internal contract,
+      rather than something the top-level compiler enforces while helper layers
+      still carry dead schema-less branches.
+      Current slice completed: `compile.py` has already been pared back so the
+      main admitted write paths no longer carry dead schema-less
+      `graph_schema is None` branches in `CREATE`, `MERGE`, `SET`, and
+      `DELETE` lowering, which matches the fact that the top-level compile
+      entrypoint already requires supported schema context.
+      Remaining work in this purge:
+      remove the still-dead schema-less and generic-table fallback branches
+      from `_compile_write_helpers.py`, delete the temporary
+      `_removed_schema_less_write_sql(...)` shim once helper imports stop
+      depending on it, purge the remaining old JSON/property-bag helper logic
+      that still survives in `_compile_read_helpers.py` and
+      `_compile_sql_utils.py`, and then simplify `_compile_duckdb.py` so
+      DuckDB lowers against the cleaner typed helper/output shapes directly
+      instead of compensating for legacy compiler forms.
+- [ ] Re-run and extend the compiler benchmarks after that purge so the repo
+      has explicit evidence for what this cleanup buys, especially whether
+      DuckDB compile latency drops once the backend no longer pays for legacy
+      helper shapes and rewrite-heavy fallback logic.
 
 ## Phase 1
 
@@ -1084,7 +1111,7 @@ Status: planned.
 - [x] Refresh the docs for the first release so the public contract, admitted subset,
       non-goals, and release positioning are all consistent.
 - [x] Write a better production ready README.md. See how I did for the humemdb repo
-  (`/mnt/ssd2/repos/humemdb/README.md`)
+      (`/mnt/ssd2/repos/humemdb/README.md`)
 - [x] Prepare the v0.1.0 release candidate materials: changelog summary, version bump,
       tag plan, and release notes draft.
 - [x] Broaden the SQLite runtime test suite beyond the current smoke coverage so
@@ -1109,8 +1136,8 @@ Status: planned.
       batch, and record total as well as per-query timing so we can reason about
       realistic frontend-plus-SQL runtime cost rather than compile latency
       alone.
-- [ ] Before pushing the remaining benchmark/performance work into `Future
-      phases`, do one more focused refresh pass on
+- [x] Before pushing the remaining benchmark/performance work into `Future
+    phases`, do one more focused refresh pass on
       `scripts/benchmarks/benchmark_compiler.py` and
       `scripts/benchmarks/benchmark_sqlite_runtime.py` so their corpora, CLI
       framing, defaults, and checked-in baselines reflect the chosen
@@ -1125,6 +1152,756 @@ Status: planned.
 
 ## Phase 12
 
+Refactor CypherGlot for equal multi-dialect SQL support.
+
+Status: in progress.
+
+Goal for this phase:
+
+- make equal full-support ambitions for SQLite, PostgreSQL, and DuckDB the
+  primary compiler architecture constraint
+- stop treating SQLite-shaped lowering plus dialect rewrite patches as the
+  long-term product path
+- introduce a backend-neutral graph-relational IR between normalized Cypher and
+  SQLGlot AST generation so new SQL targets do not require reshaping the
+  whole compiler each time
+- keep support claims strict: a backend counts as supported only when the
+  admitted subset executes correctly against that backend's schema/runtime
+  contract, not merely when SQLGlot can render SQL text for it
+
+Working policy for this phase:
+
+- do the bold source-first migration on purpose: change the core compiler
+  source code and architecture first, then reconcile tests, examples,
+  docs, and benchmarks in a follow-up pass rather than trying to keep every
+  supporting surface green at each intermediate commit
+- accept that the repo may temporarily contain broken tests, stale examples,
+  and outdated benchmark assumptions while the source-first refactor is in
+  flight, as long as that breakage is in service of landing the new
+  multi-dialect architecture faster
+- once the source-first architecture pass is materially in place, switch to an
+  explicit stabilization pass for tests, examples, docs, and benchmarks
+  before calling the phase complete
+
+Recommended implementation order for this phase:
+
+1. define the new logical graph-relational IR and backend capability model
+2. route the current SQLite compiler path through that IR first, without trying
+   to improve every surrounding surface yet
+3. replace the current DuckDB rewrite-heavy path with an explicit DuckDB
+   lowering path from the same IR
+4. add a first-class PostgreSQL lowering path from the same IR
+5. add backend-specific schema-generation and runtime-contract support for all
+   three backends
+6. only after those core source changes land, run the broad stabilization pass
+   across tests, examples, docs, and benchmarks
+
+- [x] Freeze the new architecture decision clearly in docs and roadmap text:
+      multi-dialect SQL support now comes first, and the compiler should evolve
+      from `Cypher AST -> mostly SQLite-oriented SQLGlot AST -> dialect tweaks`
+      toward `Cypher AST -> logical graph-relational IR -> backend-aware
+      lowering -> SQLGlot AST -> dialect SQL text`.
+      Done: the README, compiler-contract guide, roadmap guide, and Phase 12
+      note now all describe the new primary architecture target explicitly:
+      shared graph-relational IR first, backend-aware lowerers per backend,
+      SQLite-through-IR as the first landed executable milestone, and strict
+      support claims based on real backend execution rather than renderer-only
+      SQL text.
+- [x] Keep the parse, validation, and normalization boundary stable where
+      practical while the source-first compiler refactor lands; the main
+      refactor target is the SQL compilation architecture after normalization,
+      not a broad churn of the upstream frontend seam.
+      Done for the current source-first slice: the public compile entrypoints
+      still preserve the single-statement-versus-program API split while the
+      backend-aware IR/lowering path now sits underneath that seam instead of
+      changing the frontend contract at the same time.
+- [x] Define a small backend-neutral logical graph-relational IR for the
+      admitted subset instead of lowering normalized Cypher directly into a
+      mostly SQLite-shaped SQLGlot AST.
+      Done for the first source-first slice: `src/cypherglot/ir.py` now owns a
+      repo-level graph-relational IR scaffold instead of leaving the compiler
+      to dispatch directly from normalized statements alone.
+- [x] Keep that IR driven by real admitted Cypher semantics rather than generic
+      SQL completeness: typed node scans, typed edge scans, traversal,
+      filtering, projection, aggregation, optional flow, admitted variable-
+      length expansion, and the currently admitted write families.
+      Done: the IR now carries admitted read-shape payloads for single-node,
+      optional single-node, one-hop relationship, fixed-length chain, `UNWIND`,
+      and `MATCH ... WITH ... RETURN` source forms instead of storing only a
+      family label. The admitted write families now also lower from explicit
+      write payload IR instead of keeping top-level backend dispatch on
+      normalized statements, including standalone `CREATE`, standalone `MERGE`,
+      and traversal-backed write families whose source shape now carries the
+      same read IR payload instead of a normalized `MATCH` object. The
+      top-level admitted SQLite read lowering for those families now consumes
+      that read IR directly, including the `MATCH ... WITH ... RETURN` source
+      path and `UNWIND`, and the dead generic read entry helpers that
+      used to sit beside the IR path have been removed from `compile.py`. The
+      SQLite lowerer now also routes those admitted read families through one
+      IR-family dispatch helper instead of spelling each read case out inline
+      in the main lowering branch chain. The SET/DELETE write slice is now
+      also IR-shaped: the backend compiler now consumes explicit write payload
+      IR for `set-node`, `set-relationship`, `delete-node`, and
+      `delete-relationship` families instead of reading those families directly
+      from normalized statement objects in that dispatch path. The match-driven
+      fresh-endpoint relationship write slice now also consumes explicit write
+      payload IR for direct and traversal-backed `MATCH ... CREATE` /
+      `MATCH ... MERGE` relationship families. The remaining two-node
+      `MATCH ... MERGE` and `MATCH ... CREATE ... BETWEEN NODES` relationship
+      dispatch families now also consume explicit write payload IR at backend
+      dispatch time. All stale normalized-statement, read-helper, sql-util, and
+      type-aware-common symbols that had accumulated in `compile.py`'s import
+      block during the IR-migration were removed; the only public surface that
+      still re-exports through `compile.py` is what `__init__.py` and other
+      callers need at the module boundary.
+- [x] Define a backend capability model that makes backend differences explicit
+      in one place rather than leaking them through ad hoc dialect conditionals,
+      including recursion strategy, write-program shape, returning/id behavior,
+      JSON/cast semantics, and other execution-relevant backend differences.
+      Done for the first source-first slice: backend capability metadata now
+      lives in `ir.py`, and backend binding happens before lowering instead of
+      being implicit in compiler control flow.
+- [x] Refactor the current SQLite path into an explicit backend lowerer from the
+      logical IR to backend-specific SQLGlot AST so SQLite remains the reference
+      executable backend without staying the hidden default shape of the whole
+      compiler.
+      Done for the first source-first slice: `compile.py` now routes through an
+      explicit SQLite IR lowerer instead of owning the top-level direct
+      normalized-statement dispatch path, and the public compile/render
+      entrypoints now thread an explicit backend choice into that lowering path
+      instead of hard-wiring SQLite implicitly at the top level.
+- [x] Land the first source-first milestone by routing the current SQLite path
+      through the new IR before broad reconciliation work begins elsewhere in
+      the repo.
+- [x] Keep the Phase 12 execution order explicit in the code migration itself:
+      SQLite-through-IR first, then DuckDB-through-IR, then PostgreSQL-through-
+      IR, and only then the broader repo-wide cleanup pass.
+      Done for the current source-first checkpoint: the roadmap now records the
+      order explicitly, and the source tree has landed the first SQLite-through-
+      IR step before any broad stabilization pass.
+- [x] Replace the current narrow DuckDB strategy of mostly reusing the
+      SQLite-shaped AST plus renderer rewrite patches with an explicit DuckDB
+      lowering path from the same logical IR, then grow it until DuckDB reaches
+      full admitted-subset parity instead of a read-only carveout.
+      Started: the shared IR/backend-binding path now includes an explicit
+      DuckDB lowerer entrypoint, and the blanket backend-level read-only block
+      has now been removed so admitted write families can flow through that
+      lowerer instead of being rejected during backend binding. The first large
+      render-time rewrite block has already been moved out of `render.py` and
+      into compile-time DuckDB lowering so the renderer is no longer the place
+      where DuckDB AST shaping primarily lives, and the first focused
+      standalone type-aware DuckDB write slices now execute through that shared
+      path too, including standalone `CREATE` node, standalone `CREATE`
+      relationship, direct `MATCH ... SET` node programs, and the standalone
+      property-keyed `MERGE` node slice, which now lowers without the old
+      one-row guard loop. The direct distinct-endpoint standalone type-aware
+      `MERGE` relationship slice now also lowers without the old guard loop by
+      using guarded node inserts plus a guarded edge insert, and the remaining
+      fresh-endpoint direct-plus-traversal relationship program assembly has
+      been collapsed onto a shared helper instead of staying duplicated across
+      multiple write builders. The direct non-type-aware `CREATE` relationship
+      and guarded `MERGE` relationship paths now also share the same concrete
+      edge-statement builder instead of compiling through an intermediate create
+      program and peeling its statements back out, and the standalone
+      `CREATE` relationship program no longer routes through its own one-use
+      create-step wrapper either. The schema-less
+      self-loop `MERGE` relationship existing-node branch now emits a direct
+      guarded insert-select statement instead of another compiled loop. The
+      merge-relationship program entrypoint itself no longer routes through
+      separate one-use type-aware versus schema-less step-builder helpers
+      either and now builds those narrow program shapes directly. The
+      separate-pattern relationship-create path now also reuses the same
+      shared directional edge-binding helper instead of carrying its own alias-
+      to-binding wiring block. The fresh-endpoint direct and traversal-backed
+      relationship-program helper now also reuses shared create-node steps and
+      no longer needs the extra single-use loop-program wrapper or its own
+      schema-less create branch. The schema-less distinct-endpoint
+      `MERGE` relationship path no longer runs under the old outer guard loop;
+      it now follows the same general shape as the type-aware path by ensuring
+      endpoint-node existence first and then emitting a direct edge
+      insert-select statement, and the schema-less self-loop and
+      distinct-endpoint merge-edge insert SQL now also share one helper instead
+      of being assembled separately in both paths. The schema-less `MERGE`
+      relationship family is now compiled through one shared step builder
+      instead of separate distinct-endpoint and self-loop program wrappers, and
+      the remaining merge-node guard plus self-loop node-lookup SQL now also
+      share one node-source helper instead of duplicating node-match filter
+      assembly. The schema-less `MERGE` node path is now statement-based too
+      rather than loop-backed, and the schema-less self-loop `MERGE`
+      relationship path now also compiles as direct statement steps instead of
+      split existing-node versus created-node branches. The direct and
+      standalone type-aware `MERGE` node path no longer keeps a separate
+      zero-property loop-backed guard branch either and now always compiles
+      through the same guarded single-statement insert-select helper used by
+      the property-keyed form. The last one-shape node-id binding source helper
+      under the fresh-endpoint orchestration path has also been folded back
+      into its remaining callers instead of staying as another tiny passthrough,
+      and that shared fresh-endpoint orchestration helper no longer takes a
+      per-caller all-matched SQL callback either; callers now pass the concrete
+      all-matched SQL directly.
+      The direct and
+      traversal-backed fresh-endpoint relationship write builders now also
+      share one endpoint-resolution helper instead of duplicating the same
+      alias, binding, and direction rewiring across all four create/merge
+      entrypoints, the direct plus traversal-backed fresh-endpoint
+      `MATCH ... MERGE` guard-source SQL now also shares one existence/guard
+      helper instead of keeping separate near-copy implementations, and the
+      remaining direct fresh-endpoint `MATCH ... MERGE` entrypoint now also
+      compiles through the same shared orchestration helper, so all four fresh-
+      endpoint `MATCH ... CREATE` / `MATCH ... MERGE` program entrypoints now
+      share the same all-matched short-circuit, fresh-endpoint resolution, and
+      endpoint binding flow. The direct matched-node and traversal-backed
+      matched-endpoint type-aware `MATCH ... MERGE` SQL builders now also share
+      one typed edge insert-select helper instead of each open-coding the same
+      column/value assembly, and the corresponding matched-endpoint type-aware
+      `MATCH ... CREATE` builders now reuse that same helper too. The
+      remaining shared directional edge-statement wrapper has also been folded
+      into its callers, so the standalone create, separate-pattern create, and
+      fresh-endpoint relationship builders now all call the common edge-insert
+      statement helper directly instead of bouncing through another tiny layer.
+      The statement-family program dispatcher now also builds the four narrow
+      matched-node and traversal-backed fresh-endpoint relationship program
+      shapes directly instead of routing through separate one-use entrypoint
+      wrappers first, and it now also builds the standalone `CREATE`
+      relationship, separate-pattern `CREATE` relationship, standalone
+      `MERGE` node, and standalone `MERGE` relationship program shapes
+      directly instead of bouncing through another set of one-use program
+      wrappers. The schema-less standalone `MERGE` relationship slice also no
+      longer keeps a separate self-loop SQL helper beside the distinct-endpoint
+      SQL helper and now compiles both shapes through one shared schema-less
+      merge-edge SQL builder instead. The
+      schema-less matched CREATE and MERGE relationship builders now also share
+      one schema-less edge insert-select helper across both direct and
+      traversal-backed paths, and the merge-node insert builders now also
+      share one guarded insert-select helper instead of each spelling out the
+      same `NOT EXISTS` wrapper. The remaining fresh-endpoint relationship
+      loop body now also reuses the shared directional edge-binding helper
+      instead of threading explicit `from` / `to` binding strings through its
+      match-resolution path, and the remaining zero-property type-aware merge-
+      node guard no longer needs its own single-use source-wrapper helper. The
+      shared fresh-endpoint orchestration path has now also dropped its extra
+      single-use loop-body wrapper and trivial all-matched helper instead of
+      routing through those tiny passthrough functions, and the last one-use
+      fresh-endpoint match resolver has now been folded back into the shared
+      orchestration path too. The remaining loop-backed write families now
+      also build their final `CompiledCypherLoop` steps inline instead of
+      routing through one extra two-call loop-program wrapper, and the
+      zero-property type-aware `MERGE` node loop no longer carries an unused
+      `RETURNING id` binding in its body. The schema-less merge-node and
+      self-loop merge-edge paths also no longer route through a separate tiny
+      node-lookup SQL helper and now build that lookup SQL directly in their
+      remaining merge callers instead. The traversal-backed
+      fresh-endpoint create/merge entrypoints also no longer need their own
+      one-use traversal source wrappers and now call the shared node-id and
+      guarded-source builders directly from the entrypoints. The schema-less
+      all-matched direct and traversal-backed relationship-create builders now
+      also share one resolved edge insert-select tail instead of each
+      re-spelling the same label-contract validation and type-aware versus
+      schema-less insert selection logic, and the traversal-backed all-matched
+      merge builder now reuses that same tail after assembling its merge guard.
+      The direct matched-endpoint and matched-node self-loop `MATCH ... MERGE`
+      builders now also reuse one shared resolved merge insert-select tail
+      instead of each carrying their own backend-specific `NOT EXISTS` guard
+      assembly and insert-selection block. The schema-less
+      merge-node step builder also no longer routes through separate one-use
+      insert and label-insert SQL wrappers and now builds both guarded
+      statements directly from one shared existence lookup, and the direct
+      matched-endpoint, matched-node self-loop, plus traversal-backed
+      `MATCH ... CREATE` builders and the direct, self-loop, plus
+      traversal-backed `MATCH ... MERGE`
+      builders now also share one resolved matched-relationship write helper
+      instead of each re-spelling the same final insert-select call block.
+      The schema-less
+      direct matched-node self-loop plus fresh-endpoint `MATCH ... CREATE` /
+      `MATCH ... MERGE` builders now also share one direct matched-node
+      source-parts helper instead of each open-coding the same
+      label/property/predicate filter assembly. The shared fresh-endpoint
+      relationship program path also no longer takes a per-caller source-SQL
+      factory callback and now selects between direct matched-node binding and
+      guarded merge source assembly from concrete source parts passed by all
+      four callers. The direct matched-endpoint two-node `MATCH ... CREATE` /
+      `MATCH ... MERGE` SQL builders now also share one matched-node pair
+      source-parts helper instead of duplicating the same left/right
+      filter/predicate assembly, and the repeated type-aware relationship
+      endpoint schema-contract checks in the remaining write builders now also
+      route through one shared validator instead of keeping separate local
+      blocks. Those source helpers are now generic node and node-pair source
+      builders rather than only matched-node wrappers, and the remaining
+      direct matched-node self-loop dispatcher and narrowed SQL builders now
+      also reuse one shared direct matched-node relationship source helper
+      instead of each reassembling the same alias, source SQL, predicate
+      filters, and endpoint resolution locally, and that shared resolved
+      matched-relationship write helper now also owns its merge-guard assembly
+      directly instead of delegating through another tiny merge-only wrapper.
+      The direct matched-endpoint two-node `MATCH ... CREATE` / `MATCH ... MERGE`
+      builders now also share one direct matched-node pair relationship source
+      helper instead of each rebuilding the same node-pair source and endpoint
+      resolution block, and the traversal-backed dispatcher plus narrowed
+      `MATCH ... CREATE` / `MATCH ... MERGE` builders now also share one
+      traversal relationship source helper instead of each reassembling the
+      same traversal source components, alias map, and endpoint resolution.
+      The shared resolved matched-relationship write helper also no longer
+      routes through a separate one-call resolved edge insert-select helper,
+      and the traversal relationship source helper no longer routes through a
+      separate one-call traversal source-component wrapper either.
+      The standalone type-aware `MERGE` relationship builder now also reuses
+      that same shared resolved matched-relationship write helper instead of
+      open-coding its own type-aware edge `NOT EXISTS` guard and final insert
+      assembly.
+      The standalone schema-less `MERGE` relationship builder now also routes
+      both its self-loop and distinct-endpoint forms through that same shared
+      resolved matched-relationship write helper instead of appending its own
+      edge-absence predicate and final insert-select directly.
+      The shared fresh-endpoint relationship program helper now also owns the
+      guarded `MATCH ... MERGE` source assembly directly instead of routing
+      through a separate guarded-source helper plus tiny matched/new endpoint
+      edge-column selectors, and it now builds the loop source `SELECT` in one
+      place after deciding whether an extra merge guard is needed.
+      The remaining
+      node-lookup plus distinct-endpoint standalone `MERGE` relationship SQL
+      paths now also reuse them instead of keeping their own label/property
+      source assembly blocks. The label
+      insert no longer routes through its one-use latest-node-id helper. The
+      direct matched-node create/merge entrypoints also no longer need their
+      own one-use node-id source wrappers and now build those shared source
+      SQL calls directly from the entrypoints. The remaining guarded-source
+      path also no longer routes through a one-use merge-exists helper and now
+      builds that `NOT EXISTS` SQL inline. The shared fresh-endpoint
+      orchestration path also no longer needs an endpoint-resolver callback;
+      callers now pass the already-resolved endpoint patterns directly. The
+      type-aware standalone `MERGE` relationship path also no longer routes
+      through its own one-use dispatcher helper and now builds the shared
+      resolved-write SQL directly inside the `merge-relationship` branch. The
+      schema-less standalone `MERGE` relationship path now does the same, so
+      that branch owns both the self-loop lookup form and the distinct-endpoint
+      resolved-write form directly instead of routing through another one-use
+      helper. The shared resolved matched-relationship write helper also now
+      assembles both its schema-less and type-aware edge insert-select tails
+      directly instead of routing through separate one-use edge insert helper
+      wrappers. Its remaining schema-less relationship-absence predicate is now
+      also built inline there instead of routing through another one-use helper.
+      The direct matched-node self-loop CREATE/MERGE SQL builders and the
+      direct matched-endpoint two-node CREATE/MERGE SQL builders have now also
+      each been collapsed onto one shared write builder instead of keeping
+      separate create-versus-merge helpers with the same source and final
+      resolved-write assembly. The traversal-backed CREATE/MERGE SQL builders
+      now also share one traversal write builder instead of keeping separate
+      create-versus-merge helpers with the same traversal source and final
+      resolved-write assembly. The remaining alias-based endpoint-id plus final
+      resolved-write tail is now also shared in one helper across the direct,
+      pair, traversal, and standalone distinct-endpoint relationship write
+      paths instead of being re-spelled at each caller. The four fresh-endpoint
+      direct-versus-traversal CREATE/MERGE dispatcher branches now also share
+      two common program builders instead of each reassembling the same source
+      extraction, all-matched short-circuit, and message plumbing around the
+      shared orchestration helper, and the remaining direct-versus-traversal
+      fresh-endpoint CREATE/MERGE message bundles are now centralized too
+      instead of being restated inline at each branch; those shared fresh-
+      endpoint program builders now own the create-versus-merge message
+      selection directly, so the dispatcher branches only choose the mode. The
+      direct matched-node, direct matched-endpoint pair, and traversal write
+      builders now also own their fixed create-versus-merge validation and
+      endpoint-contract wording instead of threading that config through each
+      caller. The remaining direct and traversal source-part helpers now also
+      share one candidate-based endpoint label resolver instead of each
+      re-spelling the same matched-alias fallback logic. Inside the remaining
+      fresh-endpoint merge wrapper, the schema-less and type-aware merge-
+      existence branches now also share the same alias setup, join target, and
+      final `SELECT 1` assembly instead of each rebuilding that tail
+      separately, and that wrapper now also shares the edge source plus new-
+      endpoint join target before branching only for the backend-specific
+      predicate assembly.
+      Remaining work is to keep
+      tightening DuckDB-specific lowering for the remaining loop-backed write
+      families, which are now mainly the underlying match-driven fresh-
+      endpoint execution wrapper and the narrower type-aware zero-property
+      `MERGE` node guard path, until the read-only carveout disappears in
+      practice, not just in the capability gate.
+      The type-aware zero-property `MERGE` node guard path has now been
+      eliminated: `_compile_merge_node_program` no longer emits a
+      `CompiledCypherLoop`; it now returns a single `CompiledCypherStatement`
+      using `_compile_type_aware_merge_node_sql` directly (guarded
+      `INSERT ... SELECT ... WHERE NOT EXISTS`). At the same time all
+      schema-less dead-code branches across `_compile_write_programs.py` were
+      removed (442 lines deleted, file down from 1150 to 708 lines): the
+      schema-less `else` paths in `_compile_merge_node_guard_source_sql`,
+      `_compile_merge_self_loop_node_lookup_source_sql`,
+      `_compile_merge_self_loop_edge_insert_statement`,
+      `_compile_match_merge_relationship_sql`, and
+      `_compile_match_create_relationship_between_nodes_sql` are gone, the
+      schema-less path of `_compile_merge_relationship_program` is gone, and
+      the entirely dead `_compile_merge_relationship_guard_source_sql`
+      function has been deleted. Remaining loop-backed write families are only
+      the self-loop `MERGE` relationship path (the two
+      `CompiledCypherLoop` steps in
+      `_compile_merge_relationship_self_loop_program`) and the fresh-endpoint
+      execution wrapper in `_compile_write_helpers.py`.
+      The self-loop `MERGE` relationship path has now also been converted to
+      two `CompiledCypherStatement`s: the first is the guarded merge-node
+      statement (via `_compile_type_aware_merge_node_sql`), and the second is
+      a new `INSERT INTO {edge_table} ... SELECT {alias}.id, {alias}.id ...
+      FROM {node_table} AS {alias} WHERE {node props} AND NOT EXISTS (...)`
+      built by `_compile_type_aware_merge_self_loop_edge_sql`. The three
+      helpers it replaced — `_compile_merge_node_guard_source_sql`,
+      `_compile_merge_self_loop_node_lookup_source_sql`, and
+      `_compile_merge_self_loop_edge_insert_statement` — have been deleted.
+      `CompiledCypherLoop` is now only used in the fresh-endpoint execution
+      wrapper in `_compile_write_helpers.py`, which remains the one
+      genuinely loop-dependent write path (each matched source row requires a
+      new auto-generated node id to wire into the subsequent edge insert, and
+      correlating those ids set-based via a CTE-with-RETURNING approach is not
+      possible in DuckDB because DuckDB does not support data-modifying CTEs
+      — INSERT is not allowed inside a CTE body in DuckDB, confirmed by direct
+      runtime test). The loop is therefore the permanent accepted execution
+      model for the fresh-endpoint write path on all backends, not just DuckDB.
+      All write families in the admitted subset now compile to DuckDB-executable
+      SQL or loops where genuinely needed, and the read-only carveout is gone.
+- [x] Add a full PostgreSQL lowering path from the same logical IR rather than
+      treating PostgreSQL support as a mere SQLGlot rendering target, including
+      a backend-specific schema/runtime contract for the admitted subset.
+      Done: the shared IR/backend-binding path now includes an explicit
+      PostgreSQL lowerer entrypoint instead of leaving PostgreSQL as a missing
+      backend slot, and the blanket backend-level write prohibition has now
+      been removed so admitted shared write families can flow through the same
+      lowering path rather than being rejected before lowering. A PostgreSQL
+      runtime test suite now also lives in
+      `tests/test_postgresql_runtime.py`, covering MATCH/RETURN, CREATE node,
+      CREATE relationship, MERGE node, MERGE relationship, MATCH+CREATE
+      fresh-endpoint, node plus relationship `SET`, relationship `DELETE`,
+      and schema sequence-based ID generation;
+      renderer regressions now also pin backend-specific PostgreSQL write SQL
+      shapes such as relationship `SET` lowering through `UPDATE ... FROM`
+      plus relationship `DELETE` lowering from the shared IR path, and they
+      now also pin the loop-backed fresh-endpoint and traversal-backed
+      PostgreSQL write programs that rely on `RETURNING id` plus per-row
+      binding flow without needing a live PostgreSQL server. The repo now also
+      has a dedicated `scripts/dev/run_postgresql_runtime_docker.sh` helper
+      that starts a disposable PostgreSQL container, exports
+      `CYPHERGLOT_TEST_POSTGRES_DSN`, and runs the PostgreSQL runtime suite
+      against that live backend instead of relying only on manually managed
+      local servers;
+      tests skip automatically when psycopg2 is not installed or
+      `CYPHERGLOT_TEST_POSTGRES_DSN` is not set, and the Docker-backed helper
+      now passes that PostgreSQL runtime suite against a live disposable
+      container.
+- [x] Keep splitting oversized handwritten modules as Phase 12 work touches
+      them, so the IR/lowering migration does not just move complexity around
+      while leaving new monoliths behind. Prefer doing both jobs at once:
+      when a refactor exposes a real backend/IR/type-aware seam, split that
+      seam out immediately instead of doing one pass that only rearranges the
+      architecture and a later pass that only shrinks files. Do this in two
+      steps so the work stays focused: first keep carving down the three core
+      handwritten production modules `src/cypherglot/compile.py`,
+      `src/cypherglot/normalize.py`, and `src/cypherglot/validate.py`, with
+      `compile.py` as the immediate Phase 12 target; then, once that core
+      lowering/backend slice settles, reassess the remaining oversized support
+      and test files and split only the ones that still look structurally
+      justified rather than line-count noisy. Started: the DuckDB SQLGlot
+      expression rewrite block has now been split out of `compile.py` into
+      `src/cypherglot/_compile_duckdb.py`, so the backend-specific AST rewrite
+      logic no longer sits inline beside the main lowering dispatch and write
+      compilation paths, and that same module now also owns the DuckDB
+      program-level rewrite wrapper instead of keeping that backend-specific
+      step traversal in `compile.py`. The shared SQL string assembly,
+      schema-less predicate, and basic property/value SQL helpers have now
+      also been split into `src/cypherglot/_compile_sql_utils.py`, so
+      extracted lowering helpers no longer have to keep reaching back into
+      `compile.py` for that utility layer. The compiled-program dataclasses
+      plus the single-statement helper wrappers now also live in
+      `src/cypherglot/_compiled_program.py`, so the main compiler file no
+      longer owns that program model inline either. The type-aware variable-
+      length module now also owns its remaining variable-length-only outer
+      projection/order helper slice directly instead of importing those
+      helpers from `compile.py`, and the neighboring dead projected/group-by
+      helpers have been deleted instead of preserved. The shared type-aware
+      binding/alias spec dataclasses plus the `WITH` naming helpers now also
+      live in `src/cypherglot/_compile_type_aware_common.py`, so extracted
+      type-aware code no longer has to import those basics through
+      `compile.py` either. The shared type-aware predicate and field-
+      expression helpers now also live in
+      `src/cypherglot/_compile_type_aware_common.py`, so extracted type-aware
+      code no longer has to route node/relationship predicate or field-shaping
+      through `compile.py` for those shared basics either. The shared
+      type-aware `WITH` binding column/expression helpers now also live there,
+      so extracted type-aware lowering no longer has to reach back into
+      `compile.py` for that binding-shaping slice either. The full type-aware
+      `MATCH ... WITH ... RETURN` lowering slice now also lives in
+      `src/cypherglot/_compile_type_aware_with.py`, so the main compiler file
+      no longer carries that `WITH` source/select/predicate/order/group
+      family inline while the surrounding read-shaping helpers are being split
+      on real seams. The neighboring type-aware read family for single-node,
+      optional-node, one-hop relationship, fixed-length chain, shared return/
+      aggregate/order/group shaping, and variable-length branch expansion now
+      also lives in `src/cypherglot/_compile_type_aware_reads.py`, so the main
+      compiler file no longer owns that read-shaping seam inline either and
+      the variable-length plus `WITH` modules now import that family directly
+      instead of reaching back through `compile.py`. The remaining generic
+      non-type-aware read helper family for chain source assembly, relationship
+      source assembly, `UNWIND`, and generic `WITH`/`RETURN` read shaping now
+      also lives in `src/cypherglot/_compile_read_helpers.py`, so the main
+      compiler file has dropped that neighboring read-helper seam too rather
+      than keeping both the type-aware and schema-less read helper stacks
+      piled into the same handwritten module. The accidental duplicate second
+      copy of that generic read-helper module has now also been removed, which
+      drops `src/cypherglot/_compile_read_helpers.py` back under the current
+      handwritten size target instead of carrying dead duplicate definitions.
+      The remaining matched/traversal relationship write helper cluster has now
+      also been split out of `compile.py` into
+      `src/cypherglot/_compile_write_helpers.py`, which drops the main compiler
+      file itself back under the current handwritten size target and removes a
+      dead one-use schema-less merge-node helper instead of preserving it. The
+      oversized shared `RETURN` item parser has now also been split out of
+      `src/cypherglot/_normalize_support.py` into
+      `src/cypherglot/_normalize_return_items.py`, which drops the support
+      module under the current handwritten size target without keeping a second
+      inline copy of that parser around. The `MATCH ... WITH ... RETURN` /
+      `UNWIND` normalization family has now also been split out of
+      `src/cypherglot/normalize.py` into
+      `src/cypherglot/_normalize_with_helpers.py`, which drops both modules
+      under the current handwritten size target without leaving a second inline
+      copy of that normalization stack behind. The projection-validation helper
+      family now also lives in `src/cypherglot/_validate_projection.py`, and
+      `src/cypherglot/validate.py` now delegates the `WITH WHERE` validation
+      seam there instead of keeping every projection-related helper inline. The
+      type-aware read projection and ordering helper slice now also lives in
+      `src/cypherglot/_compile_type_aware_read_projections.py`, which drops
+      `src/cypherglot/_compile_type_aware_reads.py` under the current
+      handwritten size target instead of leaving the shared type-aware read
+      seam as another Phase 12 monolith. The broader CASE / WITH / RETURN
+      projection stack is still only partially extracted, so the remaining
+      clear production-file monolith for this item is still
+      `src/cypherglot/validate.py`. The shared plain-read projection validator
+      now also delegates into `src/cypherglot/_validate_projection.py`
+      alongside the existing `WITH WHERE` delegation, which drops
+      `src/cypherglot/validate.py` from 4752 lines to 3164 lines while the
+      broader match/with-shape validation stack continues to be extracted. The
+      duplicated CASE helper stack in `src/cypherglot/validate.py` now also
+      delegates into `src/cypherglot/_validate_projection.py`, which drops
+      `src/cypherglot/validate.py` further to 2997 lines without changing
+      admitted validation behavior. The match-pattern/vector/unwind/optional
+      shape validator family now also lives in
+      `src/cypherglot/_validate_shape_helpers.py`, which drops
+      `src/cypherglot/validate.py` further to 2692 lines while preserving the
+      same admitted subset behavior through delegating wrappers.
+      The standalone-write and mixed read-write validation branches now also
+      live in `src/cypherglot/_validate_write_helpers.py`, which drops
+      `src/cypherglot/validate.py` further to 2572 lines while preserving the
+      same admitted subset behavior through delegating wrappers.
+      The remaining giant `WITH` validation branch now also lives in
+      `src/cypherglot/_validate_with_helpers.py`, which drops
+      `src/cypherglot/validate.py` further to 351 lines while preserving the
+      same admitted subset behavior through delegating wrappers; the next
+      priority is splitting `src/cypherglot/_validate_with_helpers.py` itself,
+      which is now the remaining handwritten validation monolith at 2213 lines.
+      The 28 individually-duplicated unary scalar function blocks inside
+      `src/cypherglot/_validate_with_helpers.py` (abs, sign, round, floor,
+      ceil, sqrt, exp, sin, cos, tan, asin, acos, atan, ln, log, radians,
+      degrees, log10, toString, toInteger, toFloat, toBoolean, lower, upper,
+      trim, ltrim, rtrim, reverse) have now been consolidated into a single
+      generic regex handler, which drops `_validate_with_helpers.py` from 2213
+      to 1187 lines. All handwritten production source files are now under the
+      1500-line target.
+      The render test monolith has also now been
+      split again on a real path-family seam, with `tests/test_render_paths.py`
+      reduced to 1410 lines and the later bounded-variable-length / `WITH`
+      path cases moved into `tests/test_render_paths_variable.py` at 1464
+      lines, so the touched render-path suites no longer sit above the current
+      handwritten size target while this broader cleanup remains in progress.
+      The type-aware SQLite runtime monolith has now also been split on real
+      runtime seams into shared fixture support plus focused base, traversal,
+      and path/relational modules, with
+      `tests/test_sqlite_runtime_type_aware.py` down to 993 lines,
+      `tests/test_sqlite_runtime_type_aware_traversal.py` at 631 lines, and
+      `tests/test_sqlite_runtime_type_aware_paths.py` at 1231 lines instead of
+      keeping one 2960-line runtime suite inline. The compile-program test
+      monolith has now also been split on a real traversal/new-endpoint seam,
+      with `tests/test_compile_programs.py` down to 804 lines,
+      `tests/test_compile_programs_traversal.py` at 988 lines, and
+      `tests/test_compile_programs_endpoints.py` at 347 lines instead of
+      keeping one 2029-line compile-program suite inline. The compile test
+      monolith has now also been split along direct, multi-hop, WITH, and
+      optional/public-API seams, with `tests/test_compile.py` down to 863
+      lines, `tests/test_compile_multihop.py` at 1371 lines,
+      `tests/test_compile_with.py` at 1393 lines,
+      `tests/test_compile_with_relational.py` at 814 lines, and
+      `tests/test_compile_optional.py` at 338 lines instead of keeping one
+      4559-line compile suite inline. The normalize test monolith has now also
+      been split on base/WITH/optional-vector seams, with
+      `tests/test_normalize.py` down to 1231 lines,
+      `tests/test_normalize_with.py` at 1101 lines, and
+      `tests/test_normalize_optional_vector.py` at 301 lines instead of
+      keeping one 2617-line normalize suite inline. The validate test
+      monolith has now also been split on base/WITH/rejection seams, with
+      `tests/test_validate.py` down to 888 lines,
+      `tests/test_validate_with.py` at 516 lines, and
+      `tests/test_validate_rejections.py` at 565 lines instead of keeping one
+      1953-line validate suite inline. The oversized benchmark script set has
+      now also been split on shared runtime/CLI seams into
+      `scripts/benchmarks/_benchmark_common.py` and
+      `scripts/benchmarks/_benchmark_cli_helpers.py`, which drops
+      `scripts/benchmarks/benchmark_sqlite_runtime.py` to 1454 lines,
+      `scripts/benchmarks/benchmark_neo4j_runtime.py` to 1375 lines, and
+      `scripts/benchmarks/benchmark_sqlite_schema_shapes.py` to 1482 lines.
+- [x] Add backend-specific schema-generation and DDL support where needed so the
+      backend story is complete for SQLite, PostgreSQL, and DuckDB instead of
+      assuming one SQLite-first DDL contract underneath all rendered SQL.
+      Done for the current source-first cut: `GraphSchema` now exposes a
+      backend-aware DDL surface instead
+      of only `sqlite_ddl()`, with explicit SQLite, DuckDB, and PostgreSQL
+      column/type mappings and backend-specific table emission rules in the
+      source layer, and the remaining source/test call sites now use that
+      generic `ddl(backend)` contract instead of backend-named wrapper
+      methods. That removes another SQLite-first naming assumption from the
+      shared surface. DuckDB and PostgreSQL DDL now also provision explicit
+      per-table id sequences so backend-native schemas can auto-generate ids
+      for admitted write paths instead of relying on SQLite rowid behavior.
+- [x] Add a Neo4j-like schema-definition surface so users define graph types
+      in graph terms instead of authoring raw SQL table/index DDL.
+      Done: CypherGlot now exposes `graph_schema_from_text(...)` for a narrow
+      graph-native `CREATE NODE` / `CREATE EDGE` schema-definition surface
+      above the raw `GraphSchema(...)` Python API.
+- [x] Make `CREATE NODE` / `CREATE EDGE` style schema commands lower to both
+      backend table DDL and the default physical support objects required by
+      that graph shape.
+      Done: `schema_ddl_from_text(...)` now lowers those schema commands
+      through the existing backend DDL generator, including the default edge
+      traversal support indexes already emitted by `GraphSchema.ddl(...)`.
+- [x] Automatically provision the baseline edge endpoint indexes during
+      edge-type creation instead of expecting users to author separate
+      SQL-like index statements for ordinary traversal performance.
+      Done: `GraphSchema.ddl(...)` now emits the default edge traversal indexes
+      for every edge table across SQLite, DuckDB, and PostgreSQL, and schema
+      tests explicitly assert those generated support objects.
+- [x] Reserve explicit `CREATE INDEX` support for additional workload-
+      specific property indexes on node or edge properties, not for the
+      baseline edge endpoint indexes that the schema contract already assumes.
+      Done: `CREATE INDEX <Name> ON NODE|EDGE <Type> (...)` now lowers to
+      explicit property indexes via `GraphSchema.property_indexes`, while the
+      baseline edge endpoint indexes remain generated automatically by
+      `GraphSchema.ddl(...)`.
+- [x] Document automatic default edge traversal indexes as part of the
+      edge-schema contract instead of presenting them as optional manual
+      tuning every user must rediscover.
+      Done: the schema contract guide now treats baseline edge traversal
+      indexes as generated default physical support objects, while leaving
+      extra property indexes as explicit workload-specific tuning.
+- [x] Keep SQLGlot as the emitted SQL AST and dialect-rendering layer, but make
+      backend-specific AST shaping an explicit lowering concern instead of
+      relying mainly on renderer-time tweak passes.
+      Done for the current source-first slice: render helpers are now a thin
+      SQLGlot emission layer over backend-selected compilation, SQLite,
+      DuckDB, and PostgreSQL all enter through explicit backend lowerers, and
+      the main DuckDB SQLGlot rewrite surface now hangs off the backend
+      lowering path rather than the public renderer architecture.
+- [x] Retain small backend-specific SQLGlot rewrite passes only where they are
+      still the clearest final cleanup step after backend lowering, and do not
+      let rewrite growth become the primary multi-backend architecture.
+      Done: DuckDB-specific SQLGlot cleanup now runs through the DuckDB backend
+      lowerer registration itself instead of a post-lowering special case in the
+      top-level compiler entrypoint, so the remaining rewrite surface stays a
+      narrow backend cleanup step rather than public compiler architecture.
+- [x] Finish the source-first pass before doing broad reconciliation work in
+      tests, examples, docs, and benchmarks; during the main architecture
+      rewrite, prioritize landing the new IR and backend lowerers over keeping
+      every supporting surface in sync after each source edit.
+      Done: the source-first IR and backend-lowering pass landed first, and the
+      follow-up repo work is now happening as explicit stabilization across
+      tests, docs, examples, scripts, benchmarks, and CI instead of being mixed
+      into the core architecture edits.
+- [x] Add backend-parity regression layers for the admitted subset:
+      normalized-Cypher-to-IR tests, IR-to-backend-SQLGlot lowering tests, and
+      direct execution/runtime parity tests for SQLite, PostgreSQL, and DuckDB.
+      Done: the current suite covers normalized-Cypher-to-IR checks in
+      tests/test_ir.py, backend lowering/render assertions in
+      tests/test_render_backends.py, and direct runtime execution coverage
+      across SQLite, DuckDB, and PostgreSQL in the runtime backend test
+      modules; the full pytest suite is green on the current workspace state.
+- [x] After the source-first compiler pass, run a dedicated stabilization pass
+      that fixes tests, examples, docs, and benchmarks against the new
+      architecture rather than treating those updates as the main pacing item
+      during the core source migration.
+      Done: the stabilization pass has now updated backend-specific tests,
+      schema and public-entrypoint docs, quickstart/homepage examples,
+      scripts/dev workflow references, benchmark documentation, and CI
+      PostgreSQL runtime coverage against the post-refactor architecture.
+- [x] Revisit the full test suite after the source-first compiler pass so test
+      coverage is explicit about which backend each case targets, including
+      SQLite, DuckDB, and PostgreSQL execution paths where needed instead of
+      leaving backend assumptions implicit in SQLite-first fixtures. If the
+      PostgreSQL path needs containerized execution to be practical, wire that
+      in rather than soft-skipping real backend coverage.
+      Done: backend-specific runtime and render suites are now split by backend
+      in the test tree, and CI now runs `tests/test_postgresql_runtime.py`
+      against a PostgreSQL service container instead of relying only on local
+      DSN-driven execution.
+- [x] Revisit all repo examples after the source-first compiler pass so the
+      documented and example-backed query/program flows match the new
+      multi-backend architecture and current admitted subset instead of older
+      SQLite-shaped assumptions.
+      Done: the docs homepage, quickstart, README, and public-entrypoints guide
+      now describe the backend-aware parse/validate/normalize/IR/lowering
+      pipeline, current multi-backend stance, and the graph-native schema
+      definition surface instead of older SQLite-shaped-only examples.
+- [x] Revisit [scripts/dev](/mnt/ssd2/repos/cypherglot/scripts/dev) after the
+      source-first compiler pass so regeneration and local developer workflows
+      reflect the backend-neutral IR plus explicit SQLite, DuckDB, and
+      PostgreSQL support story instead of pre-refactor compiler assumptions.
+      Done: the checked-in dev helpers now cleanly cover Docker-backed ANTLR
+      regeneration and disposable PostgreSQL runtime execution, and the README
+      development workflow points directly at those current scripts.
+- [x] Revisit [scripts/benchmarks](/mnt/ssd2/repos/cypherglot/scripts/benchmarks)
+      after the source-first compiler pass so benchmark harnesses and reported
+      metrics reflect backend-aware compile/lowering/runtime comparisons under
+      the new architecture instead of the older SQLite-shaped pipeline.
+      Done: the benchmark suite now clearly separates the historical
+      SQLite schema-shape decision benchmark, the compiler benchmark, and the
+      Neo4j runtime benchmark from the still-open SQL-backend runtime
+      restructuring work, and the benchmark guide no longer presents the repo
+      as a SQLite-only pipeline story.
+- [ ] Update the public backend support policy and docs so CypherGlot stops
+      presenting DuckDB as read-only if that parity work lands, and instead
+      documents equal supported-backend expectations across SQLite,
+      PostgreSQL, and DuckDB.
+- [ ] Revisit benchmark coverage after the IR/lowering split lands so compile
+      latency, backend-lowering cost, and backend-specific runtime parity are
+      all measured against the new architecture instead of the older
+      SQLite-shaped pipeline.
+  - [ ] Keep
+        [scripts/benchmarks/benchmark_sqlite_schema_shapes.py](/mnt/ssd2/repos/cypherglot/scripts/benchmarks/benchmark_sqlite_schema_shapes.py)
+        as the closed historical schema-decision benchmark: it answered which
+        relational graph schema shape to keep, and it should not expand back
+        into the main runtime-performance story.
+  - [ ] Keep
+        [scripts/benchmarks/benchmark_compiler.py](/mnt/ssd2/repos/cypherglot/scripts/benchmarks/benchmark_compiler.py)
+        as the compiler-path benchmark: it should own `p50`, `p95`, and `p99`
+        for parse/validate/normalize/IR/lowering/render steps plus end-to-end
+        Cypher-to-target-SQL latency for SQLite, DuckDB, and PostgreSQL.
+  - [ ] Treat
+        [scripts/benchmarks/benchmark_neo4j_runtime.py](/mnt/ssd2/repos/cypherglot/scripts/benchmarks/benchmark_neo4j_runtime.py)
+        as the completed direct Neo4j runtime/compatibility benchmark and keep
+        new SQL-backend runtime work out of that harness.
+  - [ ] Replace
+        [scripts/benchmarks/benchmark_sqlite_runtime.py](/mnt/ssd2/repos/cypherglot/scripts/benchmarks/benchmark_sqlite_runtime.py)
+        with shared SQL-runtime benchmark infrastructure plus explicit SQLite,
+        DuckDB, and PostgreSQL runtime entrypoints, or otherwise split it into
+        three dedicated target-specific runtime scripts, so each backend owns
+        ingest/setup/query-execution measurement instead of DuckDB and
+        PostgreSQL piggybacking on a SQLite-first story.
+  - [ ] Keep OLTP and OLAP as workload families inside the SQL-runtime
+        benchmarks, but report them under each backend rather than making a
+        SQLite-centric runtime harness the primary benchmark identity.
+  - [ ] For the primary DuckDB runtime benchmark path, use DuckDB-native bulk
+        ingest/loading (for example CSV/COPY-style import or similarly direct
+        table-loading flow) instead of the attached-SQLite convenience path;
+        keep the attached-SQLite path only as an auxiliary/debug benchmark if
+        it remains useful.
+  - [ ] Add RSS measurement to each major benchmark stage in the SQL-runtime
+        harnesses, not just ingest/setup snapshots: connect, schema creation,
+        index creation, ingest, analyze/statistics, compile, execute, and suite
+        boundaries.
+
+## Phase 13
+
 Release v0.1.0.
 
 Status: planned.
@@ -1137,77 +1914,6 @@ Status: planned.
       workflows are wired; local `pytest` and `mkdocs build --strict` are green
       after the final type-aware migration cleanup, so the remaining work is the
       actual green-light, tag, publish, and GitHub release step.
-
-## Phase 13
-
-Refactor CypherGlot for equal multi-dialect SQL support.
-
-Status: planned.
-
-Goal for this phase:
-
-- make equal full-support ambitions for SQLite, PostgreSQL, and DuckDB the
-      primary compiler architecture constraint
-- stop treating SQLite-shaped lowering plus dialect rewrite patches as the
-      long-term product path
-- introduce a backend-neutral graph-relational IR between normalized Cypher and
-      SQLGlot AST generation so new SQL targets do not require reshaping the
-      whole compiler each time
-- keep support claims strict: a backend counts as supported only when the
-      admitted subset executes correctly against that backend's schema/runtime
-      contract, not merely when SQLGlot can render SQL text for it
-
-- [ ] Freeze the new architecture decision clearly in docs and roadmap text:
-      multi-dialect SQL support now comes first, and the compiler should evolve
-      from `Cypher AST -> mostly SQLite-oriented SQLGlot AST -> dialect tweaks`
-      toward `Cypher AST -> logical graph-relational IR -> backend-aware
-      lowering -> SQLGlot AST -> dialect SQL text`.
-- [ ] Keep the parse, validation, and normalization boundary stable where
-      practical while this phase lands; the main refactor target is the SQL
-      compilation architecture after normalization, not a broad churn of the
-      upstream frontend seam.
-- [ ] Define a small backend-neutral logical graph-relational IR for the
-      admitted subset instead of lowering normalized Cypher directly into a
-      mostly SQLite-shaped SQLGlot AST.
-- [ ] Keep that IR driven by real admitted Cypher semantics rather than generic
-      SQL completeness: typed node scans, typed edge scans, traversal,
-      filtering, projection, aggregation, optional flow, admitted variable-
-      length expansion, and the currently admitted write families.
-- [ ] Define a backend capability model that makes backend differences explicit
-      in one place rather than leaking them through ad hoc dialect conditionals,
-      including recursion strategy, write-program shape, returning/id behavior,
-      JSON/cast semantics, and other execution-relevant backend differences.
-- [ ] Refactor the current SQLite path into an explicit backend lowerer from the
-      logical IR to backend-specific SQLGlot AST so SQLite remains the reference
-      executable backend without staying the hidden default shape of the whole
-      compiler.
-- [ ] Replace the current narrow DuckDB strategy of mostly reusing the
-      SQLite-shaped AST plus renderer rewrite patches with an explicit DuckDB
-      lowering path from the same logical IR, then grow it until DuckDB reaches
-      full admitted-subset parity instead of a read-only carveout.
-- [ ] Add a full PostgreSQL lowering path from the same logical IR rather than
-      treating PostgreSQL support as a mere SQLGlot rendering target, including
-      a backend-specific schema/runtime contract for the admitted subset.
-- [ ] Add backend-specific schema-generation and DDL support where needed so the
-      backend story is complete for SQLite, PostgreSQL, and DuckDB instead of
-      assuming one SQLite-first DDL contract underneath all rendered SQL.
-- [ ] Keep SQLGlot as the emitted SQL AST and dialect-rendering layer, but make
-      backend-specific AST shaping an explicit lowering concern instead of
-      relying mainly on renderer-time tweak passes.
-- [ ] Retain small backend-specific SQLGlot rewrite passes only where they are
-      still the clearest final cleanup step after backend lowering, and do not
-      let rewrite growth become the primary multi-backend architecture.
-- [ ] Add backend-parity regression layers for the admitted subset:
-      normalized-Cypher-to-IR tests, IR-to-backend-SQLGlot lowering tests, and
-      direct execution/runtime parity tests for SQLite, PostgreSQL, and DuckDB.
-- [ ] Update the public backend support policy and docs so CypherGlot stops
-      presenting DuckDB as read-only if that parity work lands, and instead
-      documents equal supported-backend expectations across SQLite,
-      PostgreSQL, and DuckDB.
-- [ ] Revisit benchmark coverage after the IR/lowering split lands so compile
-      latency, backend-lowering cost, and backend-specific runtime parity are
-      all measured against the new architecture instead of the older
-      SQLite-shaped pipeline.
 
 ## Future phases
 
@@ -1222,7 +1928,6 @@ Goal for this phase:
       broader write-side traversal semantics plus broader variable-length forms
       as later-phase work, while the current admitted traversal-backed write
       subset already has representative compile and SQLite runtime proof.
-
 - [ ] Revisit compiler performance only after measuring end-to-end request cost in a
       realistic host-runtime path, not just isolated frontend compile latency.
       Started: checked-in compiler and SQLite runtime benchmark baselines now

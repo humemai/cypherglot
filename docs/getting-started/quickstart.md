@@ -5,6 +5,7 @@ CypherGlot exposes a small compiler-focused API:
 - parse raw Cypher
 - validate the admitted subset
 - normalize the accepted shape
+- define the graph schema in graph-native terms when needed
 - compile admitted queries into SQLGlot-backed output
 
 The current target is a practical mainstream single-hop, read-heavy subset, not
@@ -61,11 +62,31 @@ print(type(program).__name__)
 print(rendered.steps[0])
 ```
 
+## Define a graph schema
+
+```python
+schema_text = """
+CREATE NODE User (name STRING NOT NULL, age INTEGER);
+CREATE NODE Company (name STRING NOT NULL);
+CREATE EDGE WORKS_AT FROM User TO Company (since INTEGER);
+CREATE INDEX user_name_idx ON NODE User(name);
+"""
+
+graph_schema = cypherglot.graph_schema_from_text(schema_text)
+sqlite_ddl = cypherglot.schema_ddl_from_text(schema_text, backend="sqlite")
+
+print(type(graph_schema).__name__)
+print(sqlite_ddl[0])
+```
+
 ## Public entrypoints
 
 - `parse_cypher_text(text)` returns the raw parse tree and collected syntax errors.
 - `validate_cypher_text(text)` enforces the current admitted-subset boundary.
 - `normalize_cypher_text(text)` returns repo-owned normalized statement objects.
+- `graph_schema_from_text(text)` returns a `GraphSchema` built from graph-native
+  schema-definition text.
+- `schema_ddl_from_text(text, backend)` lowers that schema text to backend DDL.
 - `to_sqlglot_ast(text)` returns one SQLGlot `Expression` for admitted
   single-statement shapes.
 - `to_sqlglot_program(text)` returns a SQL-backed compiled program for admitted

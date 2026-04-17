@@ -7,6 +7,7 @@ from cypherglot.schema import (
     EdgeTypeSpec,
     GraphSchema,
     NodeTypeSpec,
+    PropertyIndexSpec,
     PropertyField,
     SchemaContractError,
     edge_table_name,
@@ -74,7 +75,7 @@ class SchemaContractTests(unittest.TestCase):
             ),
         )
 
-        ddl = "\n".join(schema.sqlite_ddl())
+        ddl = "\n".join(schema.ddl("sqlite"))
 
         self.assertIn("CREATE TABLE cg_node_user", ddl)
         self.assertIn("name TEXT NOT NULL", ddl)
@@ -90,12 +91,222 @@ class SchemaContractTests(unittest.TestCase):
             ddl,
         )
         self.assertIn(
+            "CREATE INDEX idx_cg_edge_works_at_from_id ON cg_edge_works_at(from_id);",
+            ddl,
+        )
+        self.assertIn(
+            "CREATE INDEX idx_cg_edge_works_at_to_id ON cg_edge_works_at(to_id);",
+            ddl,
+        )
+        self.assertIn(
             (
                 "CREATE INDEX idx_cg_edge_works_at_from_to ON "
                 "cg_edge_works_at(from_id, to_id);"
             ),
             ddl,
         )
+        self.assertIn(
+            (
+                "CREATE INDEX idx_cg_edge_works_at_to_from ON "
+                "cg_edge_works_at(to_id, from_id);"
+            ),
+            ddl,
+        )
+
+    def test_graph_schema_duckdb_ddl_builds_backend_specific_tables(self) -> None:
+        schema = GraphSchema(
+            node_types=(
+                NodeTypeSpec(
+                    name="User",
+                    properties=(
+                        PropertyField("name", "string", nullable=False),
+                        PropertyField("active", "boolean"),
+                        PropertyField("profile", "json"),
+                    ),
+                ),
+            ),
+            edge_types=(
+                EdgeTypeSpec(
+                    name="KNOWS",
+                    source_type="User",
+                    target_type="User",
+                ),
+            ),
+        )
+
+        ddl = "\n".join(schema.ddl("duckdb"))
+
+        self.assertIn("CREATE SEQUENCE cg_node_user_id_seq START 1;", ddl)
+        self.assertIn("CREATE TABLE cg_node_user", ddl)
+        self.assertIn(
+            "id BIGINT PRIMARY KEY DEFAULT nextval('cg_node_user_id_seq')",
+            ddl,
+        )
+        self.assertIn("name VARCHAR NOT NULL", ddl)
+        self.assertIn("active BOOLEAN", ddl)
+        self.assertIn("profile JSON", ddl)
+        self.assertNotIn("STRICT", ddl)
+        self.assertNotIn("PRAGMA foreign_keys = ON;", ddl)
+        self.assertNotIn("FOREIGN KEY", ddl)
+        self.assertIn(
+            "CREATE INDEX idx_cg_edge_knows_from_id ON cg_edge_knows(from_id);",
+            ddl,
+        )
+        self.assertIn(
+            "CREATE INDEX idx_cg_edge_knows_to_id ON cg_edge_knows(to_id);",
+            ddl,
+        )
+        self.assertIn(
+            "CREATE INDEX idx_cg_edge_knows_from_to ON cg_edge_knows(from_id, to_id);",
+            ddl,
+        )
+        self.assertIn(
+            "CREATE INDEX idx_cg_edge_knows_to_from ON cg_edge_knows(to_id, from_id);",
+            ddl,
+        )
+
+    def test_graph_schema_postgresql_ddl_builds_backend_specific_tables(self) -> None:
+        schema = GraphSchema(
+            node_types=(
+                NodeTypeSpec(
+                    name="User",
+                    properties=(PropertyField("score", "float"),),
+                ),
+                NodeTypeSpec(name="Company"),
+            ),
+            edge_types=(
+                EdgeTypeSpec(
+                    name="WORKS_AT",
+                    source_type="User",
+                    target_type="Company",
+                    properties=(PropertyField("metadata", "json"),),
+                ),
+            ),
+        )
+
+        ddl = "\n".join(schema.ddl("postgresql"))
+
+        self.assertIn("CREATE SEQUENCE cg_node_user_id_seq START 1;", ddl)
+        self.assertIn("score DOUBLE PRECISION", ddl)
+        self.assertIn("metadata JSONB", ddl)
+        self.assertIn(
+            "id BIGINT PRIMARY KEY DEFAULT nextval('cg_node_user_id_seq')",
+            ddl,
+        )
+        self.assertIn(
+            "FOREIGN KEY (from_id) REFERENCES cg_node_user(id) ON DELETE CASCADE",
+            ddl,
+        )
+        self.assertIn(
+            "CREATE INDEX idx_cg_edge_works_at_from_id ON cg_edge_works_at(from_id);",
+            ddl,
+        )
+        self.assertIn(
+            "CREATE INDEX idx_cg_edge_works_at_to_id ON cg_edge_works_at(to_id);",
+            ddl,
+        )
+        self.assertIn(
+            (
+                "CREATE INDEX idx_cg_edge_works_at_from_to ON "
+                "cg_edge_works_at(from_id, to_id);"
+            ),
+            ddl,
+        )
+        self.assertIn(
+            (
+                "CREATE INDEX idx_cg_edge_works_at_to_from ON "
+                "cg_edge_works_at(to_id, from_id);"
+            ),
+            ddl,
+        )
+
+    def test_graph_schema_ddl_emits_explicit_property_indexes(self) -> None:
+        schema = GraphSchema(
+            node_types=(
+                NodeTypeSpec(
+                    name="User",
+                    properties=(
+                        PropertyField("name", "string"),
+                        PropertyField("age", "integer"),
+                    ),
+                ),
+                NodeTypeSpec(name="Company"),
+            ),
+            edge_types=(
+                EdgeTypeSpec(
+                    name="WORKS_AT",
+                    source_type="User",
+                    target_type="Company",
+                    properties=(
+                        PropertyField("since", "integer"),
+                        PropertyField("active", "boolean"),
+                    ),
+                ),
+            ),
+            property_indexes=(
+                PropertyIndexSpec(
+                    name="user_name_age_idx",
+                    target_kind="node",
+                    target_type="User",
+                    property_names=("name", "age"),
+                ),
+                PropertyIndexSpec(
+                    name="works_at_since_idx",
+                    target_kind="edge",
+                    target_type="WORKS_AT",
+                    property_names=("since",),
+                ),
+            ),
+        )
+
+        ddl = "\n".join(schema.ddl("sqlite"))
+
+        self.assertIn(
+            "CREATE INDEX user_name_age_idx ON cg_node_user(name, age);",
+            ddl,
+        )
+        self.assertIn(
+            "CREATE INDEX works_at_since_idx ON cg_edge_works_at(since);",
+            ddl,
+        )
+
+    def test_graph_schema_rejects_invalid_property_indexes(self) -> None:
+        unknown_target_schema = GraphSchema(
+            node_types=(NodeTypeSpec(name="User"),),
+            edge_types=(),
+            property_indexes=(
+                PropertyIndexSpec(
+                    name="missing_idx",
+                    target_kind="node",
+                    target_type="Company",
+                    property_names=("name",),
+                ),
+            ),
+        )
+
+        with self.assertRaisesRegex(SchemaContractError, "unknown node type"):
+            unknown_target_schema.validate()
+
+        unknown_property_schema = GraphSchema(
+            node_types=(
+                NodeTypeSpec(
+                    name="User",
+                    properties=(PropertyField("name", "string"),),
+                ),
+            ),
+            edge_types=(),
+            property_indexes=(
+                PropertyIndexSpec(
+                    name="missing_property_idx",
+                    target_kind="node",
+                    target_type="User",
+                    property_names=("age",),
+                ),
+            ),
+        )
+
+        with self.assertRaisesRegex(SchemaContractError, "unknown node property"):
+            unknown_property_schema.validate()
 
     def test_graph_schema_rejects_unknown_edge_endpoint_types(self) -> None:
         schema = GraphSchema(

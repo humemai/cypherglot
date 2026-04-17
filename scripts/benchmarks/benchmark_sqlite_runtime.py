@@ -14,26 +14,53 @@ import argparse
 import gc
 import json
 import platform
-import resource
+import re
 import sqlite3
-import sys
 import tempfile
 import time
-import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import cypherglot
+
+from _benchmark_cli_helpers import parse_sqlite_runtime_args
+from _benchmark_common import (
+    CorpusQuery,
+    EdgeTypePlan,
+    RuntimeScale,
+    _average_edges_per_source,
+    _build_graph_schema,
+    _edge_out_degree,
+    _measure_ns,
+    _node_id,
+    _node_name,
+    _node_type_name,
+    _progress,
+    _progress_iteration,
+    _render_corpus_queries,
+    RuntimeProgressCallback,
+    _rss_mib,
+    _select_queries,
+    _summarize,
+    _token_map,
+    _write_json_atomic,
+)
 
 try:
     import duckdb
 except ImportError:  # pragma: no cover - optional dependency
     duckdb = None
 
+try:
+    import psycopg2
+except ImportError:  # pragma: no cover - optional dependency
+    psycopg2 = None
+
 
 DuckDBConnection = Any
+PostgreSQLConnection = Any
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -52,13 +79,7 @@ DEFAULT_OUTPUT_PATH = (
     / "sqlite_runtime_benchmark_baseline.json"
 )
 SQLITE_SAVEPOINT = "benchmark_iteration"
-RuntimeProgressCallback = Callable[[dict[str, object]], None]
 DUCKDB_OLAP_QUERY_SKIP_NAMES = frozenset({"olap_variable_length_reachability"})
-
-
-def _progress(message: str) -> None:
-    timestamp = datetime.now().strftime("%H:%M:%S")
-    print(f"[progress {timestamp}] {message}", file=sys.stderr, flush=True)
 
 
 @dataclass(slots=True)
@@ -69,50 +90,6 @@ class ManagedDirectory:
     def close(self) -> None:
         if self.temp_dir is not None:
             self.temp_dir.cleanup()
-
-
-@dataclass(frozen=True, slots=True)
-class RuntimeScale:
-    node_type_count: int = 4
-    edge_type_count: int = 4
-    nodes_per_type: int = 25_000
-    edges_per_source: int = 3
-    edge_degree_profile: str = "uniform"
-    node_extra_text_property_count: int = 2
-    node_extra_numeric_property_count: int = 6
-    node_extra_boolean_property_count: int = 2
-    edge_extra_text_property_count: int = 1
-    edge_extra_numeric_property_count: int = 3
-    edge_extra_boolean_property_count: int = 1
-    ingest_batch_size: int = 5_000
-    variable_hop_max: int = 2
-
-    @property
-    def total_nodes(self) -> int:
-        return self.node_type_count * self.nodes_per_type
-
-    @property
-    def total_edges(self) -> int:
-        return _estimated_total_edges(self)
-
-
-@dataclass(frozen=True, slots=True)
-class EdgeTypePlan:
-    type_index: int
-    name: str
-    source_type_index: int
-    target_type_index: int
-
-
-@dataclass(frozen=True, slots=True)
-class CorpusQuery:
-    name: str
-    workload: str
-    category: str
-    query: str
-    backends: tuple[str, ...]
-    mode: str = "statement"
-    mutation: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -154,245 +131,6 @@ def _create_managed_directory(
     return ManagedDirectory(path=path)
 
 
-def _node_type_name(type_index: int) -> str:
-    return f"NodeType{type_index:02d}"
-
-
-def _edge_type_name(type_index: int) -> str:
-    return f"EdgeType{type_index:02d}"
-
-
-def _node_id(scale: RuntimeScale, type_index: int, local_index: int) -> int:
-    return ((type_index - 1) * scale.nodes_per_type) + local_index
-
-
-def _node_name(type_index: int, local_index: int) -> str:
-    return f"{_node_type_name(type_index).lower()}-{local_index:06d}"
-
-
-def _edge_plans(scale: RuntimeScale) -> list[EdgeTypePlan]:
-    plans: list[EdgeTypePlan] = []
-    for edge_type_index in range(1, scale.edge_type_count + 1):
-        if edge_type_index == 1:
-            source_type_index = 1
-            target_type_index = 1
-        elif edge_type_index == 2:
-            source_type_index = 1
-            target_type_index = min(2, scale.node_type_count)
-        elif edge_type_index == 3:
-            source_type_index = min(2, scale.node_type_count)
-            target_type_index = min(3, scale.node_type_count)
-        else:
-            source_type_index = ((edge_type_index - 1) % scale.node_type_count) + 1
-            target_type_index = (source_type_index % scale.node_type_count) + 1
-        plans.append(
-            EdgeTypePlan(
-                type_index=edge_type_index,
-                name=_edge_type_name(edge_type_index),
-                source_type_index=source_type_index,
-                target_type_index=target_type_index,
-            )
-        )
-    return plans
-
-
-def _extra_node_text_property_name(property_index: int) -> str:
-    return f"text_{property_index:02d}"
-
-
-def _extra_node_numeric_property_name(property_index: int) -> str:
-    return f"num_{property_index:02d}"
-
-
-def _extra_node_boolean_property_name(property_index: int) -> str:
-    return f"flag_{property_index:02d}"
-
-
-def _extra_edge_text_property_name(property_index: int) -> str:
-    return f"text_{property_index:02d}"
-
-
-def _extra_edge_numeric_property_name(property_index: int) -> str:
-    return f"num_{property_index:02d}"
-
-
-def _extra_edge_boolean_property_name(property_index: int) -> str:
-    return f"flag_{property_index:02d}"
-
-
-def _build_graph_schema(
-    scale: RuntimeScale,
-) -> tuple[cypherglot.GraphSchema, list[EdgeTypePlan]]:
-    edge_plans = _edge_plans(scale)
-
-    node_properties = [
-        cypherglot.PropertyField("name", "string"),
-        cypherglot.PropertyField("age", "integer"),
-        cypherglot.PropertyField("score", "float"),
-        cypherglot.PropertyField("active", "boolean"),
-    ]
-    node_properties.extend(
-        cypherglot.PropertyField(_extra_node_text_property_name(index), "string")
-        for index in range(1, scale.node_extra_text_property_count + 1)
-    )
-    node_properties.extend(
-        cypherglot.PropertyField(_extra_node_numeric_property_name(index), "float")
-        for index in range(1, scale.node_extra_numeric_property_count + 1)
-    )
-    node_properties.extend(
-        cypherglot.PropertyField(_extra_node_boolean_property_name(index), "boolean")
-        for index in range(1, scale.node_extra_boolean_property_count + 1)
-    )
-
-    edge_properties = [
-        cypherglot.PropertyField("note", "string"),
-        cypherglot.PropertyField("weight", "float"),
-        cypherglot.PropertyField("score", "float"),
-        cypherglot.PropertyField("active", "boolean"),
-        cypherglot.PropertyField("rank", "integer"),
-    ]
-    edge_properties.extend(
-        cypherglot.PropertyField(_extra_edge_text_property_name(index), "string")
-        for index in range(1, scale.edge_extra_text_property_count + 1)
-    )
-    edge_properties.extend(
-        cypherglot.PropertyField(_extra_edge_numeric_property_name(index), "float")
-        for index in range(1, scale.edge_extra_numeric_property_count + 1)
-    )
-    edge_properties.extend(
-        cypherglot.PropertyField(_extra_edge_boolean_property_name(index), "boolean")
-        for index in range(1, scale.edge_extra_boolean_property_count + 1)
-    )
-
-    graph_schema = cypherglot.GraphSchema(
-        node_types=tuple(
-            cypherglot.NodeTypeSpec(
-                name=_node_type_name(type_index),
-                properties=tuple(node_properties),
-            )
-            for type_index in range(1, scale.node_type_count + 1)
-        ),
-        edge_types=tuple(
-            cypherglot.EdgeTypeSpec(
-                name=plan.name,
-                source_type=_node_type_name(plan.source_type_index),
-                target_type=_node_type_name(plan.target_type_index),
-                properties=tuple(edge_properties),
-            )
-            for plan in edge_plans
-        ),
-    )
-    return graph_schema, edge_plans
-
-
-SKEWED_EDGE_DEGREE_CYCLE = 1_000
-
-
-def _skewed_edge_degree(cycle_position: int) -> int:
-    if not 0 <= cycle_position < SKEWED_EDGE_DEGREE_CYCLE:
-        raise ValueError("cycle_position must be within the skewed degree cycle.")
-
-    if cycle_position < 700:
-        bucket_position = cycle_position / 699.0 if cycle_position else 0.0
-        return min(5, 2 + int((4 * (bucket_position ** 3.0)) + 1e-9))
-    if cycle_position < 950:
-        bucket_position = (cycle_position - 700) / 249.0
-        return min(15, 6 + int((10 * (bucket_position ** 1.5)) + 1e-9))
-
-    bucket_position = (cycle_position - 950) / 49.0
-    return min(200, 20 + int((181 * (bucket_position ** 2.6)) + 1e-9))
-
-
-def _edge_out_degree(scale: RuntimeScale, source_local_index: int) -> int:
-    if scale.edge_degree_profile == "uniform":
-        return scale.edges_per_source
-    if scale.edge_degree_profile == "skewed":
-        cycle_position = (source_local_index - 1) % SKEWED_EDGE_DEGREE_CYCLE
-        return _skewed_edge_degree(cycle_position)
-    raise ValueError(f"Unsupported edge degree profile {scale.edge_degree_profile!r}.")
-
-
-def _sum_out_degree_per_edge_type(scale: RuntimeScale) -> int:
-    if scale.edge_degree_profile == "uniform":
-        return scale.nodes_per_type * scale.edges_per_source
-
-    full_cycles, remainder = divmod(scale.nodes_per_type, SKEWED_EDGE_DEGREE_CYCLE)
-    cycle_sum = sum(
-        _skewed_edge_degree(cycle_position)
-        for cycle_position in range(SKEWED_EDGE_DEGREE_CYCLE)
-    )
-    remainder_sum = sum(
-        _skewed_edge_degree(cycle_position)
-        for cycle_position in range(remainder)
-    )
-    return (full_cycles * cycle_sum) + remainder_sum
-
-
-def _estimated_total_edges(scale: RuntimeScale) -> int:
-    return scale.edge_type_count * _sum_out_degree_per_edge_type(scale)
-
-
-def _average_edges_per_source(scale: RuntimeScale) -> float:
-    return _sum_out_degree_per_edge_type(scale) / float(scale.nodes_per_type)
-
-
-def _measure_ns(callback: Any) -> tuple[Any, int]:
-    started_ns = time.perf_counter_ns()
-    result = callback()
-    return result, time.perf_counter_ns() - started_ns
-
-
-def _progress_iteration(
-    progress_label: str,
-    *,
-    phase: str,
-    current: int,
-    total: int,
-) -> None:
-    _progress(f"{progress_label}: {phase} {current}/{total}")
-
-
-def _percentile(sorted_values: list[int], percentile: float) -> float:
-    if not sorted_values:
-        raise ValueError("Cannot compute a percentile from an empty sample.")
-    if len(sorted_values) == 1:
-        return float(sorted_values[0])
-    position = (len(sorted_values) - 1) * (percentile / 100.0)
-    lower_index = int(position)
-    upper_index = min(lower_index + 1, len(sorted_values) - 1)
-    lower_value = sorted_values[lower_index]
-    upper_value = sorted_values[upper_index]
-    fraction = position - lower_index
-    return lower_value + (upper_value - lower_value) * fraction
-
-
-def _summarize(latencies_ns: list[int]) -> dict[str, float]:
-    sorted_ns = sorted(latencies_ns)
-    return {
-        "min_ms": min(sorted_ns) / 1_000_000.0,
-        "mean_ms": sum(sorted_ns) / len(sorted_ns) / 1_000_000.0,
-        "p50_ms": _percentile(sorted_ns, 50) / 1_000_000.0,
-        "p95_ms": _percentile(sorted_ns, 95) / 1_000_000.0,
-        "p99_ms": _percentile(sorted_ns, 99) / 1_000_000.0,
-        "max_ms": max(sorted_ns) / 1_000_000.0,
-    }
-
-
-def _rss_mib() -> float:
-    status_path = Path("/proc/self/status")
-    if status_path.exists():
-        for line in status_path.read_text(encoding="utf-8").splitlines():
-            if line.startswith("VmRSS:"):
-                rss_kib = int(line.split()[1])
-                return rss_kib / 1024.0
-
-    usage = resource.getrusage(resource.RUSAGE_SELF)
-    rss = float(usage.ru_maxrss)
-    if platform.system() == "Darwin":
-        return rss / (1024.0 * 1024.0)
-    return rss / 1024.0
-
-
 def _sqlite_file_size_mib(db_path: Path) -> tuple[float, float]:
     db_size = db_path.stat().st_size / (1024.0 * 1024.0) if db_path.exists() else 0.0
     wal_path = db_path.with_name(db_path.name + "-wal")
@@ -419,7 +157,39 @@ def _create_sqlite_schema(
     conn: sqlite3.Connection,
     graph_schema: cypherglot.GraphSchema,
 ) -> None:
-    conn.executescript("\n".join(graph_schema.sqlite_ddl()))
+    conn.executescript("\n".join(graph_schema.ddl("sqlite")))
+
+
+def _create_postgresql_connection(dsn: str) -> PostgreSQLConnection:
+    if psycopg2 is None:
+        raise ValueError("psycopg2 is not installed.")
+    return psycopg2.connect(dsn)
+
+
+def _reset_postgresql_schema(
+    conn: PostgreSQLConnection,
+    graph_schema: cypherglot.GraphSchema,
+) -> None:
+    table_names = [
+        *(edge_type.table_name for edge_type in graph_schema.edge_types),
+        *(node_type.table_name for node_type in graph_schema.node_types),
+    ]
+    with conn.cursor() as cur:
+        for table_name in table_names:
+            cur.execute(f"DROP TABLE IF EXISTS {table_name} CASCADE")
+        for table_name in table_names:
+            cur.execute(f"DROP SEQUENCE IF EXISTS {table_name}_id_seq CASCADE")
+    conn.commit()
+
+
+def _create_postgresql_schema(
+    conn: PostgreSQLConnection,
+    graph_schema: cypherglot.GraphSchema,
+) -> None:
+    with conn.cursor() as cur:
+        for statement in graph_schema.ddl("postgresql"):
+            cur.execute(statement)
+    conn.commit()
 
 
 def _drop_all_sqlite_indexes(conn: sqlite3.Connection) -> None:
@@ -434,33 +204,64 @@ def _drop_all_sqlite_indexes(conn: sqlite3.Connection) -> None:
         conn.execute(f'DROP INDEX "{index_name}"')
 
 
-def _create_query_indexes(
-    conn: sqlite3.Connection,
-    graph_schema: cypherglot.GraphSchema,
-) -> None:
+def _query_index_statements(graph_schema: cypherglot.GraphSchema) -> list[str]:
+    statements: list[str] = []
     for node_type in graph_schema.node_types:
-        conn.execute(
+        statements.append(
             f"CREATE INDEX idx_{node_type.table_name}_name "
             f"ON {node_type.table_name}(name)"
         )
-        conn.execute(
+        statements.append(
             f"CREATE INDEX idx_{node_type.table_name}_active_score "
             f"ON {node_type.table_name}(active, score DESC)"
         )
-        conn.execute(
+        statements.append(
             f"CREATE INDEX idx_{node_type.table_name}_age "
             f"ON {node_type.table_name}(age)"
         )
 
     for edge_type in graph_schema.edge_types:
-        conn.execute(
+        statements.append(
             f"CREATE INDEX idx_{edge_type.table_name}_rank "
             f"ON {edge_type.table_name}(rank)"
         )
-        conn.execute(
+        statements.append(
             f"CREATE INDEX idx_{edge_type.table_name}_active_score "
             f"ON {edge_type.table_name}(active, score DESC)"
         )
+    return statements
+
+
+def _create_query_indexes(
+    conn: sqlite3.Connection,
+    graph_schema: cypherglot.GraphSchema,
+) -> None:
+    for statement in _query_index_statements(graph_schema):
+        conn.execute(statement)
+
+
+def _create_postgresql_query_indexes(
+    conn: PostgreSQLConnection,
+    graph_schema: cypherglot.GraphSchema,
+) -> None:
+    with conn.cursor() as cur:
+        for statement in _query_index_statements(graph_schema):
+            cur.execute(statement)
+    conn.commit()
+
+
+def _drop_all_postgresql_indexes(conn: PostgreSQLConnection) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT indexname FROM pg_indexes "
+            "WHERE schemaname = current_schema() "
+            "AND indexname NOT LIKE %s",
+            ("%_pkey",),
+        )
+        index_names = [row[0] for row in cur.fetchall()]
+        for index_name in index_names:
+            cur.execute(f'DROP INDEX IF EXISTS "{index_name}"')
+    conn.commit()
 
 
 def _configure_sqlite_indexes(
@@ -474,6 +275,21 @@ def _configure_sqlite_indexes(
         return
     if index_mode == "unindexed":
         _drop_all_sqlite_indexes(conn)
+        return
+    raise ValueError(f"Unsupported index mode {index_mode!r}.")
+
+
+def _configure_postgresql_indexes(
+    conn: PostgreSQLConnection,
+    graph_schema: cypherglot.GraphSchema,
+    *,
+    index_mode: str,
+) -> None:
+    if index_mode == "indexed":
+        _create_postgresql_query_indexes(conn, graph_schema)
+        return
+    if index_mode == "unindexed":
+        _drop_all_postgresql_indexes(conn)
         return
     raise ValueError(f"Unsupported index mode {index_mode!r}.")
 
@@ -745,6 +561,68 @@ def _prepare_shared_sqlite_fixture(
     )
 
 
+def _postgres_placeholder_list(width: int) -> str:
+    return ", ".join("%s" for _ in range(width))
+
+
+def _set_postgresql_sequence(
+    conn: PostgreSQLConnection,
+    table_name: str,
+    max_id: int,
+) -> None:
+    with conn.cursor() as cur:
+        cur.execute(f"SELECT setval('{table_name}_id_seq', %s, true)", (max_id,))
+
+
+def _seed_postgresql_from_sqlite(
+    conn: PostgreSQLConnection,
+    *,
+    sqlite_source: SharedSQLiteFixture,
+    graph_schema: cypherglot.GraphSchema,
+) -> dict[str, int]:
+    source = sqlite3.connect(sqlite_source.db_path)
+    try:
+        with conn.cursor() as cur:
+            table_names = [
+                *(node_type.table_name for node_type in graph_schema.node_types),
+                *(edge_type.table_name for edge_type in graph_schema.edge_types),
+            ]
+            for table_name in table_names:
+                source_cursor = source.execute(f"SELECT * FROM {table_name}")
+                first_row = source_cursor.fetchone()
+                if first_row is None:
+                    continue
+                placeholders = _postgres_placeholder_list(len(first_row))
+                cur.execute(
+                    f"INSERT INTO {table_name} VALUES ({placeholders})",
+                    first_row,
+                )
+                while True:
+                    rows = source_cursor.fetchmany(5_000)
+                    if not rows:
+                        break
+                    cur.executemany(
+                        f"INSERT INTO {table_name} VALUES ({placeholders})",
+                        rows,
+                    )
+                max_id_row = source.execute(
+                    f"SELECT COALESCE(MAX(id), 0) FROM {table_name}"
+                ).fetchone()
+                max_id = int(max_id_row[0]) if max_id_row is not None else 0
+                if max_id > 0:
+                    _set_postgresql_sequence(conn, table_name, max_id)
+        conn.commit()
+    finally:
+        source.close()
+    return dict(sqlite_source.row_counts)
+
+
+def _analyze_postgresql(conn: PostgreSQLConnection) -> None:
+    with conn.cursor() as cur:
+        cur.execute("ANALYZE")
+    conn.commit()
+
+
 def _create_duckdb_connection(db_path: Path) -> DuckDBConnection:
     if duckdb is None:
         raise ValueError("duckdb is not installed.")
@@ -814,19 +692,21 @@ class _BackendRunner:
         graph_schema: cypherglot.GraphSchema,
         schema_context: cypherglot.CompilerSchemaContext,
         sqlite_source: SharedSQLiteFixture,
+        postgres_dsn: str | None = None,
     ) -> None:
         self.backend = backend
         self.work_dir = work_dir
         self.graph_schema = graph_schema
         self.schema_context = schema_context
         self.sqlite_source = sqlite_source
+        self.postgres_dsn = postgres_dsn
         self.setup_metrics: dict[str, int] = {}
         self.row_counts: dict[str, int] = {}
         self.rss_snapshots_mib: dict[str, float] = {}
         self.db_size_mib = sqlite_source.db_size_mib
         self.wal_size_mib = sqlite_source.wal_size_mib
         self.index_mode = sqlite_source.index_mode
-        self.connection: sqlite3.Connection | DuckDBConnection
+        self.connection: sqlite3.Connection | DuckDBConnection | PostgreSQLConnection
         self._initialize()
 
     def _initialize(self) -> None:
@@ -866,6 +746,45 @@ class _BackendRunner:
             self.row_counts = dict(self.sqlite_source.row_counts)
             return
 
+        if self.backend == "postgresql":
+            if not self.postgres_dsn:
+                raise ValueError("PostgreSQL backend requires a DSN.")
+            self.db_size_mib = 0.0
+            self.wal_size_mib = 0.0
+            self.connection, self.setup_metrics["connect_ns"] = _measure_ns(
+                lambda: _create_postgresql_connection(self.postgres_dsn)
+            )
+            self.rss_snapshots_mib["after_connect"] = _rss_mib()
+            _, self.setup_metrics["schema_ns"] = _measure_ns(
+                lambda: _reset_postgresql_schema(self.postgresql, self.graph_schema)
+            )
+            _, schema_create_ns = _measure_ns(
+                lambda: _create_postgresql_schema(self.postgresql, self.graph_schema)
+            )
+            self.setup_metrics["schema_ns"] += schema_create_ns
+            self.rss_snapshots_mib["after_schema"] = _rss_mib()
+            _, self.setup_metrics["index_ns"] = _measure_ns(
+                lambda: _configure_postgresql_indexes(
+                    self.postgresql,
+                    self.graph_schema,
+                    index_mode=self.index_mode,
+                )
+            )
+            self.rss_snapshots_mib["after_index"] = _rss_mib()
+            self.row_counts, self.setup_metrics["ingest_ns"] = _measure_ns(
+                lambda: _seed_postgresql_from_sqlite(
+                    self.postgresql,
+                    sqlite_source=self.sqlite_source,
+                    graph_schema=self.graph_schema,
+                )
+            )
+            self.rss_snapshots_mib["after_ingest"] = _rss_mib()
+            _, self.setup_metrics["analyze_ns"] = _measure_ns(
+                lambda: _analyze_postgresql(self.postgresql)
+            )
+            self.rss_snapshots_mib["after_analyze"] = _rss_mib()
+            return
+
         raise ValueError(f"Unsupported backend {self.backend!r}.")
 
     @property
@@ -878,6 +797,12 @@ class _BackendRunner:
         if duckdb is None:
             raise ValueError("duckdb is not installed.")
         assert isinstance(self.connection, duckdb.DuckDBPyConnection)
+        return self.connection
+
+    @property
+    def postgresql(self) -> PostgreSQLConnection:
+        if psycopg2 is None:
+            raise ValueError("psycopg2 is not installed.")
         return self.connection
 
     def close(self) -> None:
@@ -895,6 +820,16 @@ class _BackendRunner:
                         schema_context=self.schema_context,
                     ),
                 )
+            if self.backend == "postgresql":
+                return PreparedArtifact(
+                    mode="statement",
+                    compiled=cypherglot.to_sql(
+                        query.query,
+                        dialect="postgres",
+                        backend="postgresql",
+                        schema_context=self.schema_context,
+                    ),
+                )
             return PreparedArtifact(
                 mode="statement",
                 compiled=cypherglot.to_sql(
@@ -902,8 +837,20 @@ class _BackendRunner:
                     schema_context=self.schema_context,
                 ),
             )
+        if self.backend == "postgresql":
+            return PreparedArtifact(
+                mode="program",
+                compiled=cypherglot.render_cypher_program_text(
+                    query.query,
+                    dialect="postgres",
+                    backend="postgresql",
+                    schema_context=self.schema_context,
+                ),
+            )
         if self.backend != "sqlite":
-            raise ValueError("Rendered program execution is only supported on SQLite.")
+            raise ValueError(
+                "Rendered program execution is only supported on SQLite and PostgreSQL."
+            )
         return PreparedArtifact(
             mode="program",
             compiled=cypherglot.render_cypher_program_text(
@@ -919,13 +866,81 @@ class _BackendRunner:
                 if cursor.description is not None:
                     cursor.fetchall()
                 return
+            if self.backend == "postgresql":
+                with self.postgresql.cursor() as cur:
+                    _execute_bound_postgresql_sql(cur, artifact.compiled, {})
+                    if cur.description is not None:
+                        cur.fetchall()
+                return
             cursor = self.duck.execute(artifact.compiled)
             if cursor.description is not None:
                 cursor.fetchall()
             return
+        if self.backend == "postgresql":
+            _execute_postgresql_program(self.postgresql, artifact.compiled)
+            return
         if self.backend != "sqlite":
-            raise ValueError("Rendered program execution is only supported on SQLite.")
+            raise ValueError(
+                "Rendered program execution is only supported on SQLite and PostgreSQL."
+            )
         _execute_sqlite_program(self.sqlite, artifact.compiled, commit=False)
+
+
+def _execute_bound_postgresql_sql(
+    cur: Any,
+    sql: str,
+    bindings: dict[str, object],
+) -> None:
+    bound_sql = sql
+    for name in bindings:
+        pyformat_token = f"%({name})s"
+        bound_sql = bound_sql.replace(f"${name}", pyformat_token)
+        bound_sql = bound_sql.replace(f":{name}", pyformat_token)
+
+    if re.search(r"%\([A-Za-z_][A-Za-z0-9_]*\)s", bound_sql):
+        cur.execute(bound_sql, bindings)
+        return
+
+    cur.execute(bound_sql)
+
+
+def _execute_postgresql_program(
+    conn: PostgreSQLConnection,
+    program: cypherglot.RenderedCypherProgram,
+) -> None:
+    bindings: dict[str, object] = {}
+    with conn.cursor() as cur:
+        for step in program.steps:
+            if isinstance(step, cypherglot.RenderedCypherLoop):
+                _execute_bound_postgresql_sql(cur, step.source, bindings)
+                rows = cur.fetchall()
+                for row in rows:
+                    loop_bindings = bindings | dict(
+                        zip(step.row_bindings, row, strict=True)
+                    )
+                    for statement in step.body:
+                        _execute_bound_postgresql_sql(
+                            cur,
+                            statement.sql,
+                            loop_bindings,
+                        )
+                        if statement.bind_columns:
+                            returned = cur.fetchone()
+                            if returned is None:
+                                raise ValueError(
+                                    "Expected bound columns from program step."
+                                )
+                            loop_bindings |= dict(
+                                zip(statement.bind_columns, returned, strict=True)
+                            )
+                continue
+
+            _execute_bound_postgresql_sql(cur, step.sql, bindings)
+            if step.bind_columns:
+                returned = cur.fetchone()
+                if returned is None:
+                    raise ValueError("Expected bound columns from benchmark statement.")
+                bindings |= dict(zip(step.bind_columns, returned, strict=True))
 
 
 def _execute_sqlite_program(
@@ -971,6 +986,9 @@ def _rollback_sqlite_iteration(conn: sqlite3.Connection) -> None:
 
 
 def _run_iteration(runner: _BackendRunner, query: CorpusQuery) -> dict[str, int]:
+    if runner.backend == "postgresql":
+        return _run_postgresql_iteration(runner, query)
+
     reset_ns = 0
     if query.mutation and runner.backend == "sqlite":
         runner.sqlite.execute(f"SAVEPOINT {SQLITE_SAVEPOINT}")
@@ -984,6 +1002,31 @@ def _run_iteration(runner: _BackendRunner, query: CorpusQuery) -> dict[str, int]
             _, reset_ns = _measure_ns(
                 lambda: _rollback_sqlite_iteration(runner.sqlite)
             )
+    return {
+        "compile_ns": compile_ns,
+        "execute_ns": execute_ns,
+        "end_to_end_ns": end_to_end_ns,
+        "reset_ns": reset_ns,
+    }
+
+
+def _run_postgresql_iteration(
+    runner: _BackendRunner,
+    query: CorpusQuery,
+) -> dict[str, int]:
+    reset_ns = 0
+    try:
+        total_started_ns = time.perf_counter_ns()
+        artifact, compile_ns = _measure_ns(lambda: runner.compile_query(query))
+        _, execute_ns = _measure_ns(lambda: runner.execute_query(artifact))
+        end_to_end_ns = time.perf_counter_ns() - total_started_ns
+        if query.mutation:
+            _, reset_ns = _measure_ns(runner.postgresql.rollback)
+        else:
+            runner.postgresql.rollback()
+    except Exception:
+        runner.postgresql.rollback()
+        raise
     return {
         "compile_ns": compile_ns,
         "execute_ns": execute_ns,
@@ -1084,6 +1127,7 @@ def _run_backend_suite(
     graph_schema: cypherglot.GraphSchema,
     schema_context: cypherglot.CompilerSchemaContext,
     sqlite_source: SharedSQLiteFixture,
+    postgres_dsn: str | None = None,
     db_root_dir: Path | None = None,
     iteration_progress: bool = False,
 ) -> dict[str, object]:
@@ -1108,6 +1152,7 @@ def _run_backend_suite(
         graph_schema=graph_schema,
         schema_context=schema_context,
         sqlite_source=sqlite_source,
+        postgres_dsn=postgres_dsn,
     )
     try:
         _progress(
@@ -1159,13 +1204,6 @@ def _run_backend_suite(
         }
     finally:
         runner.close()
-
-
-def _write_json_atomic(path: Path, payload: dict[str, object]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temp_path = path.with_name(f"{path.name}.{uuid.uuid4().hex}.tmp")
-    temp_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-    temp_path.replace(path)
 
 
 def _build_payload(
@@ -1251,39 +1289,6 @@ def _build_payload(
     return payload
 
 
-def _token_map(
-    scale: RuntimeScale,
-    graph_schema: cypherglot.GraphSchema,
-    edge_plans: list[EdgeTypePlan],
-) -> dict[str, str]:
-    token_map: dict[str, str] = {
-        "variable_hop_max": str(scale.variable_hop_max),
-        "grouped_rollup_variable_hop_max": str(min(scale.variable_hop_max, 3)),
-        "created_type_1_name": f"{_node_type_name(1).lower()}-created-node",
-        "created_type_1_peer_name": f"{_node_type_name(1).lower()}-created-peer",
-        "created_type_2_name": (
-            f"{_node_type_name(min(2, scale.node_type_count)).lower()}-created-node"
-        ),
-    }
-    for type_index, node_type in enumerate(graph_schema.node_types, start=1):
-        token_map[f"node_type_{type_index}"] = node_type.name
-        for local_index in range(1, min(scale.nodes_per_type, 4) + 1):
-            token_map[f"node_type_{type_index}_name_{local_index}"] = _node_name(
-                type_index,
-                local_index,
-            )
-    for edge_type_index, plan in enumerate(edge_plans, start=1):
-        token_map[f"edge_type_{edge_type_index}"] = plan.name
-    return token_map
-
-
-def _expand_query_tokens(text: str, token_map: dict[str, str]) -> str:
-    expanded = text
-    for key, value in token_map.items():
-        expanded = expanded.replace(f"%{key}%", value)
-    return expanded
-
-
 def _load_corpus(path: Path) -> list[CorpusQuery]:
     raw = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(raw, list) or not raw:
@@ -1355,37 +1360,8 @@ def _filter_duckdb_olap_queries(queries: list[CorpusQuery]) -> list[CorpusQuery]
     ]
 
 
-def _render_corpus_queries(
-    queries: list[CorpusQuery],
-    token_map: dict[str, str],
-) -> list[CorpusQuery]:
-    return [
-        CorpusQuery(
-            name=query.name,
-            workload=query.workload,
-            category=query.category,
-            query=_expand_query_tokens(query.query, token_map),
-            backends=query.backends,
-            mode=query.mode,
-            mutation=query.mutation,
-        )
-        for query in queries
-    ]
-
-
-def _select_queries(
-    queries: list[CorpusQuery],
-    query_names: list[str] | None,
-) -> list[CorpusQuery]:
-    if not query_names:
-        return list(queries)
-    requested = set(query_names)
-    selected = [query for query in queries if query.name in requested]
-    found = {query.name for query in selected}
-    missing = sorted(requested - found)
-    if missing:
-        raise ValueError("Unknown benchmark query name(s): " + ", ".join(missing))
-    return selected
+def _filter_postgresql_queries(queries: list[CorpusQuery]) -> list[CorpusQuery]:
+    return [query for query in queries if "sqlite" in query.backends]
 
 
 def _benchmark_result(
@@ -1398,6 +1374,7 @@ def _benchmark_result(
     olap_iterations: int | None = None,
     olap_warmup: int | None = None,
     include_duckdb: bool,
+    postgres_dsn: str | None = None,
     scale: RuntimeScale,
     index_mode: str,
     db_root_dir: Path | None = None,
@@ -1443,6 +1420,7 @@ def _benchmark_result(
             sqlite_oltp_queries = [
                 query for query in oltp_queries if "sqlite" in query.backends
             ]
+            postgresql_oltp_queries = _filter_postgresql_queries(oltp_queries)
             for mode, fixture in sqlite_fixtures.items():
                 workloads["oltp"][f"sqlite_{mode}"] = _run_backend_suite(
                     "sqlite",
@@ -1458,18 +1436,38 @@ def _benchmark_result(
                 )
                 if progress_callback is not None:
                     progress_callback({"workloads": workloads, "token_map": token_map})
+                if postgres_dsn:
+                    workloads["oltp"][f"postgresql_{mode}"] = _run_backend_suite(
+                        "postgresql",
+                        postgresql_oltp_queries,
+                        workload="oltp",
+                        iterations=oltp_iterations_value,
+                        warmup=oltp_warmup_value,
+                        graph_schema=graph_schema,
+                        schema_context=schema_context,
+                        sqlite_source=fixture,
+                        postgres_dsn=postgres_dsn,
+                        db_root_dir=db_root_dir,
+                        iteration_progress=iteration_progress,
+                    )
+                    if progress_callback is not None:
+                        progress_callback(
+                            {"workloads": workloads, "token_map": token_map}
+                        )
 
         if olap_queries:
             workloads["olap"] = {
                 "description": (
                     "Analytical read queries measured on indexed and unindexed "
-                    "SQLite fixtures plus DuckDB over the same generated graph."
+                    "SQLite and PostgreSQL fixtures plus DuckDB over the same "
+                    "generated graph."
                 ),
                 "duckdb_skipped_queries": sorted(DUCKDB_OLAP_QUERY_SKIP_NAMES),
             }
             sqlite_olap_queries = [
                 query for query in olap_queries if "sqlite" in query.backends
             ]
+            postgresql_olap_queries = _filter_postgresql_queries(olap_queries)
             duckdb_olap_queries = _filter_duckdb_olap_queries(olap_queries)
             for mode, fixture in sqlite_fixtures.items():
                 workloads["olap"][f"sqlite_{mode}"] = _run_backend_suite(
@@ -1486,6 +1484,24 @@ def _benchmark_result(
                 )
                 if progress_callback is not None:
                     progress_callback({"workloads": workloads, "token_map": token_map})
+                if postgres_dsn:
+                    workloads["olap"][f"postgresql_{mode}"] = _run_backend_suite(
+                        "postgresql",
+                        postgresql_olap_queries,
+                        workload="olap",
+                        iterations=olap_iterations_value,
+                        warmup=olap_warmup_value,
+                        graph_schema=graph_schema,
+                        schema_context=schema_context,
+                        sqlite_source=fixture,
+                        postgres_dsn=postgres_dsn,
+                        db_root_dir=db_root_dir,
+                        iteration_progress=iteration_progress,
+                    )
+                    if progress_callback is not None:
+                        progress_callback(
+                            {"workloads": workloads, "token_map": token_map}
+                        )
             if include_duckdb and duckdb_olap_queries:
                 duckdb_source = sqlite_fixtures.get("indexed")
                 if duckdb_source is None:
@@ -1553,19 +1569,29 @@ def _print_suite(name: str, suite: dict[str, object]) -> None:
         "  pooled compile: "
         f"mean={suite['compile']['mean_of_mean_ms']:.2f} ms, "
         f"p50={suite['compile']['mean_of_p50_ms']:.2f} ms, "
-        f"p95={suite['compile']['mean_of_p95_ms']:.2f} ms"
+        f"p95={suite['compile']['mean_of_p95_ms']:.2f} ms, "
+        f"p99={suite['compile']['mean_of_p99_ms']:.2f} ms"
     )
     print(
         "  pooled execute: "
         f"mean={suite['execute']['mean_of_mean_ms']:.2f} ms, "
         f"p50={suite['execute']['mean_of_p50_ms']:.2f} ms, "
-        f"p95={suite['execute']['mean_of_p95_ms']:.2f} ms"
+        f"p95={suite['execute']['mean_of_p95_ms']:.2f} ms, "
+        f"p99={suite['execute']['mean_of_p99_ms']:.2f} ms"
+    )
+    print(
+        "  pooled reset: "
+        f"mean={suite['reset']['mean_of_mean_ms']:.2f} ms, "
+        f"p50={suite['reset']['mean_of_p50_ms']:.2f} ms, "
+        f"p95={suite['reset']['mean_of_p95_ms']:.2f} ms, "
+        f"p99={suite['reset']['mean_of_p99_ms']:.2f} ms"
     )
     print(
         "  pooled end-to-end: "
         f"mean={suite['end_to_end']['mean_of_mean_ms']:.2f} ms, "
         f"p50={suite['end_to_end']['mean_of_p50_ms']:.2f} ms, "
-        f"p95={suite['end_to_end']['mean_of_p95_ms']:.2f} ms"
+        f"p95={suite['end_to_end']['mean_of_p95_ms']:.2f} ms, "
+        f"p99={suite['end_to_end']['mean_of_p99_ms']:.2f} ms"
     )
     for query_result in suite["queries"]:
         print(
@@ -1574,125 +1600,27 @@ def _print_suite(name: str, suite: dict[str, object]) -> None:
             f"compile_mean={query_result['compile']['mean_ms']:.2f} ms, "
             f"compile_p50={query_result['compile']['p50_ms']:.2f} ms, "
             f"compile_p95={query_result['compile']['p95_ms']:.2f} ms, "
+            f"compile_p99={query_result['compile']['p99_ms']:.2f} ms, "
             f"execute_mean={query_result['execute']['mean_ms']:.2f} ms, "
             f"execute_p50={query_result['execute']['p50_ms']:.2f} ms, "
             f"execute_p95={query_result['execute']['p95_ms']:.2f} ms, "
+            f"execute_p99={query_result['execute']['p99_ms']:.2f} ms, "
+            f"reset_mean={query_result['reset']['mean_ms']:.2f} ms, "
+            f"reset_p50={query_result['reset']['p50_ms']:.2f} ms, "
+            f"reset_p95={query_result['reset']['p95_ms']:.2f} ms, "
+            f"reset_p99={query_result['reset']['p99_ms']:.2f} ms, "
             f"end_to_end_mean={query_result['end_to_end']['mean_ms']:.2f} ms, "
             f"end_to_end_p50={query_result['end_to_end']['p50_ms']:.2f} ms, "
-            f"end_to_end_p95={query_result['end_to_end']['p95_ms']:.2f} ms"
+            f"end_to_end_p95={query_result['end_to_end']['p95_ms']:.2f} ms, "
+            f"end_to_end_p99={query_result['end_to_end']['p99_ms']:.2f} ms"
         )
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description=(
-            "Benchmark end-to-end runtime over a generated multi-type type-aware "
-            "graph for OLTP and OLAP Cypher workloads."
-        )
+    return parse_sqlite_runtime_args(
+        default_corpus_path=DEFAULT_CORPUS_PATH,
+        default_output_path=DEFAULT_OUTPUT_PATH,
     )
-    parser.add_argument(
-        "--corpus",
-        type=Path,
-        default=DEFAULT_CORPUS_PATH,
-        help="Path to the runtime benchmark corpus JSON file.",
-    )
-    parser.add_argument(
-        "--output",
-        type=Path,
-        default=DEFAULT_OUTPUT_PATH,
-        help="Path to the JSON file where benchmark results will be written.",
-    )
-    parser.add_argument(
-        "--iterations",
-        type=int,
-        default=1000,
-        help="Measured iterations to run per query.",
-    )
-    parser.add_argument(
-        "--warmup",
-        type=int,
-        default=10,
-        help="Warmup iterations to run per query before measuring.",
-    )
-    parser.add_argument(
-        "--oltp-iterations",
-        type=int,
-        help=(
-            "Optional measured iterations to run per OLTP query. "
-            "Defaults to --iterations."
-        ),
-    )
-    parser.add_argument(
-        "--oltp-warmup",
-        type=int,
-        help="Optional warmup iterations to run per OLTP query. Defaults to --warmup.",
-    )
-    parser.add_argument(
-        "--olap-iterations",
-        type=int,
-        help=(
-            "Optional measured iterations to run per OLAP query. "
-            "Defaults to --iterations."
-        ),
-    )
-    parser.add_argument(
-        "--olap-warmup",
-        type=int,
-        help="Optional warmup iterations to run per OLAP query. Defaults to --warmup.",
-    )
-    parser.add_argument(
-        "--query-name",
-        action="append",
-        dest="query_names",
-        help="Optional benchmark query name to run. Repeat to run multiple entries.",
-    )
-    parser.add_argument(
-        "--iteration-progress",
-        action="store_true",
-        help="Print warmup and measured iteration counters for each query.",
-    )
-    parser.add_argument(
-        "--skip-duckdb",
-        action="store_true",
-        help="Skip the DuckDB OLAP backend even if the package is installed.",
-    )
-    parser.add_argument(
-        "--index-mode",
-        choices=("indexed", "unindexed", "both"),
-        default="both",
-        help="Benchmark SQLite with query-driven indexes, without indexes, or both.",
-    )
-    parser.add_argument("--node-type-count", type=int, default=4)
-    parser.add_argument("--edge-type-count", type=int, default=4)
-    parser.add_argument("--nodes-per-type", type=int, default=25_000)
-    parser.add_argument("--edges-per-source", type=int, default=3)
-    parser.add_argument(
-        "--edge-degree-profile",
-        choices=("uniform", "skewed"),
-        default="uniform",
-        help=(
-            "Use a uniform out-degree or a skewed profile with 70%% of sources at "
-            "2-5 edges, 25%% at 6-15 edges, and 5%% at 20-200 edges."
-        ),
-    )
-    parser.add_argument("--node-extra-text-property-count", type=int, default=2)
-    parser.add_argument("--node-extra-numeric-property-count", type=int, default=6)
-    parser.add_argument("--node-extra-boolean-property-count", type=int, default=2)
-    parser.add_argument("--edge-extra-text-property-count", type=int, default=1)
-    parser.add_argument("--edge-extra-numeric-property-count", type=int, default=3)
-    parser.add_argument("--edge-extra-boolean-property-count", type=int, default=1)
-    parser.add_argument("--variable-hop-max", type=int, default=2)
-    parser.add_argument("--ingest-batch-size", type=int, default=5_000)
-    parser.add_argument(
-        "--db-root-dir",
-        type=Path,
-        default=None,
-        help=(
-            "Optional directory under which the benchmark will create a named run "
-            "folder and persist generated SQLite and DuckDB database files."
-        ),
-    )
-    return parser.parse_args()
 
 
 def main() -> int:
@@ -1726,6 +1654,11 @@ def main() -> int:
     include_duckdb = not args.skip_duckdb
     if include_duckdb and duckdb is None:
         raise ValueError("duckdb is not installed. Install it or pass --skip-duckdb.")
+    postgres_dsn = args.postgres_dsn.strip()
+    if postgres_dsn and psycopg2 is None:
+        raise ValueError(
+            "psycopg2 is not installed. Install it or omit --postgres-dsn."
+        )
 
     db_root_dir = None
     if args.db_root_dir is not None:
@@ -1823,6 +1756,7 @@ def main() -> int:
         olap_iterations=args.olap_iterations,
         olap_warmup=args.olap_warmup,
         include_duckdb=include_duckdb,
+        postgres_dsn=postgres_dsn or None,
         scale=scale,
         index_mode=args.index_mode,
         db_root_dir=db_root_dir,
@@ -1845,6 +1779,8 @@ def main() -> int:
     if "olap" in workloads:
         for suite_name, suite in workloads["olap"].items():
             if suite_name == "description":
+                continue
+            if suite_name == "duckdb_skipped_queries":
                 continue
             _print_suite(f"olap/{suite_name}", suite)
     return 0

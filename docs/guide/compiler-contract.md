@@ -5,8 +5,10 @@ The intended contract for CypherGlot is:
 ```text
 raw Cypher string
 → parse
-→ Cypher AST
-→ compile
+→ validate admitted subset
+→ normalize
+→ graph-relational IR
+→ backend-aware lowering
 → SQLGlot-backed output
 ```
 
@@ -28,23 +30,29 @@ in the [Schema Contract](schema-contract.md) guide.
 
 ## Current backend stance
 
-CypherGlot returns SQLGlot-backed output, but the current compiled query shapes
-are intentionally aligned with SQLite-backed host runtimes.
+CypherGlot returns SQLGlot-backed output, but Phase 12 changes the intended
+compiler architecture from a mostly SQLite-shaped lowering path into an
+explicit multi-backend compiler pipeline.
 
 In practice that means:
 
-- the current compiled graph contract is SQLite-first
-- the current runtime validation in this repo is SQLite-first, with narrow
-  DuckDB read-only coverage for admitted analytical reads
+- the compiler now targets `Cypher AST -> normalize -> graph-relational IR ->
+  backend-aware lowering -> SQLGlot-backed output`
+- SQLite-through-IR is the first landed executable milestone, not the intended
+  permanent hidden default for every backend
+- DuckDB now has an explicit lowerer from the same shared IR path; parity work
+  is still in progress and support claims remain strict
+- PostgreSQL is planned as another first-class lowerer from the same IR path,
+  not as a renderer-only dialect tweak
 - HumemDB is the main reference runtime for execution
 - host runtimes should treat the current graph-to-table schema contract as part
   of the execution boundary, not as an incidental implementation detail
 - `to_sql(..., dialect=...)` and `render_cypher_program_text(..., dialect=...)`
   expose SQLGlot rendering controls, but those controls do not by themselves make
   the compiled output backend-neutral
-- DuckDB is now a narrow read-only rendering target for admitted OLAP-style
-  graph reads over the same schema contract, but it is not yet a full parity
-  backend for every compiled Cypher shape
+- a backend counts as supported only when admitted Cypher shapes execute
+  correctly against that backend's schema and runtime contract, not merely when
+  SQLGlot can render SQL text for it
 
 ## Scope
 

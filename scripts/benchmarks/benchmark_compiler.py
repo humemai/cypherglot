@@ -26,6 +26,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Callable
 
+from cypherglot.ir import (
+    SQLBackend,
+    bind_graph_relational_backend,
+    build_graph_relational_ir,
+    lower_graph_relational_ir,
+)
+from _benchmark_common import _progress
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -176,6 +184,188 @@ def _benchmark_entrypoint_callable(
 
     schema_context = _benchmark_schema_context(cypherglot_module)
     return lambda query: func(query, schema_context=schema_context)
+
+
+def _backend_lowerers() -> dict[SQLBackend, Callable[[object], object]]:
+    compile_module = importlib.import_module("cypherglot.compile")
+    duckdb_module = importlib.import_module("cypherglot._compile_duckdb")
+    shared_lowerer = getattr(
+        compile_module,
+        "_compile_graph_relational_backend_program",
+    )
+    duckdb_lowerer = getattr(duckdb_module, "_compile_duckdb_backend_program")
+    return {
+        SQLBackend.SQLITE: shared_lowerer,
+        SQLBackend.DUCKDB: duckdb_lowerer,
+        SQLBackend.POSTGRESQL: shared_lowerer,
+    }
+
+
+def _backend_dialect(backend: SQLBackend) -> str:
+    return {
+        SQLBackend.SQLITE: "sqlite",
+        SQLBackend.DUCKDB: "duckdb",
+        SQLBackend.POSTGRESQL: "postgres",
+    }[backend]
+
+
+def _backend_lowering_result(
+    queries: list[CorpusQuery],
+    *,
+    backend: SQLBackend,
+    iterations: int,
+    warmup: int,
+) -> dict[str, object]:
+    cypherglot_module = _import_cypherglot()
+    render_module = importlib.import_module("cypherglot.render")
+    schema_context = _benchmark_schema_context(cypherglot_module)
+    lowerers = _backend_lowerers()
+    render_cypher_program_text = getattr(
+        cypherglot_module,
+        "render_cypher_program_text",
+    )
+
+    applicable_queries = [
+        query
+        for query in queries
+        if any(
+            entrypoint in query.entrypoints
+            for entrypoint in ("to_sqlglot_ast", "to_sqlglot_program")
+        )
+    ]
+    if not applicable_queries:
+        raise ValueError(
+            f"No corpus queries apply to backend lowering benchmark {backend.value!r}."
+        )
+    _progress(
+        "compiler benchmark: backend "
+        f"{backend.value} start ({len(applicable_queries)} queries, "
+        f"iterations={iterations}, warmup={warmup})"
+    )
+
+    per_query: list[dict[str, object]] = []
+    build_ir_all_latencies_ns: list[int] = []
+    bind_backend_all_latencies_ns: list[int] = []
+    lower_backend_all_latencies_ns: list[int] = []
+    render_program_all_latencies_ns: list[int] = []
+    end_to_end_all_latencies_ns: list[int] = []
+
+    for query_index, corpus_query in enumerate(applicable_queries, start=1):
+        _progress(
+            "compiler benchmark: backend "
+            f"{backend.value} query {query_index}/{len(applicable_queries)} "
+            f"{corpus_query.name}"
+        )
+        normalized_statement = cypherglot_module.normalize_cypher_text(
+            corpus_query.query
+        )
+        program_ir = build_graph_relational_ir(
+            normalized_statement,
+            schema_context=schema_context,
+        )
+        compiled_program = lower_graph_relational_ir(
+            program_ir,
+            backend=backend,
+            lowerers=lowerers,
+        )
+        backend_dialect = _backend_dialect(backend)
+
+        build_ir_latencies_ns = _measure(
+            corpus_query.query,
+            lambda _query, normalized_statement=normalized_statement: (
+                build_graph_relational_ir(
+                    normalized_statement,
+                    schema_context=schema_context,
+                )
+            ),
+            iterations=iterations,
+            warmup=warmup,
+        )
+        bind_backend_latencies_ns = _measure(
+            corpus_query.query,
+            lambda _query, program_ir=program_ir: bind_graph_relational_backend(
+                program_ir,
+                backend=backend,
+            ),
+            iterations=iterations,
+            warmup=warmup,
+        )
+        lower_backend_latencies_ns = _measure(
+            corpus_query.query,
+            lambda _query, program_ir=program_ir: lower_graph_relational_ir(
+                program_ir,
+                backend=backend,
+                lowerers=lowerers,
+            ),
+            iterations=iterations,
+            warmup=warmup,
+        )
+        render_program_latencies_ns = _measure(
+            corpus_query.query,
+            lambda _query,
+            compiled_program=compiled_program,
+            backend=backend,
+            backend_dialect=backend_dialect: (
+                render_module.render_compiled_cypher_program(
+                    compiled_program,
+                    dialect=backend_dialect,
+                    backend=backend,
+                )
+            ),
+            iterations=iterations,
+            warmup=warmup,
+        )
+        end_to_end_latencies_ns = _measure(
+            corpus_query.query,
+            lambda query,
+            backend=backend,
+            backend_dialect=backend_dialect,
+            render_cypher_program_text=render_cypher_program_text: (
+                render_cypher_program_text(
+                    query,
+                    dialect=backend_dialect,
+                    backend=backend,
+                    schema_context=schema_context,
+                )
+            ),
+            iterations=iterations,
+            warmup=warmup,
+        )
+
+        build_ir_all_latencies_ns.extend(build_ir_latencies_ns)
+        bind_backend_all_latencies_ns.extend(bind_backend_latencies_ns)
+        lower_backend_all_latencies_ns.extend(lower_backend_latencies_ns)
+        render_program_all_latencies_ns.extend(render_program_latencies_ns)
+        end_to_end_all_latencies_ns.extend(end_to_end_latencies_ns)
+
+        per_query.append(
+            {
+                "name": corpus_query.name,
+                "category": corpus_query.category,
+                "build_ir": _summarize(build_ir_latencies_ns),
+                "bind_backend": _summarize(bind_backend_latencies_ns),
+                "lower_backend": _summarize(lower_backend_latencies_ns),
+                "render_program": _summarize(render_program_latencies_ns),
+                "end_to_end": _summarize(end_to_end_latencies_ns),
+            }
+        )
+
+    _progress(f"compiler benchmark: backend {backend.value} complete")
+
+    return {
+        "backend": backend.value,
+        "iterations": iterations,
+        "warmup": warmup,
+        "query_count": len(applicable_queries),
+        "overall": {
+            "build_ir": _summarize(build_ir_all_latencies_ns),
+            "bind_backend": _summarize(bind_backend_all_latencies_ns),
+            "lower_backend": _summarize(lower_backend_all_latencies_ns),
+            "render_program": _summarize(render_program_all_latencies_ns),
+            "end_to_end": _summarize(end_to_end_all_latencies_ns),
+        },
+        "queries": per_query,
+    }
 
 
 def _parse_args() -> argparse.Namespace:
@@ -480,8 +670,18 @@ def _entrypoint_result(
     applicable_queries = [query for query in queries if label in query.entrypoints]
     if not applicable_queries:
         raise ValueError(f"No corpus queries apply to benchmark entrypoint {label!r}.")
+    _progress(
+        "compiler benchmark: entrypoint "
+        f"{label} start ({len(applicable_queries)} queries, "
+        f"iterations={iterations}, warmup={warmup})"
+    )
 
-    for corpus_query in applicable_queries:
+    for query_index, corpus_query in enumerate(applicable_queries, start=1):
+        _progress(
+            "compiler benchmark: entrypoint "
+            f"{label} query {query_index}/{len(applicable_queries)} "
+            f"{corpus_query.name}"
+        )
         latencies_ns = _measure(
             corpus_query.query,
             func,
@@ -496,6 +696,8 @@ def _entrypoint_result(
                 "summary": _summarize(latencies_ns),
             }
         )
+
+    _progress(f"compiler benchmark: entrypoint {label} complete")
 
     return {
         "entrypoint": label,
@@ -518,7 +720,16 @@ def _sqlglot_result(
     per_query: list[dict[str, object]] = []
     all_latencies_ns: list[int] = []
 
-    for corpus_query in queries:
+    _progress(
+        "compiler benchmark: sqlglot "
+        f"{label} start ({len(queries)} queries, iterations={iterations}, "
+        f"warmup={warmup})"
+    )
+    for query_index, corpus_query in enumerate(queries, start=1):
+        _progress(
+            "compiler benchmark: sqlglot "
+            f"{label} query {query_index}/{len(queries)} {corpus_query.name}"
+        )
         latencies_ns = _measure(
             corpus_query.query,
             func,
@@ -533,6 +744,8 @@ def _sqlglot_result(
                 "summary": _summarize(latencies_ns),
             }
         )
+
+    _progress(f"compiler benchmark: sqlglot {label} complete")
 
     return {
         "method": label,
@@ -551,6 +764,7 @@ def _sqlglot_suite_result(
     warmup: int,
     mode: str,
 ) -> dict[str, object]:
+    _progress(f"compiler benchmark: sqlglot suite {mode} start")
     with _sqlglot_import_context(mode):
         sqlglot_module = importlib.import_module("sqlglot")
         details = _sqlglot_module_details(sqlglot_module)
@@ -564,6 +778,7 @@ def _sqlglot_suite_result(
             )
             for label, func in _sqlglot_benchmark_funcs(sqlglot_module).items()
         ]
+    _progress(f"compiler benchmark: sqlglot suite {mode} complete")
 
     return {
         "implementation": details["implementation"],
@@ -591,6 +806,7 @@ def _run_sqlglot_subprocess(
     mode: str,
 ) -> dict[str, object]:
     with tempfile.TemporaryDirectory(prefix="sqlglot-benchmark-") as temp_dir:
+        _progress(f"compiler benchmark: launching sqlglot subprocess {mode}")
         output_path = Path(temp_dir) / "sqlglot-result.json"
         subprocess.run(
             [
@@ -610,6 +826,7 @@ def _run_sqlglot_subprocess(
             check=True,
             cwd=REPO_ROOT,
         )
+        _progress(f"compiler benchmark: sqlglot subprocess {mode} complete")
         return json.loads(output_path.read_text(encoding="utf-8"))
 
 
@@ -674,6 +891,11 @@ def main() -> int:
         return 0
 
     queries = _load_corpus(args.corpus)
+    _progress(
+        "compiler benchmark: starting main suite "
+        f"({len(queries)} queries, iterations={args.iterations}, "
+        f"warmup={args.warmup}, sqlglot_mode={args.sqlglot_mode})"
+    )
     cypherglot_results = [
         _entrypoint_result(
             queries,
@@ -726,6 +948,15 @@ def main() -> int:
         "corpus_path": str(args.corpus),
         "query_count": len(queries),
         "results": cypherglot_results,
+        "backend_lowering_results": [
+            _backend_lowering_result(
+                queries,
+                backend=backend,
+                iterations=args.iterations,
+                warmup=args.warmup,
+            )
+            for backend in SQLBackend
+        ],
         "sqlglot_mode": args.sqlglot_mode,
         "sql_corpus_path": str(args.sql_corpus),
         "sql_query_count": len(sql_queries),
@@ -733,10 +964,30 @@ def main() -> int:
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    _progress(f"compiler benchmark: wrote baseline to {args.output}")
 
     print(f"Wrote benchmark baseline to {args.output}")
     for result in cypherglot_results:
         _print_summary(result)
+    for result in payload["backend_lowering_results"]:
+        overall = result["overall"]
+        assert isinstance(overall, dict)
+        lower_backend = overall["lower_backend"]
+        assert isinstance(lower_backend, dict)
+        end_to_end = overall["end_to_end"]
+        assert isinstance(end_to_end, dict)
+        print(
+            f"backend-lowering [{result['backend']}]: "
+            f"p50={lower_backend['p50_us']:.2f} us, "
+            f"p95={lower_backend['p95_us']:.2f} us, "
+            f"p99={lower_backend['p99_us']:.2f} us"
+        )
+        print(
+            f"backend-end-to-end [{result['backend']}]: "
+            f"p50={end_to_end['p50_us']:.2f} us, "
+            f"p95={end_to_end['p95_us']:.2f} us, "
+            f"p99={end_to_end['p99_us']:.2f} us"
+        )
     for suite in sqlglot_suites:
         _print_sqlglot_summary(suite)
     return 0

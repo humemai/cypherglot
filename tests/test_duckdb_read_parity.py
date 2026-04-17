@@ -62,23 +62,11 @@ class DuckDBReadParityTests(unittest.TestCase):
         self.schema_context = CompilerSchemaContext.type_aware(self.graph_schema)
 
         self.sqlite = sqlite3.connect(":memory:")
-        self.sqlite.executescript("\n".join(self.graph_schema.sqlite_ddl()))
+        self.sqlite.executescript("\n".join(self.graph_schema.ddl("sqlite")))
 
         self.duckdb = duckdb.connect()
-        self.duckdb.execute(
-            "CREATE TABLE cg_node_user ("
-            "id BIGINT, name VARCHAR, age BIGINT, score DOUBLE, active BOOLEAN)"
-        )
-        self.duckdb.execute("CREATE TABLE cg_node_company (id BIGINT, name VARCHAR)")
-        self.duckdb.execute(
-            "CREATE TABLE cg_edge_knows ("
-            "id BIGINT, from_id BIGINT, to_id BIGINT, note VARCHAR, "
-            "weight DOUBLE, score DOUBLE, active BOOLEAN)"
-        )
-        self.duckdb.execute(
-            "CREATE TABLE cg_edge_works_at ("
-            "id BIGINT, from_id BIGINT, to_id BIGINT, since BIGINT)"
-        )
+        for statement in self.graph_schema.ddl("duckdb"):
+            self.duckdb.execute(statement)
         self._seed_graphs()
 
     def tearDown(self) -> None:

@@ -7,9 +7,11 @@ The intended flow is:
 ```text
 raw Cypher string
 → parse
-→ Cypher AST
-→ compile
-→ SQLGlot AST
+→ validate admitted subset
+→ normalize
+→ graph-relational IR
+→ backend-aware lowering
+→ SQLGlot AST or SQL-backed program
 ```
 
 The repository is intentionally compiler-focused.
@@ -17,7 +19,8 @@ The repository is intentionally compiler-focused.
 - It parses and lowers Neo4j-like Cypher.
 - It currently targets a practical mainstream single-hop read-heavy subset,
   not full Cypher parity.
-- It returns SQLGlot AST instead of owning SQL execution.
+- It returns SQLGlot AST or SQL-backed compiled programs instead of owning SQL
+    execution.
 - It can carry vector intent forward, but it does not execute vector search.
 
 ## What this repo is for
@@ -26,17 +29,21 @@ The repository is intentionally compiler-focused.
 - a stable boundary between Cypher parsing and execution
 - a SQLGlot-based output that host runtimes can plan and execute
 
-## Current backend target
+## Current backend direction
 
-CypherGlot currently targets SQL for a SQLite-backed graph store, with narrow
-DuckDB read-only support for admitted analytical reads over the same schema.
+CypherGlot is moving away from a mostly SQLite-shaped compiler pipeline toward
+backend-neutral IR plus backend-aware lowering.
 
-- the main intended host runtime today is HumemDB
-- generated SQL is tested and supported against the current SQLite-backed graph schema
-- SQLGlot dialect rendering is exposed as an output helper, not as a claim that
-    every emitted query is backend-portable today
-- DuckDB support is currently limited to read-only graph-query families, not full
-    backend parity
+- SQLite-through-IR is the first landed executable milestone, not the hidden
+    long-term shape for every backend.
+- DuckDB already has an explicit lowering path from the same shared
+    architecture for admitted analytical reads.
+- PostgreSQL is part of the same source-first backend path rather than a
+    renderer-only dialect afterthought.
+- SQLGlot dialect rendering remains useful as an output helper, but rendering
+    alone is not the support boundary.
+- A backend counts as supported only when admitted Cypher shapes execute
+    correctly against that backend's schema and runtime contract.
 
 ## What this repo is not
 
@@ -49,6 +56,8 @@ DuckDB read-only support for admitted analytical reads over the same schema.
 
 - [Installation](getting-started/installation.md)
 - [Quick Start](getting-started/quickstart.md)
+- [Public Entrypoints](guide/public-entrypoints.md)
 - [Compiler Contract](guide/compiler-contract.md)
 - [Schema Contract](guide/schema-contract.md)
+- [Benchmarks](guide/benchmarks.md)
 - [Roadmap](guide/roadmap.md)

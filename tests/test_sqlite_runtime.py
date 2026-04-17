@@ -69,7 +69,7 @@ class SQLiteRuntimeTests(unittest.TestCase):
             ),
         )
         self.schema_context = CompilerSchemaContext.type_aware(self.graph_schema)
-        self.conn.executescript("\n".join(self.graph_schema.sqlite_ddl()))
+        self.conn.executescript("\n".join(self.graph_schema.ddl("sqlite")))
 
     def tearDown(self) -> None:
         self.conn.close()
