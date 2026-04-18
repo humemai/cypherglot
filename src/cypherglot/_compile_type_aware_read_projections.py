@@ -4,13 +4,20 @@ from typing import Callable
 
 from ._compile_sql_utils import _AGGREGATE_SQL_NAMES, _sql_literal, _sql_value
 from ._compile_type_aware_common import (
+    _compile_type_aware_numeric_coercion_expression,
+    _compile_type_aware_size_expression,
     _compile_type_aware_edge_field_expression,
     _compile_type_aware_node_field_expression,
+    _is_type_aware_entity_field_numeric,
+    _is_type_aware_numeric_literal,
+    _type_aware_backend_requires_numeric_coercion,
+    _type_aware_backend_requires_truncating_integer_cast,
 )
+from .ir import SQLBackend
 from ._normalize_support import OrderItem, ReturnItem
 
 
-_TYPE_AWARE_RELATIONAL_JSON_DEPENDENT_KINDS = {
+_TYPE_AWARE_RELATIONAL_PACKAGING_DEPENDENT_KINDS = {
     "entity",
     "properties",
     "labels",
@@ -18,21 +25,154 @@ _TYPE_AWARE_RELATIONAL_JSON_DEPENDENT_KINDS = {
 }
 
 
+_TYPE_AWARE_CONSTANT_FUNCTION_KINDS = {
+    "size",
+    "lower",
+    "upper",
+    "trim",
+    "ltrim",
+    "rtrim",
+    "reverse",
+    "replace",
+    "left",
+    "right",
+    "split",
+    "abs",
+    "sign",
+    "round",
+    "ceil",
+    "floor",
+    "sqrt",
+    "exp",
+    "sin",
+    "cos",
+    "tan",
+    "asin",
+    "acos",
+    "atan",
+    "ln",
+    "log",
+    "log10",
+    "radians",
+    "degrees",
+    "to_string",
+    "to_integer",
+    "to_float",
+    "to_boolean",
+    "substring",
+}
+
+
+_TYPE_AWARE_NUMERIC_FUNCTION_KINDS_REQUIRING_COERCION = {
+    "abs",
+    "sign",
+    "round",
+    "ceil",
+    "floor",
+    "sqrt",
+    "exp",
+    "sin",
+    "cos",
+    "tan",
+    "asin",
+    "acos",
+    "atan",
+    "ln",
+    "log",
+    "log10",
+    "radians",
+    "degrees",
+}
+
+
+_TYPE_AWARE_NUMERIC_AGGREGATE_KINDS_REQUIRING_COERCION = {"sum", "avg"}
+
+
+def _compile_type_aware_integer_cast_expression(
+    inner: str,
+    backend: SQLBackend,
+    *,
+    source_value: object | None = None,
+    is_statically_numeric: bool = False,
+) -> str:
+    if not _type_aware_backend_requires_truncating_integer_cast(backend):
+        return f"CAST({inner} AS INTEGER)"
+    if is_statically_numeric or _is_type_aware_numeric_literal(source_value):
+        return f"CAST(TRUNC({inner}) AS INTEGER)"
+    if isinstance(source_value, str):
+        return f"CAST({inner} AS INTEGER)"
+    return (
+        "CAST("
+        f"TRUNC({_compile_type_aware_numeric_coercion_expression(inner, backend)}) "
+        "AS INTEGER)"
+    )
+
+
+def _compile_type_aware_numeric_function_expression(
+    kind: str,
+    inner: str,
+    backend: SQLBackend,
+    *,
+    cast_operand: bool,
+) -> str:
+    if (
+        cast_operand
+        and _type_aware_backend_requires_numeric_coercion(backend)
+        and kind in _TYPE_AWARE_NUMERIC_FUNCTION_KINDS_REQUIRING_COERCION
+    ):
+        inner = _compile_type_aware_numeric_coercion_expression(inner, backend)
+    return f"{kind.upper()}({inner})"
+
+
+def _compile_type_aware_aggregate_expression(
+    kind: str,
+    inner: str,
+    backend: SQLBackend,
+    *,
+    cast_operand: bool,
+) -> str:
+    if (
+        cast_operand
+        and _type_aware_backend_requires_numeric_coercion(backend)
+        and kind in _TYPE_AWARE_NUMERIC_AGGREGATE_KINDS_REQUIRING_COERCION
+    ):
+        inner = _compile_type_aware_numeric_coercion_expression(inner, backend)
+    return f"{_AGGREGATE_SQL_NAMES[kind]}({inner})"
+
+
+def _is_type_aware_constant_projection(item: object) -> bool:
+    kind = getattr(item, "kind", None)
+    field = getattr(item, "field", None)
+    value = getattr(item, "value", None)
+
+    if kind == "scalar":
+        return value is not None
+    if kind == "scalar_value":
+        return True
+    if kind in _TYPE_AWARE_CONSTANT_FUNCTION_KINDS:
+        return field is None and value is not None
+
+    return False
+
+
 def _compile_type_aware_match_node_select_expression(
     alias: str,
     node_type: object,
     item: ReturnItem,
+    backend: SQLBackend,
 ) -> str:
     if item.kind in _AGGREGATE_SQL_NAMES:
         return _compile_type_aware_match_node_aggregate_return_expression(
             alias,
             node_type,
             item,
+            backend=backend,
         )
     return _compile_type_aware_return_expression(
         alias,
         node_type,
         item,
+        backend=backend,
     )
 
 
@@ -40,6 +180,7 @@ def _compile_type_aware_match_node_select_expressions(
     alias: str,
     node_type: object,
     item: ReturnItem,
+    backend: SQLBackend,
 ) -> list[tuple[str, str]]:
     if item.kind == "entity":
         output_name = item.column_name
@@ -76,6 +217,7 @@ def _compile_type_aware_match_node_select_expressions(
                 alias,
                 node_type,
                 item,
+                backend=backend,
             ),
             item.column_name,
         )
@@ -86,24 +228,34 @@ def _compile_type_aware_match_node_aggregate_return_expression(
     alias: str,
     node_type: object,
     item: ReturnItem,
+    backend: SQLBackend,
 ) -> str:
-    function_name = _AGGREGATE_SQL_NAMES[item.kind]
     if item.kind == "count":
         if item.alias == "*":
             return "COUNT(*)"
-        return f"{function_name}({alias}.id)"
+        return f'{_AGGREGATE_SQL_NAMES[item.kind]}({alias}.id)'
     inner = _compile_type_aware_return_expression(
         alias,
         node_type,
         ReturnItem(alias=item.alias, field=item.field, kind="field"),
+        backend=backend,
     )
-    return f"{function_name}({inner})"
+    return _compile_type_aware_aggregate_expression(
+        item.kind,
+        inner,
+        backend,
+        cast_operand=not _is_type_aware_entity_field_numeric(
+            node_type,
+            item.field or "",
+        ),
+    )
 
 
 def _compile_type_aware_match_node_group_by(
     alias: str,
     node_type: object,
     returns: tuple[ReturnItem, ...],
+    backend: SQLBackend,
 ) -> str | None:
     if not any(item.kind in _AGGREGATE_SQL_NAMES for item in returns):
         return None
@@ -118,6 +270,7 @@ def _compile_type_aware_match_node_group_by(
                     alias,
                     node_type,
                     item,
+                    backend=backend,
                 )
             )
             continue
@@ -126,6 +279,7 @@ def _compile_type_aware_match_node_group_by(
                 alias,
                 node_type,
                 item,
+                backend=backend,
             )
         )
     if not group_items:
@@ -137,6 +291,7 @@ def _compile_type_aware_return_expression(
     alias: str,
     node_type: object,
     item: ReturnItem,
+    backend: SQLBackend,
 ) -> str:
     scalar_expression = _compile_type_aware_scalar_return_expression(
         item,
@@ -147,6 +302,10 @@ def _compile_type_aware_return_expression(
                 field,
             )
         ),
+        field_is_statically_numeric=(
+            lambda field: _is_type_aware_entity_field_numeric(node_type, field)
+        ),
+        backend=backend,
     )
     if scalar_expression is not None:
         return scalar_expression
@@ -173,6 +332,8 @@ def _compile_type_aware_scalar_return_expression(
     item: ReturnItem,
     *,
     field_expression_resolver: Callable[[str], str],
+    field_is_statically_numeric: Callable[[str], bool],
+    backend: SQLBackend,
 ) -> str | None:
     if item.kind == "field":
         assert item.field is not None
@@ -184,9 +345,11 @@ def _compile_type_aware_scalar_return_expression(
         return _sql_value(item.value)
     if item.kind == "size":
         if item.field is not None:
-            return f"LENGTH({field_expression_resolver(item.field)})"
+            return _compile_type_aware_size_expression(
+                field_expression_resolver(item.field)
+            )
         assert item.value is not None
-        return f"LENGTH({_sql_value(item.value)})"
+        return _compile_type_aware_size_expression(_sql_value(item.value))
     if item.kind in {"lower", "upper", "trim", "ltrim", "rtrim", "reverse"}:
         if item.field is not None:
             inner = field_expression_resolver(item.field)
@@ -253,7 +416,13 @@ def _compile_type_aware_scalar_return_expression(
         else:
             assert item.value is not None
             inner = _sql_value(item.value)
-        return f"{item.kind.upper()}({inner})"
+        return _compile_type_aware_numeric_function_expression(
+            item.kind,
+            inner,
+            backend,
+            cast_operand=item.field is not None
+            and not field_is_statically_numeric(item.field),
+        )
     if item.kind == "to_string":
         if item.field is not None:
             inner = field_expression_resolver(item.field)
@@ -267,7 +436,14 @@ def _compile_type_aware_scalar_return_expression(
         else:
             assert item.value is not None
             inner = _sql_value(item.value)
-        return f"CAST({inner} AS INTEGER)"
+        return _compile_type_aware_integer_cast_expression(
+            inner,
+            backend,
+            source_value=item.value,
+            is_statically_numeric=(
+                item.field is not None and field_is_statically_numeric(item.field)
+            ),
+        )
     if item.kind == "to_float":
         if item.field is not None:
             inner = field_expression_resolver(item.field)
@@ -304,6 +480,7 @@ def _compile_type_aware_order_by(
     node_type: object,
     order_by: tuple[OrderItem, ...],
     returns: tuple[ReturnItem, ...],
+    backend: SQLBackend,
 ) -> str | None:
     if not order_by:
         return None
@@ -325,16 +502,21 @@ def _compile_type_aware_order_by(
                         f"{item.direction.upper()}"
                     )
                     continue
+                if _is_type_aware_constant_projection(matched_return):
+                    continue
                 if matched_return.kind in {
                     "entity",
                     "properties",
                 }:
                     parts.extend(
                         f"{expression} {item.direction.upper()}"
-                        for expression, _ in _compile_type_aware_match_node_select_expressions(
-                            alias,
-                            node_type,
-                            matched_return,
+                        for expression, _ in (
+                            _compile_type_aware_match_node_select_expressions(
+                                alias,
+                                node_type,
+                                matched_return,
+                                backend=backend,
+                            )
                         )
                     )
                     continue
@@ -342,17 +524,17 @@ def _compile_type_aware_order_by(
                     alias,
                     node_type,
                     matched_return,
+                    backend=backend,
                 )
                 parts.append(f"{expression} {item.direction.upper()}")
                 continue
-
         expression = _compile_type_aware_node_field_expression(
             alias,
             node_type,
             item.field,
         )
         parts.append(f"{expression} {item.direction.upper()}")
-    return ", ".join(parts)
+    return ", ".join(parts) or None
 
 
 def _compile_type_aware_relationship_return_expression(
@@ -363,6 +545,7 @@ def _compile_type_aware_relationship_return_expression(
     right_alias: str,
     right_type: object,
     item: ReturnItem,
+    backend: SQLBackend,
 ) -> str:
     if item.kind == "start_node":
         if item.field is not None:
@@ -393,12 +576,14 @@ def _compile_type_aware_relationship_return_expression(
             left_alias,
             left_type,
             item,
+            backend=backend,
         )
     if item.alias == right_alias:
         return _compile_type_aware_return_expression(
             right_alias,
             right_type,
             item,
+            backend=backend,
         )
     if item.alias == relationship_alias:
         scalar_expression = _compile_type_aware_scalar_return_expression(
@@ -410,6 +595,10 @@ def _compile_type_aware_relationship_return_expression(
                     field,
                 )
             ),
+            field_is_statically_numeric=(
+                lambda field: _is_type_aware_entity_field_numeric(edge_type, field)
+            ),
+            backend=backend,
         )
         if scalar_expression is not None:
             return scalar_expression
@@ -447,6 +636,7 @@ def _compile_type_aware_match_relationship_select_expression(
     right_alias: str,
     right_type: object,
     item: ReturnItem,
+    backend: SQLBackend,
 ) -> str:
     if item.kind in _AGGREGATE_SQL_NAMES:
         return _compile_type_aware_match_relationship_aggregate_return_expression(
@@ -457,6 +647,7 @@ def _compile_type_aware_match_relationship_select_expression(
             right_alias,
             right_type,
             item,
+            backend=backend,
         )
     return _compile_type_aware_relationship_return_expression(
         left_alias,
@@ -466,6 +657,7 @@ def _compile_type_aware_match_relationship_select_expression(
         right_alias,
         right_type,
         item,
+        backend=backend,
     )
 
 
@@ -477,6 +669,7 @@ def _compile_type_aware_match_relationship_select_expressions(
     right_alias: str,
     right_type: object,
     item: ReturnItem,
+    backend: SQLBackend,
 ) -> list[tuple[str, str]]:
     if item.kind == "start_node" and item.field is None:
         output_name = item.column_name
@@ -547,6 +740,7 @@ def _compile_type_aware_match_relationship_select_expressions(
                 right_alias,
                 right_type,
                 item,
+                backend=backend,
             ),
             item.column_name,
         )
@@ -561,17 +755,17 @@ def _compile_type_aware_match_relationship_aggregate_return_expression(
     right_alias: str,
     right_type: object,
     item: ReturnItem,
+    backend: SQLBackend,
 ) -> str:
-    function_name = _AGGREGATE_SQL_NAMES[item.kind]
     if item.kind == "count":
         if item.alias == "*":
             return "COUNT(*)"
         if item.alias == relationship_alias:
-            return f"{function_name}({relationship_alias}.id)"
+            return f'{_AGGREGATE_SQL_NAMES[item.kind]}({relationship_alias}.id)'
         if item.alias == left_alias:
-            return f"{function_name}({left_alias}.id)"
+            return f'{_AGGREGATE_SQL_NAMES[item.kind]}({left_alias}.id)'
         if item.alias == right_alias:
-            return f"{function_name}({right_alias}.id)"
+            return f'{_AGGREGATE_SQL_NAMES[item.kind]}({right_alias}.id)'
         raise ValueError(
             f"Unknown aggregate alias {item.alias!r} for one-hop MATCH."
         )
@@ -583,8 +777,17 @@ def _compile_type_aware_match_relationship_aggregate_return_expression(
         right_alias,
         right_type,
         ReturnItem(alias=item.alias, field=item.field, kind="field"),
+        backend=backend,
     )
-    return f"{function_name}({inner})"
+    return _compile_type_aware_aggregate_expression(
+        item.kind,
+        inner,
+        backend,
+        cast_operand=not _is_type_aware_entity_field_numeric(
+            edge_type,
+            item.field or "",
+        ),
+    )
 
 
 def _compile_type_aware_match_relationship_group_by(
@@ -595,6 +798,7 @@ def _compile_type_aware_match_relationship_group_by(
     right_alias: str,
     right_type: object,
     returns: tuple[ReturnItem, ...],
+    backend: SQLBackend,
 ) -> str | None:
     if not any(item.kind in _AGGREGATE_SQL_NAMES for item in returns):
         return None
@@ -610,14 +814,17 @@ def _compile_type_aware_match_relationship_group_by(
         }:
             group_items.extend(
                 expression
-                for expression, _ in _compile_type_aware_match_relationship_select_expressions(
-                    left_alias,
-                    left_type,
-                    relationship_alias,
-                    edge_type,
-                    right_alias,
-                    right_type,
-                    item,
+                for expression, _ in (
+                    _compile_type_aware_match_relationship_select_expressions(
+                        left_alias,
+                        left_type,
+                        relationship_alias,
+                        edge_type,
+                        right_alias,
+                        right_type,
+                        item,
+                        backend=backend,
+                    )
                 )
             )
             continue
@@ -630,6 +837,7 @@ def _compile_type_aware_match_relationship_group_by(
                 right_alias,
                 right_type,
                 item,
+                backend=backend,
             )
         )
     if not group_items:
@@ -646,6 +854,7 @@ def _compile_type_aware_relationship_order_by(
     right_type: object,
     order_by: tuple[OrderItem, ...],
     returns: tuple[ReturnItem, ...],
+    backend: SQLBackend,
 ) -> str | None:
     if not order_by:
         return None
@@ -668,6 +877,8 @@ def _compile_type_aware_relationship_order_by(
                         f"{item.direction.upper()}"
                     )
                     continue
+                if _is_type_aware_constant_projection(matched_return):
+                    continue
                 if matched_return.kind in {
                     "entity",
                     "properties",
@@ -676,14 +887,17 @@ def _compile_type_aware_relationship_order_by(
                 }:
                     parts.extend(
                         f"{expression} {item.direction.upper()}"
-                        for expression, _ in _compile_type_aware_match_relationship_select_expressions(
-                            left_alias,
-                            left_type,
-                            relationship_alias,
-                            edge_type,
-                            right_alias,
-                            right_type,
-                            matched_return,
+                        for expression, _ in (
+                            _compile_type_aware_match_relationship_select_expressions(
+                                left_alias,
+                                left_type,
+                                relationship_alias,
+                                edge_type,
+                                right_alias,
+                                right_type,
+                                matched_return,
+                                backend=backend,
+                            )
                         )
                     )
                     continue
@@ -695,6 +909,7 @@ def _compile_type_aware_relationship_order_by(
                     right_alias,
                     right_type,
                     matched_return,
+                    backend=backend,
                 )
                 parts.append(f"{expression} {item.direction.upper()}")
                 continue
@@ -722,7 +937,7 @@ def _compile_type_aware_relationship_order_by(
                 f"Unknown ORDER BY alias {item.alias!r} for one-hop MATCH."
             )
         parts.append(f"{expression} {item.direction.upper()}")
-    return ", ".join(parts)
+    return ", ".join(parts) or None
 
 
 def _require_type_aware_relational_support(
@@ -730,13 +945,13 @@ def _require_type_aware_relational_support(
     *,
     field: str | None,
 ) -> None:
-    if kind in _TYPE_AWARE_RELATIONAL_JSON_DEPENDENT_KINDS:
+    if kind in _TYPE_AWARE_RELATIONAL_PACKAGING_DEPENDENT_KINDS:
         raise ValueError(
             "Type-aware relational output mode does not yet support whole-entity "
-            "or introspection returns that require SQL JSON constructors."
+            "or introspection returns that require non-scalar packaging."
         )
     if kind in {"start_node", "end_node"} and field is None:
         raise ValueError(
             "Type-aware relational output mode does not yet support whole-entity "
-            "or introspection returns that require SQL JSON constructors."
+            "or introspection returns that require non-scalar packaging."
         )

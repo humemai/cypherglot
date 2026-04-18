@@ -834,6 +834,7 @@ class _BackendRunner:
                 mode="statement",
                 compiled=cypherglot.to_sql(
                     query.query,
+                    backend="sqlite",
                     schema_context=self.schema_context,
                 ),
             )
@@ -855,6 +856,7 @@ class _BackendRunner:
             mode="program",
             compiled=cypherglot.render_cypher_program_text(
                 query.query,
+                backend="sqlite",
                 schema_context=self.schema_context,
             ),
         )

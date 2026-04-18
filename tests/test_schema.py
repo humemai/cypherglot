@@ -121,7 +121,7 @@ class SchemaContractTests(unittest.TestCase):
                     properties=(
                         PropertyField("name", "string", nullable=False),
                         PropertyField("active", "boolean"),
-                        PropertyField("profile", "json"),
+                        PropertyField("nickname", "string"),
                     ),
                 ),
             ),
@@ -135,7 +135,6 @@ class SchemaContractTests(unittest.TestCase):
         )
 
         ddl = "\n".join(schema.ddl("duckdb"))
-
         self.assertIn("CREATE SEQUENCE cg_node_user_id_seq START 1;", ddl)
         self.assertIn("CREATE TABLE cg_node_user", ddl)
         self.assertIn(
@@ -144,7 +143,7 @@ class SchemaContractTests(unittest.TestCase):
         )
         self.assertIn("name VARCHAR NOT NULL", ddl)
         self.assertIn("active BOOLEAN", ddl)
-        self.assertIn("profile JSON", ddl)
+        self.assertIn("nickname VARCHAR", ddl)
         self.assertNotIn("STRICT", ddl)
         self.assertNotIn("PRAGMA foreign_keys = ON;", ddl)
         self.assertNotIn("FOREIGN KEY", ddl)
@@ -179,7 +178,7 @@ class SchemaContractTests(unittest.TestCase):
                     name="WORKS_AT",
                     source_type="User",
                     target_type="Company",
-                    properties=(PropertyField("metadata", "json"),),
+                    properties=(PropertyField("note", "string"),),
                 ),
             ),
         )
@@ -188,7 +187,7 @@ class SchemaContractTests(unittest.TestCase):
 
         self.assertIn("CREATE SEQUENCE cg_node_user_id_seq START 1;", ddl)
         self.assertIn("score DOUBLE PRECISION", ddl)
-        self.assertIn("metadata JSONB", ddl)
+        self.assertIn("note TEXT", ddl)
         self.assertIn(
             "id BIGINT PRIMARY KEY DEFAULT nextval('cg_node_user_id_seq')",
             ddl,
@@ -219,6 +218,12 @@ class SchemaContractTests(unittest.TestCase):
             ),
             ddl,
         )
+
+    def test_property_field_rejects_removed_json_logical_type(self) -> None:
+        with self.assertRaises(SchemaContractError) as raised:
+            PropertyField("profile", "json").column_sql("sqlite")
+
+        self.assertIn("Unsupported logical type 'json'", str(raised.exception))
 
     def test_graph_schema_ddl_emits_explicit_property_indexes(self) -> None:
         schema = GraphSchema(

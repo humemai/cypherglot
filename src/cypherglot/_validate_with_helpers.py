@@ -15,6 +15,7 @@ from ._validate_projection import (
     _validate_plain_case_expression,
     _validate_plain_read_projection_shape,
     _validate_with_case_expression,
+    _validate_with_projection_expression,
     _validate_with_where_shape,
 )
 from ._validate_shape_helpers import _context_text, _validate_match_pattern_shape
@@ -122,11 +123,23 @@ def _validate_with_shape(result: CypherParseResult, multi_part_query_ctx) -> Non
                 )
             binding_kinds[output_alias] = "scalar"
             continue
-        raise ValueError(
-            "CypherGlot currently admits only passthrough variable items such as "
-            "WITH u or WITH u AS person, plus simple scalar rebinding such as "
-            "WITH u.name AS name, in the supported WITH subset."
+        if output_alias is None:
+            raise ValueError(
+                "CypherGlot currently requires derived scalar WITH bindings to use "
+                "an explicit AS alias in the supported multi-part subset."
+            )
+        projected_kind = _validate_with_projection_expression(
+            expression_text,
+            output_alias=output_alias,
+            binding_kinds={alias: "entity" for alias in allowed_aliases},
+            binding_alias_kinds=source_alias_kinds,
         )
+        if projected_kind != "scalar":
+            raise ValueError(
+                "CypherGlot currently supports derived WITH bindings only for "
+                "scalar-producing expressions in the supported multi-part subset."
+            )
+        binding_kinds[output_alias] = "scalar"
 
     if with_ctx.oC_Where() is not None:
         _validate_with_where_shape(

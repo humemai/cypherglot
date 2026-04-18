@@ -56,11 +56,11 @@ DEFAULT_OUTPUT_PATH = (
     / "scripts"
     / "benchmarks"
     / "results"
-    / "compiler_benchmark_baseline.json"
+    / "compiler_benchmark.json"
 )
 SQLGLOT_READ_DIALECT = "postgres"
 SQLGLOT_WRITE_DIALECT = "sqlite"
-SCHEMA_REQUIRED_ENTRYPOINTS = frozenset(
+BACKEND_REQUIRED_ENTRYPOINTS = frozenset(
     {
         "to_sqlglot_ast",
         "to_sql",
@@ -177,26 +177,32 @@ def _benchmark_entrypoint_callable(
     cypherglot_module,
     *,
     label: str,
+    backend: SQLBackend | None = None,
 ) -> Callable[[str], object]:
     func = getattr(cypherglot_module, CYPHERGLOT_ENTRYPOINT_ATTRS[label])
-    if label not in SCHEMA_REQUIRED_ENTRYPOINTS:
+    if label not in BACKEND_REQUIRED_ENTRYPOINTS:
         return func
 
+    if backend is None:
+        raise ValueError(f"Benchmark entrypoint {label!r} requires a backend.")
+
     schema_context = _benchmark_schema_context(cypherglot_module)
-    return lambda query: func(query, schema_context=schema_context)
+    return lambda query: func(
+        query,
+        schema_context=schema_context,
+        backend=backend,
+    )
 
 
 def _backend_lowerers() -> dict[SQLBackend, Callable[[object], object]]:
     compile_module = importlib.import_module("cypherglot.compile")
-    duckdb_module = importlib.import_module("cypherglot._compile_duckdb")
     shared_lowerer = getattr(
         compile_module,
         "_compile_graph_relational_backend_program",
     )
-    duckdb_lowerer = getattr(duckdb_module, "_compile_duckdb_backend_program")
     return {
         SQLBackend.SQLITE: shared_lowerer,
-        SQLBackend.DUCKDB: duckdb_lowerer,
+        SQLBackend.DUCKDB: shared_lowerer,
         SQLBackend.POSTGRESQL: shared_lowerer,
     }
 
@@ -660,26 +666,32 @@ def _entrypoint_result(
     queries: list[CorpusQuery],
     *,
     label: str,
+    backend: SQLBackend | None = None,
     iterations: int,
     warmup: int,
 ) -> dict[str, object]:
     cypherglot_module = _import_cypherglot()
-    func = _benchmark_entrypoint_callable(cypherglot_module, label=label)
+    func = _benchmark_entrypoint_callable(
+        cypherglot_module,
+        label=label,
+        backend=backend,
+    )
     per_query: list[dict[str, object]] = []
     all_latencies_ns: list[int] = []
     applicable_queries = [query for query in queries if label in query.entrypoints]
     if not applicable_queries:
         raise ValueError(f"No corpus queries apply to benchmark entrypoint {label!r}.")
+    benchmark_name = label if backend is None else f"{label}[{backend.value}]"
     _progress(
         "compiler benchmark: entrypoint "
-        f"{label} start ({len(applicable_queries)} queries, "
+        f"{benchmark_name} start ({len(applicable_queries)} queries, "
         f"iterations={iterations}, warmup={warmup})"
     )
 
     for query_index, corpus_query in enumerate(applicable_queries, start=1):
         _progress(
             "compiler benchmark: entrypoint "
-            f"{label} query {query_index}/{len(applicable_queries)} "
+            f"{benchmark_name} query {query_index}/{len(applicable_queries)} "
             f"{corpus_query.name}"
         )
         latencies_ns = _measure(
@@ -697,9 +709,9 @@ def _entrypoint_result(
             }
         )
 
-    _progress(f"compiler benchmark: entrypoint {label} complete")
+    _progress(f"compiler benchmark: entrypoint {benchmark_name} complete")
 
-    return {
+    result = {
         "entrypoint": label,
         "iterations": iterations,
         "warmup": warmup,
@@ -707,6 +719,9 @@ def _entrypoint_result(
         "overall": _summarize(all_latencies_ns),
         "queries": per_query,
     }
+    if backend is not None:
+        result["backend"] = backend.value
+    return result
 
 
 def _sqlglot_result(
@@ -833,8 +848,14 @@ def _run_sqlglot_subprocess(
 def _print_summary(result: dict[str, object]) -> None:
     overall = result["overall"]
     assert isinstance(overall, dict)
+    backend = result.get("backend")
+    summary_label = (
+        str(result["entrypoint"])
+        if backend is None
+        else f"{result['entrypoint']} [{backend}]"
+    )
     print(
-        f"{result['entrypoint']}: "
+        f"{summary_label}: "
         f"p50={overall['p50_us']:.2f} us, "
         f"p95={overall['p95_us']:.2f} us, "
         f"p99={overall['p99_us']:.2f} us"
@@ -849,6 +870,19 @@ def _print_summary(result: dict[str, object]) -> None:
             f"p95={summary['p95_us']:.2f} us, "
             f"p99={summary['p99_us']:.2f} us"
         )
+
+
+def _partition_entrypoint_results(
+    results: list[dict[str, object]],
+) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+    shared_results: list[dict[str, object]] = []
+    backend_results: list[dict[str, object]] = []
+    for result in results:
+        if result["entrypoint"] in BACKEND_REQUIRED_ENTRYPOINTS:
+            backend_results.append(result)
+            continue
+        shared_results.append(result)
+    return shared_results, backend_results
 
 
 def _print_sqlglot_summary(suite: dict[str, object]) -> None:
@@ -896,16 +930,30 @@ def main() -> int:
         f"({len(queries)} queries, iterations={args.iterations}, "
         f"warmup={args.warmup}, sqlglot_mode={args.sqlglot_mode})"
     )
-    cypherglot_results = [
-        _entrypoint_result(
-            queries,
-            label=entrypoint,
-            iterations=args.iterations,
-            warmup=args.warmup,
+    cypherglot_results: list[dict[str, object]] = []
+    for entrypoint in DEFAULT_ENTRYPOINT_ORDER:
+        if not any(entrypoint in query.entrypoints for query in queries):
+            continue
+        if entrypoint in BACKEND_REQUIRED_ENTRYPOINTS:
+            for backend in SQLBackend:
+                cypherglot_results.append(
+                    _entrypoint_result(
+                        queries,
+                        label=entrypoint,
+                        backend=backend,
+                        iterations=args.iterations,
+                        warmup=args.warmup,
+                    )
+                )
+            continue
+        cypherglot_results.append(
+            _entrypoint_result(
+                queries,
+                label=entrypoint,
+                iterations=args.iterations,
+                warmup=args.warmup,
+            )
         )
-        for entrypoint in DEFAULT_ENTRYPOINT_ORDER
-        if any(entrypoint in query.entrypoints for query in queries)
-    ]
 
     sql_queries = (
         _load_sql_corpus(args.sql_corpus) if args.sqlglot_mode != "off" else []
@@ -932,6 +980,10 @@ def main() -> int:
 
     cypherglot_module = _import_cypherglot()
 
+    shared_entrypoint_results, backend_entrypoint_results = (
+        _partition_entrypoint_results(cypherglot_results)
+    )
+
     payload = {
         "generated_at": datetime.now(UTC).isoformat(),
         "python_version": platform.python_version(),
@@ -947,7 +999,39 @@ def main() -> int:
         ),
         "corpus_path": str(args.corpus),
         "query_count": len(queries),
-        "results": cypherglot_results,
+        "benchmark_sections": {
+            "shared_entrypoint_results": {
+                "purpose": (
+                    "Measures backend-neutral public compiler entrypoints "
+                    "once per query."
+                ),
+                "entrypoints": [
+                    entrypoint
+                    for entrypoint in DEFAULT_ENTRYPOINT_ORDER
+                    if entrypoint not in BACKEND_REQUIRED_ENTRYPOINTS
+                ],
+                "comparison_axis": "shared compiler frontend behavior",
+            },
+            "backend_entrypoint_results": {
+                "purpose": (
+                    "Measures backend-dependent public compiler entrypoints "
+                    "once per SQL backend."
+                ),
+                "entrypoints": sorted(BACKEND_REQUIRED_ENTRYPOINTS),
+                "backends": [backend.value for backend in SQLBackend],
+                "comparison_axis": "end-to-end public API SQL target behavior",
+            },
+            "backend_lowering_results": {
+                "purpose": (
+                    "Measures shared IR binding, lowering, and rendering cost "
+                    "per SQL backend below the public API layer."
+                ),
+                "backends": [backend.value for backend in SQLBackend],
+                "comparison_axis": "backend lowerer and renderer behavior",
+            },
+        },
+        "shared_entrypoint_results": shared_entrypoint_results,
+        "backend_entrypoint_results": backend_entrypoint_results,
         "backend_lowering_results": [
             _backend_lowering_result(
                 queries,

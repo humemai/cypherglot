@@ -4,19 +4,25 @@ from dataclasses import dataclass
 from typing import Literal
 
 from ._compile_sql_utils import _compile_stream_predicate, _sql_literal, _sql_value
+from .ir import BACKEND_CAPABILITIES, BackendCapabilities, SQLBackend
 from ._normalize_support import (
     _SIZE_PREDICATE_FIELD_PREFIX,
     CypherValue,
     Predicate,
 )
-from .normalize import WithBinding
+from .normalize import WithBinding, WithCaseSpec, WithReturnItem
 from .schema import property_column_name
+
+
+def _compile_type_aware_size_expression(expression: str) -> str:
+    return f"LENGTH(CAST({expression} AS TEXT))"
 
 
 @dataclass(frozen=True, slots=True)
 class _TypeAwareWithBindingSpec:
     binding: WithBinding
     entity_type: object | None = None
+    scalar_logical_type: str | None = None
     start_binding_output_alias: str | None = None
     end_binding_output_alias: str | None = None
 
@@ -46,6 +52,7 @@ def _compile_type_aware_match_node_predicate(
     alias: str,
     node_type: object,
     predicate: Predicate,
+    backend: SQLBackend,
 ) -> str:
     if predicate.field.startswith(_SIZE_PREDICATE_FIELD_PREFIX):
         inner_field = predicate.field.removeprefix(_SIZE_PREDICATE_FIELD_PREFIX)
@@ -55,7 +62,7 @@ def _compile_type_aware_match_node_predicate(
             inner_field,
         )
         return _compile_stream_predicate(
-            f"LENGTH({expression})",
+            _compile_type_aware_size_expression(expression),
             None,
             predicate.operator,
             predicate.value,
@@ -83,6 +90,11 @@ def _compile_type_aware_match_node_predicate(
         ),
         operator=predicate.operator,
         value=predicate.value,
+        backend=backend,
+        is_statically_numeric=_is_type_aware_entity_field_numeric(
+            node_type,
+            predicate.field,
+        ),
     )
 
 
@@ -90,13 +102,12 @@ def _compile_type_aware_match_relationship_predicate(
     alias: str,
     edge_type: object,
     predicate: Predicate,
+    backend: SQLBackend,
 ) -> str:
     if predicate.field.startswith(_SIZE_PREDICATE_FIELD_PREFIX):
         inner_field = predicate.field.removeprefix(_SIZE_PREDICATE_FIELD_PREFIX)
-        expression = (
-            "LENGTH("
-            f"{_compile_type_aware_edge_field_expression(alias, edge_type, inner_field)}"
-            ")"
+        expression = _compile_type_aware_size_expression(
+            _compile_type_aware_edge_field_expression(alias, edge_type, inner_field)
         )
         return _compile_stream_predicate(
             expression,
@@ -127,7 +138,193 @@ def _compile_type_aware_match_relationship_predicate(
         ),
         operator=predicate.operator,
         value=predicate.value,
+        backend=backend,
+        is_statically_numeric=_is_type_aware_entity_field_numeric(
+            edge_type,
+            predicate.field,
+        ),
     )
+
+
+def _is_type_aware_numeric_literal(value: CypherValue) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _is_type_aware_numeric_logical_type(logical_type: object | None) -> bool:
+    return logical_type in {"integer", "float"}
+
+
+def _type_aware_property_logical_type(
+    entity_type: object | None,
+    field: str,
+) -> str | None:
+    if entity_type is None:
+        return None
+    for property_field in entity_type.properties:
+        if property_field.name == field:
+            return property_field.logical_type
+    return None
+
+
+def _type_aware_entity_field_logical_type(
+    entity_type: object | None,
+    field: str,
+) -> str | None:
+    if field == "id":
+        return "integer"
+    if field in {"label", "type"}:
+        return "string"
+    return _type_aware_property_logical_type(entity_type, field)
+
+
+def _is_type_aware_entity_field_numeric(
+    entity_type: object | None,
+    field: str,
+) -> bool:
+    logical_type = _type_aware_entity_field_logical_type(entity_type, field)
+    return _is_type_aware_numeric_logical_type(logical_type)
+
+
+def _type_aware_binding_logical_type(
+    binding_spec: _TypeAwareWithBindingSpec,
+    field: str | None = None,
+) -> str | None:
+    binding = binding_spec.binding
+    if binding.binding_kind == "scalar":
+        if field is not None:
+            return None
+        return binding_spec.scalar_logical_type
+    if field is None:
+        return None
+    return _type_aware_entity_field_logical_type(binding_spec.entity_type, field)
+
+
+def _is_type_aware_binding_numeric(
+    binding_spec: _TypeAwareWithBindingSpec,
+    field: str | None = None,
+) -> bool:
+    logical_type = _type_aware_binding_logical_type(binding_spec, field)
+    return _is_type_aware_numeric_logical_type(logical_type)
+
+
+def _build_type_aware_with_binding_spec(
+    binding: WithBinding,
+    *,
+    entity_type: object | None,
+    scalar_logical_type: str | None = None,
+    start_binding_output_alias: str | None = None,
+    end_binding_output_alias: str | None = None,
+) -> _TypeAwareWithBindingSpec:
+    resolved_scalar_logical_type = scalar_logical_type
+    if binding.binding_kind == "scalar" and resolved_scalar_logical_type is None:
+        source_field = binding.source_field
+        if source_field is not None:
+            resolved_scalar_logical_type = _type_aware_entity_field_logical_type(
+                entity_type,
+                source_field,
+            )
+    return _TypeAwareWithBindingSpec(
+        binding=binding,
+        entity_type=entity_type,
+        scalar_logical_type=resolved_scalar_logical_type,
+        start_binding_output_alias=start_binding_output_alias,
+        end_binding_output_alias=end_binding_output_alias,
+    )
+
+
+def _type_aware_scalar_literal_logical_type(value: object | None) -> str | None:
+    if isinstance(value, bool):
+        return "boolean"
+    if isinstance(value, int):
+        return "integer"
+    if isinstance(value, float):
+        return "float"
+    if isinstance(value, str):
+        return "string"
+    return None
+
+
+def _type_aware_with_expression_logical_type(
+    item: WithReturnItem,
+    binding_specs: dict[str, _TypeAwareWithBindingSpec],
+) -> str | None:
+    if item.kind == "case":
+        assert isinstance(item.value, WithCaseSpec)
+        branch_types = [
+            _type_aware_with_expression_logical_type(arm.result, binding_specs)
+            for arm in item.value.when_items
+        ]
+        branch_types.append(
+            _type_aware_with_expression_logical_type(item.value.else_item, binding_specs)
+        )
+        distinct_types = {logical_type for logical_type in branch_types if logical_type is not None}
+        if len(distinct_types) == 1:
+            return next(iter(distinct_types))
+        return None
+    if item.kind == "scalar_value":
+        return _type_aware_scalar_literal_logical_type(item.value)
+    if item.kind == "scalar":
+        return _type_aware_binding_logical_type(binding_specs[item.alias], item.field)
+    if item.kind == "field":
+        return _type_aware_binding_logical_type(binding_specs[item.alias], item.field)
+    if item.kind == "id":
+        return "integer"
+    if item.kind == "type":
+        return "string"
+    if item.kind == "size":
+        return "integer"
+    if item.kind == "predicate":
+        return "boolean"
+    if item.kind in {"lower", "upper", "trim", "ltrim", "rtrim", "reverse", "replace", "left", "right", "substring", "to_string"}:
+        return "string"
+    if item.kind == "to_integer":
+        return "integer"
+    if item.kind == "to_float":
+        return "float"
+    if item.kind == "to_boolean":
+        return "boolean"
+    if item.kind == "coalesce":
+        input_type = _type_aware_binding_logical_type(binding_specs[item.alias], item.field)
+        if input_type is not None:
+            return input_type
+        return _type_aware_scalar_literal_logical_type(item.value)
+    if item.kind in {"abs", "sign", "round", "ceil", "floor"}:
+        input_type = _type_aware_binding_logical_type(binding_specs[item.alias], item.field)
+        if input_type in {"integer", "float"}:
+            return input_type
+        return None
+    if item.kind in {"sqrt", "exp", "sin", "cos", "tan", "asin", "acos", "atan", "ln", "log", "log10", "radians", "degrees"}:
+        return "float"
+    return None
+
+
+def _type_aware_backend_capabilities(backend: SQLBackend) -> BackendCapabilities:
+    return BACKEND_CAPABILITIES[backend]
+
+
+def _type_aware_backend_requires_numeric_coercion(backend: SQLBackend) -> bool:
+    return (
+        _type_aware_backend_capabilities(backend).numeric_coercion_sql_type
+        is not None
+    )
+
+
+def _type_aware_backend_requires_truncating_integer_cast(
+    backend: SQLBackend,
+) -> bool:
+    return _type_aware_backend_capabilities(backend).integer_cast_requires_truncation
+
+
+def _compile_type_aware_numeric_coercion_expression(
+    expression: str,
+    backend: SQLBackend,
+) -> str:
+    capabilities = _type_aware_backend_capabilities(backend)
+    target_type = capabilities.numeric_coercion_sql_type
+    if target_type is None:
+        return expression
+    cast_name = "TRY_CAST" if capabilities.numeric_coercion_is_tolerant else "CAST"
+    return f"{cast_name}({expression} AS {target_type})"
 
 
 def _compile_type_aware_predicate(
@@ -146,6 +343,8 @@ def _compile_type_aware_predicate(
         "IS NOT NULL",
     ],
     value: CypherValue,
+    backend: SQLBackend,
+    is_statically_numeric: bool = False,
 ) -> str:
     if operator == "IS NULL":
         return f"{field_expression} IS NULL"
@@ -153,12 +352,24 @@ def _compile_type_aware_predicate(
         return f"{field_expression} IS NOT NULL"
 
     value_sql = _sql_value(value)
+    predicate_expression = field_expression
+    if (
+        _type_aware_backend_requires_numeric_coercion(backend)
+        and operator in {"=", "<", "<=", ">", ">="}
+        and value is not None
+        and _is_type_aware_numeric_literal(value)
+        and not is_statically_numeric
+    ):
+        predicate_expression = _compile_type_aware_numeric_coercion_expression(
+            field_expression,
+            backend,
+        )
     if operator == "=":
         if value is None:
             return f"{field_expression} IS NULL"
-        return f"{field_expression} = {value_sql}"
+        return f"{predicate_expression} = {value_sql}"
     if operator in {"<", "<=", ">", ">="}:
-        return f"{field_expression} {operator} {value_sql}"
+        return f"{predicate_expression} {operator} {value_sql}"
     if operator == "STARTS WITH":
         return f"substr({field_expression}, 1, length({value_sql})) = {value_sql}"
     if operator == "ENDS WITH":

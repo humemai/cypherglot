@@ -31,6 +31,7 @@ class LoggingTests(unittest.TestCase):
         with self.assertLogs("cypherglot", level="DEBUG") as captured:
             cypherglot.to_sql(
                 "MATCH (u:User) RETURN u.name",
+                backend="sqlite",
                 schema_context=self._schema_context(),
             )
 

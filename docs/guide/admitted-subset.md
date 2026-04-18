@@ -378,15 +378,15 @@ The admitted `WITH` slice is currently narrow:
   `type(...)`, whole-entity, `size(...)`, scalar literal/parameter outputs, and predicate outputs
   produced by the final `RETURN`
 
-Whole-entity pass-through returns currently compile to stable JSON object shapes:
-
-- node bindings: `{id, label, properties}`
-- relationship bindings: `{id, type, properties}`
+Whole-entity pass-through returns on the strict relational product path do not
+compile to packed object values anymore. Where whole-entity slices remain
+admitted, they are expected to expand into stable typed dotted columns such as
+`user.id`, `user.name`, `rel.id`, or endpoint-field projections; list- or
+object-shaped packaging is not part of the emitted-SQL contract.
 
 The admitted `UNWIND` slice is currently narrow:
 
 - standalone `UNWIND list_literal AS x RETURN x`
-- standalone `UNWIND $items AS x RETURN x`
 - optional `AS output_alias` on admitted scalar unwind projections
 - `ORDER BY` on the unwind alias or projected scalar alias
 - `SKIP` or `OFFSET`, and `LIMIT`

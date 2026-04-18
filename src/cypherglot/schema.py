@@ -7,29 +7,50 @@ from typing import Literal
 
 SchemaBackend = Literal["sqlite", "duckdb", "postgresql"]
 
+
+@dataclass(frozen=True)
+class SchemaBackendCapabilities:
+    logical_type_sql: dict[str, str]
+    boolean_check_constraint: bool = False
+    needs_foreign_key_pragma: bool = False
+    needs_sequence_objects: bool = True
+    reference_id_sql_type: str = "BIGINT"
+    include_foreign_keys: bool = True
+    strict_tables: bool = False
+
+
 _IDENTIFIER_PART_RE = re.compile(r"[^a-z0-9]+")
-_TYPE_BY_LOGICAL_TYPE_BY_BACKEND: dict[SchemaBackend, dict[str, str]] = {
-    "sqlite": {
-        "string": "TEXT",
-        "integer": "INTEGER",
-        "float": "REAL",
-        "boolean": "INTEGER",
-        "json": "TEXT",
-    },
-    "duckdb": {
-        "string": "VARCHAR",
-        "integer": "BIGINT",
-        "float": "DOUBLE",
-        "boolean": "BOOLEAN",
-        "json": "JSON",
-    },
-    "postgresql": {
-        "string": "TEXT",
-        "integer": "BIGINT",
-        "float": "DOUBLE PRECISION",
-        "boolean": "BOOLEAN",
-        "json": "JSONB",
-    },
+_SCHEMA_BACKEND_CAPABILITIES: dict[SchemaBackend, SchemaBackendCapabilities] = {
+    "sqlite": SchemaBackendCapabilities(
+        logical_type_sql={
+            "string": "TEXT",
+            "integer": "INTEGER",
+            "float": "REAL",
+            "boolean": "INTEGER",
+        },
+        boolean_check_constraint=True,
+        needs_foreign_key_pragma=True,
+        needs_sequence_objects=False,
+        reference_id_sql_type="INTEGER",
+        strict_tables=True,
+    ),
+    "duckdb": SchemaBackendCapabilities(
+        logical_type_sql={
+            "string": "VARCHAR",
+            "integer": "BIGINT",
+            "float": "DOUBLE",
+            "boolean": "BOOLEAN",
+        },
+        include_foreign_keys=False,
+    ),
+    "postgresql": SchemaBackendCapabilities(
+        logical_type_sql={
+            "string": "TEXT",
+            "integer": "BIGINT",
+            "float": "DOUBLE PRECISION",
+            "boolean": "BOOLEAN",
+        },
+    ),
 }
 
 
@@ -38,12 +59,16 @@ class SchemaContractError(ValueError):
 
 
 def _validated_backend(backend: SchemaBackend) -> SchemaBackend:
-    if backend not in _TYPE_BY_LOGICAL_TYPE_BY_BACKEND:
-        supported = ", ".join(sorted(_TYPE_BY_LOGICAL_TYPE_BY_BACKEND))
+    if backend not in _SCHEMA_BACKEND_CAPABILITIES:
+        supported = ", ".join(sorted(_SCHEMA_BACKEND_CAPABILITIES))
         raise SchemaContractError(
             f"Unsupported schema backend {backend!r}. Supported: {supported}."
         )
     return backend
+
+
+def _schema_backend_capabilities(backend: SchemaBackend) -> SchemaBackendCapabilities:
+    return _SCHEMA_BACKEND_CAPABILITIES[_validated_backend(backend)]
 
 
 def _identifier_suffix(name: str) -> str:
@@ -81,11 +106,10 @@ class PropertyField:
 
     def column_sql(self, backend: SchemaBackend) -> str:
         backend = _validated_backend(backend)
-        sql_type = _TYPE_BY_LOGICAL_TYPE_BY_BACKEND[backend].get(self.logical_type)
+        capabilities = _schema_backend_capabilities(backend)
+        sql_type = capabilities.logical_type_sql.get(self.logical_type)
         if sql_type is None:
-            supported = ", ".join(
-                sorted(_TYPE_BY_LOGICAL_TYPE_BY_BACKEND[backend])
-            )
+            supported = ", ".join(sorted(capabilities.logical_type_sql))
             raise SchemaContractError(
                 "Unsupported logical type "
                 f"{self.logical_type!r}. Supported: {supported}."
@@ -95,10 +119,8 @@ class PropertyField:
         constraints = [f"{column_name} {sql_type}"]
         if not self.nullable:
             constraints.append("NOT NULL")
-        if backend == "sqlite" and self.logical_type == "boolean":
+        if capabilities.boolean_check_constraint and self.logical_type == "boolean":
             constraints.append(f"CHECK ({column_name} IN (0, 1))")
-        if backend == "sqlite" and self.logical_type == "json":
-            constraints.append(f"CHECK (json_valid({column_name}))")
         return " ".join(constraints)
 
 
@@ -233,9 +255,10 @@ class GraphSchema:
     def ddl(self, backend: SchemaBackend) -> list[str]:
         self.validate()
         backend = _validated_backend(backend)
+        capabilities = _schema_backend_capabilities(backend)
 
         ddl: list[str] = []
-        if backend == "sqlite":
+        if capabilities.needs_foreign_key_pragma:
             ddl.append("PRAGMA foreign_keys = ON;")
         node_table_by_name = {
             node_type.name: node_type.table_name for node_type in self.node_types
@@ -333,12 +356,14 @@ class GraphSchema:
         return statements
 
     def _pre_table_ddl(self, table_name: str, backend: SchemaBackend) -> list[str]:
-        if backend == "sqlite":
+        capabilities = _schema_backend_capabilities(backend)
+        if not capabilities.needs_sequence_objects:
             return []
         return [f"CREATE SEQUENCE {_id_sequence_name(table_name)} START 1;"]
 
     def _id_column_sql(self, table_name: str, backend: SchemaBackend) -> str:
-        if backend == "sqlite":
+        capabilities = _schema_backend_capabilities(backend)
+        if not capabilities.needs_sequence_objects:
             return "id INTEGER PRIMARY KEY"
         return (
             "id BIGINT PRIMARY KEY DEFAULT "
@@ -350,9 +375,8 @@ class GraphSchema:
         backend: SchemaBackend,
         column_name: str,
     ) -> str:
-        if backend == "sqlite":
-            return f"{column_name} INTEGER NOT NULL"
-        return f"{column_name} BIGINT NOT NULL"
+        capabilities = _schema_backend_capabilities(backend)
+        return f"{column_name} {capabilities.reference_id_sql_type} NOT NULL"
 
     def _foreign_key_sql(
         self,
@@ -360,7 +384,7 @@ class GraphSchema:
         column_name: str,
         referenced_table: str,
     ) -> list[str]:
-        if backend == "duckdb":
+        if not _schema_backend_capabilities(backend).include_foreign_keys:
             return []
         return [
             "FOREIGN KEY "
@@ -373,7 +397,9 @@ class GraphSchema:
         column_lines: list[str],
         backend: SchemaBackend,
     ) -> str:
-        table_suffix = " STRICT" if backend == "sqlite" else ""
+        table_suffix = (
+            " STRICT" if _schema_backend_capabilities(backend).strict_tables else ""
+        )
         return (
             "CREATE TABLE "
             f"{table_name} (\n  "

@@ -8,12 +8,12 @@ this physical contract or a compatibility layer that behaves the same way.
 
 ## Migration status
 
-CypherGlot is moving away from the legacy generic JSON-backed `nodes` / `edges`
-/ `node_labels` contract and toward a generated type-aware schema.
+CypherGlot is moving away from the legacy generic `nodes` / `edges` /
+`node_labels` compatibility contract and toward a generated type-aware schema.
 
 The compiler is not fully switched yet, but this guide now describes the target
-contract the repo is migrating toward. The generic JSON-backed layout should be
-treated as legacy compatibility rather than the intended long-term backend.
+contract the repo is migrating toward. The generic compatibility layout should
+be treated as legacy behavior rather than the intended long-term backend.
 
 ## Target physical layout
 
@@ -21,7 +21,7 @@ The target SQLite contract is generated from graph schema metadata:
 
 - one table per node type
 - one table per edge type
-- typed property columns instead of a single JSON `properties` blob
+- typed property columns instead of a single catch-all `properties` blob
 - foreign keys from edge tables to their source and target node tables
 - automatically generated baseline edge traversal indexes that match one-hop
   and multi-hop traversal directions
@@ -88,12 +88,12 @@ CypherGlot's long-term type-aware target is strict relational SQL output:
 - emitted SQL should return plain scalar values and typed columns
 - whole entities should expand into stable dotted columns such as `user.id` and
   `user.name`
-- SQL should not rely on `JSON_OBJECT(...)`, `JSON_ARRAY(...)`, or other
-  dialect-specific object or list constructors for the target path
+- SQL should not rely on dialect-specific object or list constructors for the
+  target path
 
-The current JSON-shaped output mode exists only as transitional compatibility
-while the compiler migration is still in flight. It is not the intended
-long-term contract for broad SQL-dialect support via SQLGlot.
+The current object-shaped compatibility mode exists only as transitional
+behavior while the compiler migration is still in flight. It is not the
+intended long-term contract for broad SQL-dialect support via SQLGlot.
 
 This distinction matters because the storage schema can be fully fixed and
 type-aware while some return helpers still try to package values back into one
@@ -119,8 +119,8 @@ The migrated compiler should assume these access patterns:
 Helpers that naturally want list or object outputs, such as `labels(...)` and
 `keys(...)`, do not map cleanly to portable SQL columns across dialects. For
 the strict relational target path, they should therefore be handled by an upper
-runtime layer or remain unsupported rather than forcing JSON back into emitted
-SQL.
+runtime layer or remain unsupported rather than forcing structured packaging
+back into emitted SQL.
 
 Examples:
 
@@ -165,7 +165,7 @@ the schema boundary:
 - ids: integer-like values
 - node type names: text carried in schema metadata and table selection
 - relationship type names: text carried in schema metadata and table selection
-- properties: declared scalar or JSON-like fields materialized as typed columns
+- properties: declared scalar fields materialized as typed columns
 
 ## Contract vs implementation detail
 
@@ -175,7 +175,7 @@ The important target contract is:
 - stable endpoint columns: `from_id`, `to_id`
 - stable primary key column: `id`
 - type identity resolved through table choice
-- typed property columns instead of one catch-all JSON blob
+- typed property columns instead of one catch-all properties blob
 
 The exact naming scheme and extra backend-local accelerators remain
 implementation choices. In this repo, the first source-level contract for that

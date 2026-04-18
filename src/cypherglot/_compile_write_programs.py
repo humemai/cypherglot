@@ -15,6 +15,7 @@ from .ir import (
     GraphRelationalMatchMergeRelationshipWriteIR,
     GraphRelationalMergeNodeWriteIR,
     GraphRelationalMergeRelationshipWriteIR,
+    SQLBackend,
 )
 from .schema import GraphSchema
 
@@ -22,7 +23,9 @@ from .schema import GraphSchema
 def _compile_create_relationship_program(
     statement: GraphRelationalCreateRelationshipWriteIR,
     graph_schema: GraphSchema,
+    backend: SQLBackend,
 ) -> CompiledCypherProgram:
+    _ = backend
     from .compile import (
         _compile_create_node_steps,
         _compile_edge_insert_statement,
@@ -109,17 +112,23 @@ def _compile_create_relationship_from_separate_patterns_program(
 def _compile_merge_node_program(
     statement: GraphRelationalMergeNodeWriteIR,
     graph_schema: GraphSchema,
+    backend: SQLBackend,
 ) -> CompiledCypherProgram:
     from .compile import _compile_type_aware_merge_node_sql
 
     return _single_statement_program(
-        _compile_type_aware_merge_node_sql(statement.node, graph_schema)
+        _compile_type_aware_merge_node_sql(
+            statement.node,
+            graph_schema,
+            backend=backend,
+        )
     )
 
 
 def _compile_merge_relationship_program(
     statement: GraphRelationalMergeRelationshipWriteIR,
     graph_schema: GraphSchema,
+    backend: SQLBackend,
 ) -> CompiledCypherProgram:
     from ._compile_write_helpers import _compile_resolved_match_relationship_write_sql
     from .compile import (
@@ -133,6 +142,7 @@ def _compile_merge_relationship_program(
         return _compile_merge_relationship_self_loop_program(
             statement,
             graph_schema=graph_schema,
+            backend=backend,
         )
 
     if statement.left.label is None or statement.right.label is None:
@@ -169,6 +179,7 @@ def _compile_merge_relationship_program(
                     ),
                     operator="=",
                     value=value,
+                    backend=backend,
                 )
                 for field, value in statement.left.properties
             ],
@@ -181,11 +192,13 @@ def _compile_merge_relationship_program(
                     ),
                     operator="=",
                     value=value,
+                    backend=backend,
                 )
                 for field, value in statement.right.properties
             ],
         ],
         graph_schema=graph_schema,
+        backend=backend,
         left_label=statement.left.label,
         right_label=statement.right.label,
         require_label_message=(
@@ -203,6 +216,7 @@ def _compile_merge_relationship_program(
                     _compile_type_aware_merge_node_sql(
                         statement.left,
                         graph_schema,
+                        backend=backend,
                     )
                 )
             ),
@@ -211,6 +225,7 @@ def _compile_merge_relationship_program(
                     _compile_type_aware_merge_node_sql(
                         statement.right,
                         graph_schema,
+                        backend=backend,
                     )
                 )
             ),
@@ -222,6 +237,7 @@ def _compile_merge_relationship_program(
 def _compile_merge_relationship_self_loop_program(
     statement: GraphRelationalMergeRelationshipWriteIR,
     graph_schema: GraphSchema,
+    backend: SQLBackend,
 ) -> CompiledCypherProgram:
     from .compile import _compile_type_aware_merge_node_sql
 
@@ -232,6 +248,7 @@ def _compile_merge_relationship_self_loop_program(
                     _compile_type_aware_merge_node_sql(
                         statement.left,
                         graph_schema,
+                        backend=backend,
                     )
                 )
             ),
@@ -241,6 +258,7 @@ def _compile_merge_relationship_self_loop_program(
                         statement.relationship,
                         statement.left,
                         graph_schema,
+                        backend=backend,
                     )
                 )
             ),
@@ -252,6 +270,7 @@ def _compile_type_aware_merge_self_loop_edge_sql(
     relationship: RelationshipPattern,
     node: NodePattern,
     graph_schema: GraphSchema,
+    backend: SQLBackend,
 ) -> str:
     from .compile import (
         _assemble_select_sql,
@@ -287,6 +306,7 @@ def _compile_type_aware_merge_self_loop_edge_sql(
             ),
             operator="=",
             value=value,
+            backend=backend,
         )
         for field, value in node.properties
     ]
@@ -304,6 +324,7 @@ def _compile_type_aware_merge_self_loop_edge_sql(
                 ),
                 operator="=",
                 value=value,
+                backend=backend,
             )
         )
     node_where_parts.append(
@@ -336,6 +357,7 @@ def _compile_type_aware_merge_self_loop_edge_sql(
 def _compile_match_merge_relationship_sql(
     statement: GraphRelationalMatchMergeRelationshipWriteIR,
     graph_schema: GraphSchema,
+    backend: SQLBackend,
 ) -> str:
     from .compile import (
         _assemble_select_sql,
@@ -399,6 +421,7 @@ def _compile_match_merge_relationship_sql(
             ),
             operator="=",
             value=value,
+            backend=backend,
         )
         for field, value in statement.left_match.properties
     ]
@@ -411,6 +434,7 @@ def _compile_match_merge_relationship_sql(
             ),
             operator="=",
             value=value,
+            backend=backend,
         )
         for field, value in statement.right_match.properties
     )
@@ -421,6 +445,7 @@ def _compile_match_merge_relationship_sql(
                     left_alias,
                     left_type,
                     predicate,
+                    backend=backend,
                 )
             )
             continue
@@ -430,6 +455,7 @@ def _compile_match_merge_relationship_sql(
                     right_alias,
                     right_type,
                     predicate,
+                    backend=backend,
                 )
             )
             continue
@@ -451,6 +477,7 @@ def _compile_match_merge_relationship_sql(
                 ),
                 operator="=",
                 value=value,
+                backend=backend,
             )
         )
     where_parts.append(
@@ -505,6 +532,7 @@ def _compile_match_merge_relationship_sql(
 def _compile_match_create_relationship_between_nodes_sql(
     statement: GraphRelationalMatchCreateRelationshipBetweenNodesWriteIR,
     graph_schema: GraphSchema,
+    backend: SQLBackend,
 ) -> str:
     from .compile import (
         _assemble_insert_select_sql,
@@ -566,6 +594,7 @@ def _compile_match_create_relationship_between_nodes_sql(
             ),
             operator="=",
             value=value,
+            backend=backend,
         )
         for field, value in statement.left_match.properties
     ]
@@ -578,6 +607,7 @@ def _compile_match_create_relationship_between_nodes_sql(
             ),
             operator="=",
             value=value,
+            backend=backend,
         )
         for field, value in statement.right_match.properties
     )
@@ -588,6 +618,7 @@ def _compile_match_create_relationship_between_nodes_sql(
                     left_alias,
                     left_type,
                     predicate,
+                    backend=backend,
                 )
             )
             continue
@@ -597,6 +628,7 @@ def _compile_match_create_relationship_between_nodes_sql(
                     right_alias,
                     right_type,
                     predicate,
+                    backend=backend,
                 )
             )
             continue

@@ -59,6 +59,7 @@ class RenderTests(unittest.TestCase):
                 "MATCH (a:User)-[r:KNOWS]->(b:User)-[s:WORKS_AT]->(c:Company) "
                 "RETURN a.name AS user_name, c.name AS company ORDER BY company"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -106,6 +107,7 @@ class RenderTests(unittest.TestCase):
                 "MATCH (a:User)-[:KNOWS*0..2]->(b:User) "
                 "RETURN a.name AS user_name, b.name AS friend ORDER BY friend, user_name"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -126,6 +128,7 @@ class RenderTests(unittest.TestCase):
         )
         aggregate_sql = cypherglot.to_sql(
             "MATCH (a:User)-[:KNOWS*0..2]->(b:User) RETURN sum(b.age) AS total_age",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -150,6 +153,7 @@ class RenderTests(unittest.TestCase):
                 "RETURN lower(b.name) AS lower_friend, toString(b.age) AS age_text "
                 "ORDER BY age_text, lower_friend"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -173,6 +177,7 @@ class RenderTests(unittest.TestCase):
         )
         id_sql = cypherglot.to_sql(
             "MATCH (a:User)-[:KNOWS*0..2]->(b:User) RETURN id(b) AS friend_id ORDER BY friend_id",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -234,6 +239,7 @@ class RenderTests(unittest.TestCase):
                     "properties(b) AS friend_props, labels(b) AS friend_labels, keys(b) AS friend_keys, "
                     "b.name AS friend ORDER BY friend"
                 ),
+                backend="sqlite",
                 schema_context=CompilerSchemaContext.type_aware(
                     GraphSchema(
                         node_types=(
@@ -296,6 +302,7 @@ class RenderTests(unittest.TestCase):
                 "MATCH (a:User)-[:KNOWS*0..2]->(b:User) "
                 "RETURN b.name AS friend, count(b) AS total ORDER BY total DESC, friend"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -319,6 +326,7 @@ class RenderTests(unittest.TestCase):
                 "MATCH (a:User)-[:KNOWS*0..2]->(b:User) "
                 "RETURN b AS friend_node, count(b) AS total ORDER BY total DESC, friend_node"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -345,6 +353,7 @@ class RenderTests(unittest.TestCase):
                 "MATCH (a:User)-[:KNOWS*0..2]->(b:User) "
                 "RETURN properties(b) AS friend_props, count(b) AS total ORDER BY total DESC, friend_props"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -371,6 +380,7 @@ class RenderTests(unittest.TestCase):
                 "MATCH (a:User)-[:KNOWS*0..2]->(b:User) "
                 "RETURN lower(b.name) AS lowered_name, count(b) AS total ORDER BY total DESC, lowered_name"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -397,6 +407,7 @@ class RenderTests(unittest.TestCase):
                 "MATCH (a:User)-[:KNOWS*0..2]->(b:User) "
                 "RETURN toString(b.age) AS age_text, count(b) AS total ORDER BY total DESC, age_text"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -423,6 +434,7 @@ class RenderTests(unittest.TestCase):
                 "MATCH (a:User)-[:KNOWS*0..2]->(b:User) "
                 "RETURN id(b) AS friend_id, count(b) AS total ORDER BY total DESC, friend_id"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -490,6 +502,7 @@ class RenderTests(unittest.TestCase):
                     "MATCH (a:User)-[:KNOWS*0..2]->(b:User) "
                     "RETURN labels(b) AS friend_labels, count(b) AS total ORDER BY total DESC, friend_labels"
                 ),
+                backend="sqlite",
                 schema_context=CompilerSchemaContext.type_aware(
                     GraphSchema(
                         node_types=(
@@ -520,6 +533,7 @@ class RenderTests(unittest.TestCase):
                     "MATCH (a:User)-[:KNOWS*0..2]->(b:User) "
                     "RETURN keys(b) AS friend_keys, count(b) AS total ORDER BY total DESC, friend_keys"
                 ),
+                backend="sqlite",
                 schema_context=CompilerSchemaContext.type_aware(
                     GraphSchema(
                         node_types=(
@@ -574,6 +588,7 @@ class RenderTests(unittest.TestCase):
                 "MATCH (a:User)-[:KNOWS*0..2]->(b:User) "
                 "RETURN b AS friend, count(b) AS total ORDER BY friend, total"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -600,6 +615,7 @@ class RenderTests(unittest.TestCase):
                 "MATCH (a:User)-[:KNOWS*0..2]->(b:User) "
                 "RETURN properties(b) AS props, count(b) AS total ORDER BY props, total"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -655,6 +671,7 @@ class RenderTests(unittest.TestCase):
                 "RETURN type(r) AS first_rel_type, startNode(s).name AS employee, "
                 "endNode(s) AS employer ORDER BY first_rel_type, employee, employer"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -710,6 +727,7 @@ class RenderTests(unittest.TestCase):
                     "keys(s) AS rel_keys, startNode(s).name AS employee, endNode(s).id AS company_id "
                     "ORDER BY friend_props, friend_labels, rel_keys, employee, company_id"
                 ),
+                backend="sqlite",
                 schema_context=CompilerSchemaContext.type_aware(
                     GraphSchema(
                         node_types=(
@@ -753,6 +771,7 @@ class RenderTests(unittest.TestCase):
                     "labels(c) AS company_labels, startNode(s).id AS employee_id, endNode(s).name AS company_name "
                     "ORDER BY rel_props, friend_keys, company_labels, employee_id, company_name"
                 ),
+                backend="sqlite",
                 schema_context=CompilerSchemaContext.type_aware(
                     GraphSchema(
                         node_types=(
@@ -796,6 +815,7 @@ class RenderTests(unittest.TestCase):
                     "keys(s) AS rel_keys, startNode(s).name AS employee, endNode(s).id AS company_id, "
                     "count(s) AS total ORDER BY total DESC"
                 ),
+                backend="sqlite",
                 schema_context=CompilerSchemaContext.type_aware(
                     GraphSchema(
                         node_types=(
@@ -839,6 +859,7 @@ class RenderTests(unittest.TestCase):
                     "labels(c) AS company_labels, startNode(s).id AS employee_id, endNode(s).name AS company_name, "
                     "count(s) AS total ORDER BY total DESC"
                 ),
+                backend="sqlite",
                 schema_context=CompilerSchemaContext.type_aware(
                     GraphSchema(
                         node_types=(
@@ -874,6 +895,7 @@ class RenderTests(unittest.TestCase):
                 "MATCH (a:User)-[r:KNOWS]->(b:User)-[s:WORKS_AT]->(c:Company) "
                 "RETURN c.name AS company, count(s) AS total ORDER BY total DESC, company"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -920,6 +942,7 @@ class RenderTests(unittest.TestCase):
                 "RETURN startNode(s) AS employee, endNode(s) AS employer, c.name AS company "
                 "ORDER BY company"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -971,6 +994,7 @@ class RenderTests(unittest.TestCase):
                 "s AS rel, properties(s) AS rel_props, c.name AS company_name "
                 "ORDER BY company_name"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -1025,6 +1049,7 @@ class RenderTests(unittest.TestCase):
                 "s AS rel, properties(s) AS rel_props, count(s) AS total "
                 "ORDER BY total DESC"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -1077,6 +1102,7 @@ class RenderTests(unittest.TestCase):
                 "WITH b AS friend, c.name AS company "
                 "RETURN friend.name AS friend_name, company ORDER BY company"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -1128,6 +1154,7 @@ class RenderTests(unittest.TestCase):
                 "RETURN startNode(rel).name AS employee, endNode(rel) AS employer, "
                 "type(rel) AS rel_type ORDER BY employee, employer, rel_type"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -1196,6 +1223,7 @@ class RenderTests(unittest.TestCase):
                     "keys(rel) AS rel_keys, startNode(rel).name AS employee, endNode(rel).id AS company_id "
                     "ORDER BY friend_props, friend_labels, rel_keys, employee, company_id"
                 ),
+                backend="sqlite",
                 schema_context=CompilerSchemaContext.type_aware(
                     GraphSchema(
                         node_types=(
@@ -1240,6 +1268,7 @@ class RenderTests(unittest.TestCase):
                     "labels(company) AS company_labels, startNode(rel).id AS employee_id, endNode(rel).name AS company_name "
                     "ORDER BY rel_props, friend_keys, company_labels, employee_id, company_name"
                 ),
+                backend="sqlite",
                 schema_context=CompilerSchemaContext.type_aware(
                     GraphSchema(
                         node_types=(
@@ -1284,6 +1313,7 @@ class RenderTests(unittest.TestCase):
                     "keys(rel) AS rel_keys, startNode(rel).name AS employee, endNode(rel).id AS company_id, "
                     "count(rel) AS total ORDER BY total DESC"
                 ),
+                backend="sqlite",
                 schema_context=CompilerSchemaContext.type_aware(
                     GraphSchema(
                         node_types=(
@@ -1328,6 +1358,7 @@ class RenderTests(unittest.TestCase):
                     "labels(company) AS company_labels, startNode(rel).id AS employee_id, endNode(rel).name AS company_name, "
                     "count(rel) AS total ORDER BY total DESC"
                 ),
+                backend="sqlite",
                 schema_context=CompilerSchemaContext.type_aware(
                     GraphSchema(
                         node_types=(
@@ -1364,6 +1395,7 @@ class RenderTests(unittest.TestCase):
                 "WITH c.name AS company, s AS rel "
                 "RETURN company, avg(rel.since) AS mean_since ORDER BY mean_since DESC, company"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(

@@ -85,7 +85,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             expression.sql(),
@@ -123,7 +124,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 ),
             ),
-        )
+        
+            backend="sqlite",)
         aggregate_expression = cypherglot.compile_cypher_text(
             "MATCH (a:User)-[:KNOWS*0..2]->(b:User) RETURN sum(b.age) AS total_age",
             schema_context=CompilerSchemaContext.type_aware(
@@ -143,7 +145,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 ),
             ),
-        )
+        
+            backend="sqlite",)
         scalar_function_expression = cypherglot.compile_cypher_text(
             (
                 "MATCH (a:User)-[:KNOWS*0..2]->(b:User) "
@@ -170,7 +173,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 ),
             ),
-        )
+        
+            backend="sqlite",)
         id_expression = cypherglot.compile_cypher_text(
             "MATCH (a:User)-[:KNOWS*0..2]->(b:User) RETURN id(b) AS friend_id ORDER BY friend_id",
             schema_context=CompilerSchemaContext.type_aware(
@@ -190,7 +194,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 ),
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             expression.sql(),
@@ -254,7 +259,8 @@ class CompileTests(unittest.TestCase):
                         ),
                     ),
                 ),
-            )
+            
+            backend="sqlite",)
         self.assertEqual(
             scalar_function_expression.sql(),
             'SELECT * FROM (SELECT LOWER(__cg_zero_hop_node.name) AS "lower_friend", CAST(__cg_zero_hop_node.age AS TEXT) AS "age_text" '
@@ -313,7 +319,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 ),
             ),
-        )
+        
+            backend="sqlite",)
         node_expression = cypherglot.compile_cypher_text(
             (
                 "MATCH (a:User)-[:KNOWS*0..2]->(b:User) "
@@ -339,7 +346,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 ),
             ),
-        )
+        
+            backend="sqlite",)
         helper_expression = cypherglot.compile_cypher_text(
             (
                 "MATCH (a:User)-[:KNOWS*0..2]->(b:User) "
@@ -365,7 +373,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 ),
             ),
-        )
+        
+            backend="sqlite",)
         lowered_expression = cypherglot.compile_cypher_text(
             (
                 "MATCH (a:User)-[:KNOWS*0..2]->(b:User) "
@@ -391,7 +400,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 ),
             ),
-        )
+        
+            backend="sqlite",)
         age_text_expression = cypherglot.compile_cypher_text(
             (
                 "MATCH (a:User)-[:KNOWS*0..2]->(b:User) "
@@ -417,7 +427,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 ),
             ),
-        )
+        
+            backend="sqlite",)
         id_expression = cypherglot.compile_cypher_text(
             (
                 "MATCH (a:User)-[:KNOWS*0..2]->(b:User) "
@@ -443,7 +454,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 ),
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             expression.sql(),
@@ -510,7 +522,8 @@ class CompileTests(unittest.TestCase):
                         ),
                     ),
                 ),
-            )
+            
+            backend="sqlite",)
         with self.assertRaisesRegex(
             ValueError,
             "relational output mode does not yet support whole-entity or introspection returns",
@@ -540,7 +553,8 @@ class CompileTests(unittest.TestCase):
                         ),
                     ),
                 ),
-            )
+            
+            backend="sqlite",)
         self.assertEqual(
             lowered_expression.sql(),
             'SELECT variable_length_q."lowered_name" AS "lowered_name", COUNT(variable_length_q."__cg_aggregate_1") AS "total" '
@@ -594,7 +608,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 ),
             ),
-        )
+        
+            backend="sqlite",)
         properties_expression = cypherglot.compile_cypher_text(
             (
                 "MATCH (a:User)-[:KNOWS*0..2]->(b:User) "
@@ -620,7 +635,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 ),
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             entity_expression.sql(),
@@ -681,7 +697,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             expression.sql(),
@@ -735,7 +752,8 @@ class CompileTests(unittest.TestCase):
                         ),
                     )
                 ),
-            )
+            
+            backend="sqlite",)
 
     def test_compile_type_aware_fixed_length_multi_hop_complementary_helper_returns(
         self,
@@ -778,7 +796,8 @@ class CompileTests(unittest.TestCase):
                         ),
                     )
                 ),
-            )
+            
+            backend="sqlite",)
 
     def test_compile_type_aware_relational_output_mode_rejects_fixed_length_multi_hop_grouped_helper_returns(
         self,
@@ -821,7 +840,8 @@ class CompileTests(unittest.TestCase):
                         ),
                     ),
                 ),
-            )
+            
+            backend="sqlite",)
 
     def test_compile_type_aware_relational_output_mode_rejects_fixed_length_multi_hop_grouped_complementary_helper_returns(
         self,
@@ -864,7 +884,8 @@ class CompileTests(unittest.TestCase):
                         ),
                     ),
                 ),
-            )
+            
+            backend="sqlite",)
 
     def test_compile_type_aware_fixed_length_multi_hop_grouped_aggregates(self) -> None:
         expression = cypherglot.compile_cypher_text(
@@ -896,7 +917,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             expression.sql(),
@@ -938,7 +960,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             expression.sql(),
@@ -979,7 +1002,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             expression.sql(),
@@ -1020,7 +1044,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             expression.sql(),
@@ -1064,7 +1089,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             expression.sql(),
@@ -1110,7 +1136,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             expression.sql(),
@@ -1152,7 +1179,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             expression.sql(),
@@ -1197,7 +1225,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             expression.sql(),
@@ -1245,7 +1274,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 ),
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             expression.sql(),
@@ -1297,7 +1327,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 ),
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             expression.sql(),
@@ -1351,7 +1382,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 ),
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             expression.sql(),

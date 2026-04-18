@@ -20,6 +20,7 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
 
         sql = cypherglot.to_sql(
             "MATCH (u:User) RETURN u.name ORDER BY u.name",
+            backend="sqlite",
             schema_context=self._type_aware_schema_context(),
         )
 
@@ -32,6 +33,7 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
 
         program = cypherglot.render_cypher_program_text(
             "MERGE (u:User {name: 'Alice'})",
+            backend="sqlite",
             schema_context=self._type_aware_schema_context(),
         )
 
@@ -48,7 +50,11 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
         self._seed_type_aware_graph()
 
         program = cypherglot.render_cypher_program_text(
-            "MERGE (:User {name: 'Alice'})-[:WORKS_AT {since: 2020}]->(:Company {name: 'Acme'})",
+            (
+                "MERGE (:User {name: 'Alice'})"
+                "-[:WORKS_AT {since: 2020}]->(:Company {name: 'Acme'})"
+            ),
+            backend="sqlite",
             schema_context=self._type_aware_schema_context(),
         )
 
@@ -76,6 +82,7 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
 
         program = cypherglot.render_cypher_program_text(
             "MERGE (u:User {name: 'Alice'})-[:KNOWS]->(u:User {name: 'Alice'})",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -101,6 +108,7 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "RETURN a.name AS user_name, r.since AS since, b.name AS company "
                 "ORDER BY company"
             ),
+            backend="sqlite",
             schema_context=self._type_aware_schema_context(),
         )
 
@@ -121,6 +129,7 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "MATCH (u:User)-[r:KNOWS]->(u:User) "
                 "RETURN u.name AS user_name ORDER BY user_name"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -136,6 +145,7 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "MATCH (u:User {name: 'Alice'}) "
                 "CREATE (u)-[:WORKS_AT {since: 2024}]->(:Company {name: 'Cypher'})"
             ),
+            backend="sqlite",
             schema_context=self._type_aware_schema_context(),
         )
 
@@ -160,7 +170,11 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
         self._seed_type_aware_graph()
 
         program = cypherglot.render_cypher_program_text(
-            "MATCH (b:Company {name: 'Acme'}) CREATE (:User {name: 'Cara'})-[:WORKS_AT {since: 2024}]->(b)",
+            (
+                "MATCH (b:Company {name: 'Acme'}) "
+                "CREATE (:User {name: 'Cara'})-[:WORKS_AT {since: 2024}]->(b)"
+            ),
+            backend="sqlite",
             schema_context=self._type_aware_schema_context(),
         )
 
@@ -170,7 +184,10 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
             "SELECT id, name, age FROM cg_node_user ORDER BY id"
         ).fetchall()
         works_at = self.conn.execute(
-            "SELECT from_id, to_id, since FROM cg_edge_works_at ORDER BY from_id, to_id, since"
+            (
+                "SELECT from_id, to_id, since FROM cg_edge_works_at "
+                "ORDER BY from_id, to_id, since"
+            )
         ).fetchall()
 
         self.assertEqual(users, [(1, "Alice", 30), (2, "Bob", 25), (3, "Cara", None)])
@@ -184,6 +201,7 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "MATCH (a:User {name: 'Alice'}), (b:Company {name: 'Acme'}) "
                 "CREATE (a)-[:WORKS_AT {since: 2024}]->(b)"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -204,6 +222,7 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "MATCH (a:User), (b:Company) WHERE a.name = 'Alice' "
                 "AND b.name = 'Acme' CREATE (a)-[:WORKS_AT {since: 2025}]->(b)"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -224,6 +243,7 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "MATCH (a:User), (b:Company) WHERE b.name = 'Acme' "
                 "CREATE (a)-[:WORKS_AT {since: 2026}]->(b)"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -252,7 +272,11 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
         self._seed_type_aware_graph()
 
         sql = cypherglot.to_sql(
-            "MATCH (a:User)-[r:WORKS_AT]->(b:Company {name: 'Acme'}) CREATE (a)-[:WORKS_AT {since: 2024}]->(b)",
+            (
+                "MATCH (a:User)-[r:WORKS_AT]->(b:Company {name: 'Acme'}) "
+                "CREATE (a)-[:WORKS_AT {since: 2024}]->(b)"
+            ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -271,7 +295,11 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
         self._seed_type_aware_graph()
 
         sql = cypherglot.to_sql(
-            "MATCH (a:User)-[r:WORKS_AT]->(b:Company) WHERE r.since = 2020 CREATE (a)-[:WORKS_AT {since: 2024}]->(b)",
+            (
+                "MATCH (a:User)-[r:WORKS_AT]->(b:Company) "
+                "WHERE r.since = 2020 CREATE (a)-[:WORKS_AT {since: 2024}]->(b)"
+            ),
+            backend="sqlite",
             schema_context=self._type_aware_schema_context(),
         )
 
@@ -284,13 +312,18 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
 
         self.assertEqual(works_at, [(1, 10, 2020), (2, 11, 2021), (1, 10, 2024)])
 
-    def test_type_aware_match_create_with_left_and_relationship_filters_executes_on_sqlite(
+    def test_type_aware_match_create_with_left_rel_filters_executes_on_sqlite(
         self,
     ) -> None:
         self._seed_type_aware_graph()
 
         sql = cypherglot.to_sql(
-            "MATCH (a:User)-[r:WORKS_AT]->(b:Company) WHERE a.name = 'Alice' AND r.since = 2020 CREATE (a)-[:WORKS_AT {since: 2024}]->(b)",
+            (
+                "MATCH (a:User)-[r:WORKS_AT]->(b:Company) "
+                "WHERE a.name = 'Alice' AND r.since = 2020 "
+                "CREATE (a)-[:WORKS_AT {since: 2024}]->(b)"
+            ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -309,7 +342,12 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
         self._seed_type_aware_graph()
 
         sql = cypherglot.to_sql(
-            "MATCH (a:User {name: 'Alice'})-[r:WORKS_AT]->(b:Company {name: 'Acme'}) CREATE (a)-[:WORKS_AT {since: 2024}]->(b)",
+            (
+                "MATCH (a:User {name: 'Alice'})-[r:WORKS_AT]->"
+                "(b:Company {name: 'Acme'}) "
+                "CREATE (a)-[:WORKS_AT {since: 2024}]->(b)"
+            ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -326,7 +364,12 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
         self._seed_type_aware_graph()
 
         sql = cypherglot.to_sql(
-            "MATCH (a:User {name: 'Alice'})-[r:WORKS_AT]->(b:Company {name: 'Acme'}) WHERE r.since = 2020 CREATE (a)-[:WORKS_AT {since: 2024}]->(b)",
+            (
+                "MATCH (a:User {name: 'Alice'})-[r:WORKS_AT]->"
+                "(b:Company {name: 'Acme'}) WHERE r.since = 2020 "
+                "CREATE (a)-[:WORKS_AT {since: 2024}]->(b)"
+            ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -344,6 +387,7 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
 
         sql = cypherglot.to_sql(
             "MATCH (a:User {name: 'Alice'}) CREATE (a)-[:KNOWS]->(a)",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -364,6 +408,7 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "MATCH (a:User {name: 'Alice'}), (b:Company {name: 'Acme'}) "
                 "MERGE (a)-[:WORKS_AT {since: 2020}]->(b)"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -385,6 +430,7 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "MATCH (a:User), (b:Company) WHERE b.name = 'Acme' "
                 "MERGE (a)-[:WORKS_AT {since: 2020}]->(b)"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -406,6 +452,7 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "MATCH (a:User), (b:Company) WHERE a.name = 'Alice' "
                 "AND b.name = 'Acme' MERGE (a)-[:WORKS_AT {since: 2020}]->(b)"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -428,7 +475,11 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
         self._seed_type_aware_graph()
 
         sql = cypherglot.to_sql(
-            "MATCH (a:User)-[r:WORKS_AT]->(b:Company {name: 'Acme'}) MERGE (a)-[:WORKS_AT {since: 2024}]->(b)",
+            (
+                "MATCH (a:User)-[r:WORKS_AT]->(b:Company {name: 'Acme'}) "
+                "MERGE (a)-[:WORKS_AT {since: 2024}]->(b)"
+            ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -448,7 +499,11 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
         self._seed_type_aware_graph()
 
         sql = cypherglot.to_sql(
-            "MATCH (a:User)-[r:WORKS_AT]->(b:Company) WHERE r.since = 2020 MERGE (a)-[:WORKS_AT {since: 2024}]->(b)",
+            (
+                "MATCH (a:User)-[r:WORKS_AT]->(b:Company) "
+                "WHERE r.since = 2020 MERGE (a)-[:WORKS_AT {since: 2024}]->(b)"
+            ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -466,7 +521,12 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
         self._seed_type_aware_graph()
 
         sql = cypherglot.to_sql(
-            "MATCH (a:User {name: 'Alice'})-[r:WORKS_AT]->(b:Company {name: 'Acme'}) WHERE r.since = 2020 MERGE (a)-[:WORKS_AT {since: 2024}]->(b)",
+            (
+                "MATCH (a:User {name: 'Alice'})-[r:WORKS_AT]->"
+                "(b:Company {name: 'Acme'}) WHERE r.since = 2020 "
+                "MERGE (a)-[:WORKS_AT {since: 2024}]->(b)"
+            ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -480,13 +540,18 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
 
         self.assertEqual(works_at, [(1, 10, 2020), (2, 11, 2021), (1, 10, 2024)])
 
-    def test_type_aware_match_merge_with_left_and_relationship_filters_executes_on_sqlite(
+    def test_type_aware_match_merge_with_left_rel_filters_executes_on_sqlite(
         self,
     ) -> None:
         self._seed_type_aware_graph()
 
         sql = cypherglot.to_sql(
-            "MATCH (a:User)-[r:WORKS_AT]->(b:Company) WHERE a.name = 'Alice' AND r.since = 2020 MERGE (a)-[:WORKS_AT {since: 2024}]->(b)",
+            (
+                "MATCH (a:User)-[r:WORKS_AT]->(b:Company) "
+                "WHERE a.name = 'Alice' AND r.since = 2020 "
+                "MERGE (a)-[:WORKS_AT {since: 2024}]->(b)"
+            ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -506,7 +571,12 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
         self._seed_type_aware_graph()
 
         sql = cypherglot.to_sql(
-            "MATCH (a:User {name: 'Alice'})-[r:WORKS_AT]->(b:Company {name: 'Acme'}) MERGE (a)-[:WORKS_AT {since: 2024}]->(b)",
+            (
+                "MATCH (a:User {name: 'Alice'})-[r:WORKS_AT]->"
+                "(b:Company {name: 'Acme'}) "
+                "MERGE (a)-[:WORKS_AT {since: 2024}]->(b)"
+            ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -525,6 +595,7 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
 
         sql = cypherglot.to_sql(
             "MATCH (a:User {name: 'Alice'}) MERGE (a)-[:KNOWS]->(a)",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -544,7 +615,11 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
         self._seed_type_aware_graph()
 
         program = cypherglot.render_cypher_program_text(
-            "MATCH (a:User {name: 'Alice'}) MERGE (a)-[:INTRODUCED]->(:Person {name: 'Cara'})",
+            (
+                "MATCH (a:User {name: 'Alice'}) "
+                "MERGE (a)-[:INTRODUCED]->(:Person {name: 'Cara'})"
+            ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -566,6 +641,7 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "MATCH (a:User {name: 'Alice'})-[r:KNOWS]->(b:User) "
                 "CREATE (a)-[:INTRODUCED]->(:Person {name: 'Dana'})"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
         filtered_right_program = cypherglot.render_cypher_program_text(
@@ -573,6 +649,7 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "MATCH (a:User)-[r:KNOWS]->(b:User {name: 'Bob'}) "
                 "CREATE (a)-[:INTRODUCED]->(:Person {name: 'Erin'})"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -595,7 +672,11 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
         self._seed_type_aware_graph()
 
         program = cypherglot.render_cypher_program_text(
-            "MATCH (b:Company {name: 'Acme'}) MERGE (:User {name: 'Cara'})-[:WORKS_AT {since: 2024}]->(b)",
+            (
+                "MATCH (b:Company {name: 'Acme'}) "
+                "MERGE (:User {name: 'Cara'})-[:WORKS_AT {since: 2024}]->(b)"
+            ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -606,7 +687,10 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
             "SELECT id, name, age FROM cg_node_user ORDER BY id"
         ).fetchall()
         works_at = self.conn.execute(
-            "SELECT from_id, to_id, since FROM cg_edge_works_at ORDER BY from_id, to_id, since"
+            (
+                "SELECT from_id, to_id, since FROM cg_edge_works_at "
+                "ORDER BY from_id, to_id, since"
+            )
         ).fetchall()
 
         self.assertEqual(users, [(1, "Alice", 30), (2, "Bob", 25), (3, "Cara", None)])
@@ -617,6 +701,7 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
 
         sql = cypherglot.to_sql(
             "MATCH (u:User {name: 'Alice'}) SET u.age = 31",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -637,6 +722,7 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "MATCH (a:User)-[r:WORKS_AT]->(b:Company) "
                 "WHERE a.name = 'Alice' SET r.since = 2024"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -652,13 +738,17 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
             [(1, 10, 2024), (2, 11, 2021)],
         )
 
-    def test_type_aware_match_set_relationship_with_right_endpoint_filter_executes_on_sqlite(
+    def test_type_aware_match_set_relationship_with_right_filter_executes_on_sqlite(
         self,
     ) -> None:
         self._seed_type_aware_graph()
 
         sql = cypherglot.to_sql(
-            "MATCH (a:User)-[r:WORKS_AT]->(b:Company {name: 'Acme'}) SET r.since = 2025",
+            (
+                "MATCH (a:User)-[r:WORKS_AT]->(b:Company {name: 'Acme'}) "
+                "SET r.since = 2025"
+            ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -671,13 +761,17 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
 
         self.assertEqual(works_at, [(1, 10, 2025), (2, 11, 2021)])
 
-    def test_type_aware_match_set_relationship_with_relationship_filter_executes_on_sqlite(
+    def test_type_aware_match_set_relationship_with_rel_filter_executes_on_sqlite(
         self,
     ) -> None:
         self._seed_type_aware_graph()
 
         sql = cypherglot.to_sql(
-            "MATCH (a:User)-[r:WORKS_AT]->(b:Company) WHERE r.since = 2020 SET r.since = 2025",
+            (
+                "MATCH (a:User)-[r:WORKS_AT]->(b:Company) "
+                "WHERE r.since = 2020 SET r.since = 2025"
+            ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -696,7 +790,11 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
         self._seed_type_aware_graph()
 
         sql = cypherglot.to_sql(
-            "MATCH (a:User)-[r:WORKS_AT]->(b:Company {name: 'Acme'}) WHERE r.since = 2020 SET r.since = 2025",
+            (
+                "MATCH (a:User)-[r:WORKS_AT]->(b:Company {name: 'Acme'}) "
+                "WHERE r.since = 2020 SET r.since = 2025"
+            ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -709,13 +807,17 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
 
         self.assertEqual(works_at, [(1, 10, 2025), (2, 11, 2021)])
 
-    def test_type_aware_match_set_relationship_with_left_and_relationship_filters_executes_on_sqlite(
+    def test_type_aware_match_set_relationship_with_left_rel_filters_executes_on_sqlite(
         self,
     ) -> None:
         self._seed_type_aware_graph()
 
         sql = cypherglot.to_sql(
-            "MATCH (a:User)-[r:WORKS_AT]->(b:Company) WHERE a.name = 'Alice' AND r.since = 2020 SET r.since = 2025",
+            (
+                "MATCH (a:User)-[r:WORKS_AT]->(b:Company) "
+                "WHERE a.name = 'Alice' AND r.since = 2020 SET r.since = 2025"
+            ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -728,13 +830,17 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
 
         self.assertEqual(works_at, [(1, 10, 2025), (2, 11, 2021)])
 
-    def test_type_aware_match_set_relationship_with_both_endpoint_filters_executes_on_sqlite(
+    def test_type_aware_match_set_relationship_with_both_filters_executes_on_sqlite(
         self,
     ) -> None:
         self._seed_type_aware_graph()
 
         sql = cypherglot.to_sql(
-            "MATCH (a:User {name: 'Alice'})-[r:WORKS_AT]->(b:Company {name: 'Acme'}) SET r.since = 2025",
+            (
+                "MATCH (a:User {name: 'Alice'})-[r:WORKS_AT]->"
+                "(b:Company {name: 'Acme'}) SET r.since = 2025"
+            ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -753,7 +859,12 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
         self._seed_type_aware_graph()
 
         sql = cypherglot.to_sql(
-            "MATCH (a:User {name: 'Alice'})-[r:WORKS_AT]->(b:Company {name: 'Acme'}) WHERE r.since = 2020 SET r.since = 2025",
+            (
+                "MATCH (a:User {name: 'Alice'})-[r:WORKS_AT]->"
+                "(b:Company {name: 'Acme'}) WHERE r.since = 2020 "
+                "SET r.since = 2025"
+            ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -798,7 +909,11 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
         local_conn.commit()
 
         sql = cypherglot.to_sql(
-            "MATCH (a:User)-[r:KNOWS]->(a:User) WHERE a.name = 'Alice' SET r.since = 2021",
+            (
+                "MATCH (a:User)-[r:KNOWS]->(a:User) "
+                "WHERE a.name = 'Alice' SET r.since = 2021"
+            ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(local_schema),
         )
 
@@ -817,6 +932,7 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
 
         sql = cypherglot.to_sql(
             "MATCH (u:User {name: 'Alice'}) DETACH DELETE u",
+            backend="sqlite",
             schema_context=self._type_aware_schema_context(),
         )
 
@@ -842,6 +958,7 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
 
         sql = cypherglot.to_sql(
             "MATCH (a:User)-[r:WORKS_AT]->(b:Company) WHERE a.name = 'Alice' DELETE r",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -854,13 +971,14 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
 
         self.assertEqual(works_at, [(2, 11, 2021)])
 
-    def test_type_aware_match_delete_relationship_with_right_endpoint_filter_executes_on_sqlite(
+    def test_type_aware_match_delete_relationship_with_right_filter_executes_on_sqlite(
         self,
     ) -> None:
         self._seed_type_aware_graph()
 
         sql = cypherglot.to_sql(
             "MATCH (a:User)-[r:WORKS_AT]->(b:Company {name: 'Acme'}) DELETE r",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -873,13 +991,14 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
 
         self.assertEqual(works_at, [(2, 11, 2021)])
 
-    def test_type_aware_match_delete_relationship_with_relationship_filter_executes_on_sqlite(
+    def test_type_aware_match_delete_relationship_with_rel_filter_executes_on_sqlite(
         self,
     ) -> None:
         self._seed_type_aware_graph()
 
         sql = cypherglot.to_sql(
             "MATCH (a:User)-[r:WORKS_AT]->(b:Company) WHERE r.since = 2020 DELETE r",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -892,13 +1011,17 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
 
         self.assertEqual(works_at, [(2, 11, 2021)])
 
-    def test_type_aware_match_delete_relationship_with_combined_filters_executes_on_sqlite(
+    def test_type_aware_match_delete_rel_with_combined_filters_executes_on_sqlite(
         self,
     ) -> None:
         self._seed_type_aware_graph()
 
         sql = cypherglot.to_sql(
-            "MATCH (a:User)-[r:WORKS_AT]->(b:Company {name: 'Acme'}) WHERE r.since = 2020 DELETE r",
+            (
+                "MATCH (a:User)-[r:WORKS_AT]->(b:Company {name: 'Acme'}) "
+                "WHERE r.since = 2020 DELETE r"
+            ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -911,13 +1034,17 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
 
         self.assertEqual(works_at, [(2, 11, 2021)])
 
-    def test_type_aware_match_delete_relationship_with_left_and_relationship_filters_executes_on_sqlite(
+    def test_type_aware_match_delete_rel_with_left_filters_executes_on_sqlite(
         self,
     ) -> None:
         self._seed_type_aware_graph()
 
         sql = cypherglot.to_sql(
-            "MATCH (a:User)-[r:WORKS_AT]->(b:Company) WHERE a.name = 'Alice' AND r.since = 2020 DELETE r",
+            (
+                "MATCH (a:User)-[r:WORKS_AT]->(b:Company) "
+                "WHERE a.name = 'Alice' AND r.since = 2020 DELETE r"
+            ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -930,13 +1057,17 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
 
         self.assertEqual(works_at, [(2, 11, 2021)])
 
-    def test_type_aware_match_delete_relationship_with_both_endpoint_filters_executes_on_sqlite(
+    def test_type_aware_match_delete_relationship_with_both_filters_executes_on_sqlite(
         self,
     ) -> None:
         self._seed_type_aware_graph()
 
         sql = cypherglot.to_sql(
-            "MATCH (a:User {name: 'Alice'})-[r:WORKS_AT]->(b:Company {name: 'Acme'}) DELETE r",
+            (
+                "MATCH (a:User {name: 'Alice'})-[r:WORKS_AT]->"
+                "(b:Company {name: 'Acme'}) DELETE r"
+            ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -955,7 +1086,11 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
         self._seed_type_aware_graph()
 
         sql = cypherglot.to_sql(
-            "MATCH (a:User {name: 'Alice'})-[r:WORKS_AT]->(b:Company {name: 'Acme'}) WHERE r.since = 2020 DELETE r",
+            (
+                "MATCH (a:User {name: 'Alice'})-[r:WORKS_AT]->"
+                "(b:Company {name: 'Acme'}) WHERE r.since = 2020 DELETE r"
+            ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -980,6 +1115,7 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
 
         sql = cypherglot.to_sql(
             "MATCH (a:User)-[r:KNOWS]->(a:User) WHERE a.name = 'Alice' DELETE r",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 

@@ -65,11 +65,14 @@ class BackendCapabilities:
     supports_reads: bool = True
     supports_writes: bool = True
     supports_recursive_cte: bool = True
+    render_dialect: str | None = None
     supports_returning: bool = False
     supports_update_from: bool = False
     supports_delete_using: bool = False
     supports_native_boolean: bool = True
-    supports_json_text_functions: bool = True
+    numeric_coercion_sql_type: str | None = None
+    numeric_coercion_is_tolerant: bool = False
+    integer_cast_requires_truncation: bool = False
 
 
 ReadPredicate = Predicate | WithPredicate
@@ -230,9 +233,8 @@ class GraphRelationalReadIR:
     skip: int | None = None
     source: GraphRelationalReadIR | None = None
     unwind_alias: str | None = None
-    unwind_source_kind: Literal["literal", "parameter"] | None = None
+    unwind_source_kind: Literal["literal"] | None = None
     unwind_source_items: tuple[CypherValue, ...] = ()
-    unwind_source_param_name: str | None = None
 
     @property
     def node(self) -> NodePattern:
@@ -302,6 +304,10 @@ BACKEND_CAPABILITIES: dict[SQLBackend, BackendCapabilities] = {
         supports_update_from=True,
         supports_delete_using=False,
         supports_native_boolean=True,
+        render_dialect="duckdb",
+        numeric_coercion_sql_type="DOUBLE",
+        numeric_coercion_is_tolerant=True,
+        integer_cast_requires_truncation=True,
     ),
     SQLBackend.POSTGRESQL: BackendCapabilities(
         backend=SQLBackend.POSTGRESQL,
@@ -310,6 +316,8 @@ BACKEND_CAPABILITIES: dict[SQLBackend, BackendCapabilities] = {
         supports_update_from=True,
         supports_delete_using=True,
         supports_native_boolean=True,
+        render_dialect="postgres",
+        integer_cast_requires_truncation=True,
     ),
 }
 
@@ -542,7 +550,6 @@ def _build_read_ir(
             unwind_alias=statement.alias,
             unwind_source_kind=statement.source_kind,
             unwind_source_items=statement.source_items,
-            unwind_source_param_name=statement.source_param_name,
         )
     return None
 

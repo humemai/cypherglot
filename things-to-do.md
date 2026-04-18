@@ -74,7 +74,12 @@ What 80% would require later:
 Replace the current JSON-backed relational assumptions with a generated
 type-aware schema that becomes the primary CypherGlot backend contract.
 
-Status: complete
+Status: complete.
+
+The broad type-aware storage migration is now complete for the current
+release contract. The reopened follow-up closed the remaining contract
+gaps around JSON-valued property types, strict relational helper/output
+surfaces, and DuckDB's rewrite-heavy compatibility path.
 
 Release scope for `v0.1.0`:
 
@@ -501,6 +506,7 @@ Working policy for this migration:
       target. The remaining generic compatibility runtimes are isolated legacy
       surfaces, not repo-wide disagreement about the intended relational
       contract.
+
 ### Post-migration cleanup follow-up
 
 These are follow-up cleanup and evidence items after the migration itself,
@@ -530,6 +536,105 @@ not blockers for calling the type-aware schema migration complete.
       entrypoints plus the SQLite, DuckDB, and PostgreSQL backends, with the
       baseline written to
       `scripts/benchmarks/results/compiler-post-migration-cleanup.json`.
+
+### Reopened follow-up
+
+These are not generic cleanup nice-to-haves anymore. They are the remaining
+work needed to make the type-aware migration internally consistent with the
+relational-storage decision and the compiler-latency target.
+
+- [x] Remove JSON-valued property types from the public schema contract so the
+      generated type-aware path is scalar-relational only rather than still
+      admitting `json` as a logical property family in `GraphSchema` and the
+      schema text surface.
+      Done: `cypherglot.schema` no longer maps a `json` logical type for any
+      backend, the graph-native schema text parser no longer accepts `JSON`
+      property declarations, the direct schema-contract guide now describes
+      typed properties as scalar fields only, and focused schema plus
+      schema-command regression coverage now proves that the removed logical
+      type is rejected instead of silently carried forward.
+- [x] Update the repo docs and public contract wording so the target type-aware
+      schema no longer describes properties as scalar-or-JSON-like, and so the
+      admitted relational path is explicit that JSON-valued properties are out
+      of scope rather than a lingering maybe-supported edge case.
+      Done: the README plus the schema-contract, public-entrypoints, and
+      admitted-subset guides now describe the product path in typed-column
+      terms, remove stale generic JSON-backed walkthrough wording, and reflect
+      the current literal-only `UNWIND` admission instead of preserving the old
+      parameter-driven JSON-expansion path in the docs.
+- [x] Audit the active compile/render/runtime codepaths and delete any
+      remaining product-path assumptions that still treat JSON-valued property
+      storage as something the type-aware relational contract should carry.
+      Done so far: parameter-backed `UNWIND` is no longer admitted, so the last
+      live compiler dependency on SQL JSON table expansion (`JSON_EACH(...)`)
+      has been removed from `src/cypherglot`; the active compiler source now
+      contains no remaining `json` references under `src/cypherglot`, so the
+      product-path compiler and lowering code no longer carry JSON-valued
+      storage assumptions. The remaining repo-level `json` mentions now sit in
+      roadmap history, benchmark/file-format surfaces, and rejection coverage
+      that proves removed support stays removed.
+- [x] Tighten the remaining helper and projection surfaces so object/list-shaped
+      helpers such as `properties(...)`, `labels(...)`, `keys(...)`,
+      `startNode(...)`, `endNode(...)`, and whole-entity reconstruction are
+      either expressed as strict relational dotted-column output or handled by
+      an upper runtime layer, but never by reintroducing JSON-valued storage or
+      SQL-side JSON-shaped compatibility behavior.
+      Done: the strict relational type-aware path now expands admitted
+      whole-entity, `properties(...)`, and whole `startNode(...)` /
+      `endNode(...)` endpoint returns into dotted typed columns across direct,
+      fixed-length-chain, variable-length, and `WITH` rebound slices, while
+      unsupported list/object introspection helpers such as `labels(...)` and
+      `keys(...)` are rejected consistently in compile, render, and runtime
+      coverage instead of silently routing through SQL-side packaging or legacy
+      storage assumptions.
+- [x] Replace the current DuckDB post-lowering rewrite pipeline with a direct
+      type-aware DuckDB lowering path so DuckDB can stop after the shared IR
+      plus backend lowering stage instead of compiling generic SQL first and
+      then paying for whole-tree repair passes.
+- [x] Eliminate DuckDB rewrite passes incrementally by removing the categories
+      of fallback output that force them, starting with JSON-extract-driven
+      property access and the extra numeric/order/min-max repairs layered on
+      top of that compatibility shape.
+      Done so far: the dead JSON-extract-specific DuckDB rewrite branch has now
+      been removed because the active type-aware compiler path no longer emits
+      `JSON_EXTRACT(...)` ASTs into DuckDB lowering; focused DuckDB render plus
+      DuckDB/SQLite parity coverage stayed green after deleting that category.
+      The old constant-order cleanup rewrite has now also been removed after
+      upstream type-aware lowering stopped emitting no-op literal/parameter
+      `ORDER BY` terms, and focused render plus backend coverage stayed green
+      with the DuckDB `ORDER` rewrite deleted. The old DuckDB
+      `LENGTH(...)`-operand rewrite has now also been removed after admitted
+      type-aware `size(...)` lowering started emitting explicit text coercion
+      upstream, and focused compile/render coverage stayed green with that
+      backend rewrite deleted. The old DuckDB numeric-function rewrite has now
+      also been removed after direct type-aware DuckDB lowering started
+      emitting explicit numeric coercion for admitted scalar math functions and
+      `SUM(...)` / `AVG(...)` aggregates upstream, with focused DuckDB backend,
+      parity, runtime, and shared compile/render coverage staying green. The
+      old DuckDB numeric-comparison rewrite has now also been removed after the
+      shared type-aware predicate lowering started emitting explicit numeric
+      coercion for DuckDB typed-column comparisons against numeric literals in
+      `WHERE`, rebound `WITH`, and predicate-return slices, with focused
+      DuckDB backend, parity, runtime, and shared compile/render coverage
+      staying green after deleting that backend pass. The old DuckDB
+      integer-cast rewrite has now also been removed after shared type-aware
+      read and rebound `WITH` lowering started emitting truncating integer
+      casts directly, so DuckDB now runs through the shared backend lowerer
+      without any post-lowering AST repair pass.
+- [x] Re-benchmark DuckDB compiler latency after each direct-lowering slice so
+      the repo has explicit evidence for whether these removals move the
+      read-only admitted subset toward the roughly `~1 ms` end-to-end compile
+      target.
+      Done: refreshed
+      `scripts/benchmarks/results/compiler-post-migration-cleanup.json`
+      after removing the final DuckDB rewrite pass. In the lightweight
+      checkpoint run (`iterations=1`, `warmup=0`, `sqlglot-mode=off`), DuckDB
+      backend-lowering mean latency dropped from about `827.5 us` to about
+      `113.0 us`, while end-to-end compile mean latency moved from about
+      `3403.7 us` to about `3124.6 us`. That confirms the rewrite removals are
+      materially reducing DuckDB backend-lowering cost, but the admitted
+      compile path still sits above the `~1 ms` target because render-stage
+      cost remains the dominant slice.
 
 ## Phase 1
 
@@ -1598,13 +1703,13 @@ Recommended implementation order for this phase:
       `compile.py` as the immediate Phase 12 target; then, once that core
       lowering/backend slice settles, reassess the remaining oversized support
       and test files and split only the ones that still look structurally
-      justified rather than line-count noisy. Started: the DuckDB SQLGlot
-      expression rewrite block has now been split out of `compile.py` into
-      `src/cypherglot/_compile_duckdb.py`, so the backend-specific AST rewrite
-      logic no longer sits inline beside the main lowering dispatch and write
-      compilation paths, and that same module now also owns the DuckDB
-      program-level rewrite wrapper instead of keeping that backend-specific
-      step traversal in `compile.py`. The shared SQL string assembly,
+      justified rather than line-count noisy. Started: the former DuckDB
+      SQLGlot rewrite block was first split out of `compile.py` so the
+      backend-specific cleanup could be isolated, and the later type-aware
+      migration then removed that rewrite-heavy path entirely. DuckDB now uses
+      the shared backend lowerer directly, with only narrow backend-specific
+      branches left inside the shared type-aware compiler where SQL semantics
+      genuinely differ. The shared SQL string assembly,
       schema-less predicate, and basic property/value SQL helpers have now
       also been split into `src/cypherglot/_compile_sql_utils.py`, so
       extracted lowering helpers no longer have to keep reaching back into
@@ -1637,16 +1742,14 @@ Recommended implementation order for this phase:
       also lives in `src/cypherglot/_compile_type_aware_reads.py`, so the main
       compiler file no longer owns that read-shaping seam inline either and
       the variable-length plus `WITH` modules now import that family directly
-      instead of reaching back through `compile.py`. The remaining generic
-      non-type-aware read helper family for chain source assembly, relationship
-      source assembly, `UNWIND`, and generic `WITH`/`RETURN` read shaping now
-      also lives in `src/cypherglot/_compile_read_helpers.py`, so the main
-      compiler file has dropped that neighboring read-helper seam too rather
-      than keeping both the type-aware and schema-less read helper stacks
-      piled into the same handwritten module. The accidental duplicate second
-      copy of that generic read-helper module has now also been removed, which
-      drops `src/cypherglot/_compile_read_helpers.py` back under the current
-      handwritten size target instead of carrying dead duplicate definitions.
+      instead of reaching back through `compile.py`. The old generic
+      non-type-aware read helper family that previously covered chain source
+      assembly, relationship source assembly, `UNWIND`, and generic
+      `WITH`/`RETURN` shaping has now been retired from the active compiler
+      path altogether. The one admitted slice that was still using it,
+      `UNWIND`, now lives in `src/cypherglot/_compile_unwind.py`, and the
+      orphaned JSON-era helper module has been deleted rather than kept around
+      as dead compatibility scaffolding.
       The remaining matched/traversal relationship write helper cluster has now
       also been split out of `compile.py` into
       `src/cypherglot/_compile_write_helpers.py`, which drops the main compiler

@@ -69,14 +69,14 @@ CypherGlot’s output is schema-aware. If you want to execute its compiled SQL,
 your runtime needs to provide the graph-to-table layout that the compiler
 expects.
 
-The repo is moving from the legacy generic JSON-backed graph layout toward a
+The repo is moving from the legacy generic graph layout toward a
 generated type-aware schema contract.
 
 The long-term target contract is:
 
 - one table per node type
 - one table per edge type
-- typed property columns instead of one catch-all JSON `properties` blob
+- typed property columns instead of one catch-all `properties` blob
 - explicit `from_id` and `to_id` foreign keys on edge tables
 - traversal-oriented indexes on generated edge tables
 

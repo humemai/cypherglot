@@ -74,7 +74,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(len(program.steps), 1)
         loop = program.steps[0]
@@ -120,7 +121,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         filtered_type_aware_loop = filtered_type_aware_program.steps[0]
         assert isinstance(filtered_type_aware_loop, cypherglot.CompiledCypherLoop)
@@ -150,7 +152,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(len(program.steps), 1)
         loop = program.steps[0]
@@ -194,7 +197,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         filtered_type_aware_loop = filtered_type_aware_program.steps[0]
         assert isinstance(filtered_type_aware_loop, cypherglot.CompiledCypherLoop)
@@ -224,7 +228,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         loop = program.steps[0]
         assert isinstance(loop, cypherglot.CompiledCypherLoop)
@@ -260,7 +265,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         filtered_type_aware_loop = filtered_type_aware_program.steps[0]
         assert isinstance(filtered_type_aware_loop, cypherglot.CompiledCypherLoop)
@@ -290,7 +296,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         loop = program.steps[0]
         assert isinstance(loop, cypherglot.CompiledCypherLoop)
@@ -330,7 +337,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         filtered_type_aware_loop = filtered_type_aware_program.steps[0]
         assert isinstance(filtered_type_aware_loop, cypherglot.CompiledCypherLoop)
@@ -344,4 +352,5 @@ class CompileTests(unittest.TestCase):
             cypherglot.compile_cypher_text(
                 "CREATE (:User {name: 'Alice'})",
                 schema_context=_public_api_schema_context(),
-            )
+            
+            backend="sqlite",)

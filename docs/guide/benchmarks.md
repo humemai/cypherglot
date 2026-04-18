@@ -30,7 +30,7 @@ CypherGlot compilation. Instead, it builds the same synthetic graph into three
 different SQLite layouts and benchmarks a representative set of direct SQL
 query shapes against each layout:
 
-- generic JSON-backed `nodes` and `edges`
+- generic compatibility `nodes` and `edges`
 - generic typed-property tables
 - type-aware per-node-type and per-edge-type tables
 
@@ -202,9 +202,11 @@ Supporting files:
 
 ### Compiler scope
 
-This harness is for compiler latency, not backend execution. It measures the
-public CypherGlot stages and entrypoints that matter for the current admitted
-subset:
+This harness is for compiler latency, not backend execution. It now measures
+the general relational IR pipeline plus the current public compiler entrypoints
+over the admitted `v0.1.0` subset.
+
+Public entrypoints covered:
 
 - `parse_cypher_text(...)`
 - `validate_cypher_text(...)`
@@ -214,23 +216,21 @@ subset:
 - `to_sqlglot_program(...)`
 - `render_cypher_program_text(...)`
 
-It also runs a separate SQLGlot comparison suite over a PostgreSQL-to-SQLite
-SQL corpus using:
-
-- `tokenize(...)`
-- `parse_one(...)`
-- `parse_one(...).sql(dialect="sqlite")`
-- `transpile(..., read="postgres", write="sqlite")`
-
-In addition to those public entrypoints, the harness also records backend-aware
-compiler pipeline timings for SQLite, DuckDB, and PostgreSQL across these
-stages:
+Backend-aware pipeline timings recorded for SQLite, DuckDB, and PostgreSQL:
 
 - IR build
 - backend bind
 - backend lower
 - rendered-program emission
-- backend-specific end-to-end raw Cypher to rendered target SQL/program text
+- backend-specific end-to-end raw Cypher to rendered SQL/program text
+
+The same script also runs a separate SQLGlot comparison suite over a
+PostgreSQL-to-SQLite SQL corpus using:
+
+- `tokenize(...)`
+- `parse_one(...)`
+- `parse_one(...).sql(dialect="sqlite")`
+- `transpile(..., read="postgres", write="sqlite")`
 
 The compiler corpus intentionally mixes query families rather than timing only a
 single read shape. It currently includes ordinary reads, optional reads, `WITH`
@@ -273,49 +273,73 @@ The default compiler run uses:
 The checked-in compiler baseline lives at
 `scripts/benchmarks/results/compiler_benchmark_baseline.json`.
 
-That baseline records:
-
-- stage-level latency summaries
-- per-entrypoint summaries
-- per-query summaries
-- backend-aware lowering and end-to-end summaries for SQLite, DuckDB, and PostgreSQL
-- vector-only normalization summaries
-- SQLGlot comparison results for compiled and pure-Python installs when enabled
-
 The current checked-in baseline was produced from a `22`-query CypherGlot
 compiler corpus and a matching `22`-query SQLGlot comparison corpus.
+
+That baseline records:
+
+- per-entrypoint summaries for the public compiler surface
+- per-query summaries across the mixed admitted-subset corpus
+- backend-aware IR-build, bind, lower, render, and end-to-end summaries for
+  SQLite, DuckDB, and PostgreSQL
+- vector-only parse / validate / normalize summaries
+- SQLGlot comparison results for compiled and pure-Python installs when enabled
 
 Compiler entrypoint summary from the current checked-in run:
 
 | Entrypoint | p50 | p95 | p99 |
 | --- | ---: | ---: | ---: |
-| `parse_cypher_text(...)` | `0.54 ms` | `0.87 ms` | `0.99 ms` |
-| `validate_cypher_text(...)` | `0.64 ms` | `1.00 ms` | `1.08 ms` |
-| `normalize_cypher_text(...)` | `0.70 ms` | `1.12 ms` | `1.20 ms` |
-| `to_sqlglot_ast(...)` | `0.92 ms` | `1.26 ms` | `1.31 ms` |
-| `to_sql(...)` | `1.03 ms` | `1.38 ms` | `1.44 ms` |
-| `to_sqlglot_program(...)` | `0.84 ms` | `1.23 ms` | `1.27 ms` |
-| `render_cypher_program_text(...)` | `0.95 ms` | `1.34 ms` | `1.38 ms` |
+| `parse_cypher_text(...)` | `0.57 ms` | `0.93 ms` | `1.02 ms` |
+| `validate_cypher_text(...)` | `0.66 ms` | `1.03 ms` | `1.08 ms` |
+| `normalize_cypher_text(...)` | `0.73 ms` | `1.17 ms` | `1.22 ms` |
+| `to_sqlglot_ast(...)` | `0.96 ms` | `1.29 ms` | `1.32 ms` |
+| `to_sql(...)` | `1.12 ms` | `1.48 ms` | `1.55 ms` |
+| `to_sqlglot_program(...)` | `0.88 ms` | `1.34 ms` | `1.54 ms` |
+| `render_cypher_program_text(...)` | `1.00 ms` | `1.48 ms` | `1.85 ms` |
+
+Backend pipeline summary from the same run:
+
+| Backend | IR build p50 | Bind p50 | Lower p50 | Render p50 | End-to-end p50 | End-to-end p95 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| SQLite | `2.97 us` | `0.39 us` | `69.93 us` | `69.96 us` | `1.04 ms` | `1.58 ms` |
+| DuckDB | `2.99 us` | `0.39 us` | `73.73 us` | `1.55 ms` | `2.74 ms` | `5.65 ms` |
+| PostgreSQL | `2.98 us` | `0.39 us` | `74.53 us` | `80.13 us` | `1.08 ms` | `1.61 ms` |
+
+The key current result is that the old DuckDB lowering debt is gone: DuckDB
+lowering is now roughly in family with SQLite and PostgreSQL. The remaining
+DuckDB gap is render cost.
+
+Why DuckDB is slow right now:
+
+- The bottleneck is `render_program`, not IR build, backend bind, or backend
+  lower.
+- DuckDB render p50 is about `1.55 ms`, versus about `70-80 us` for SQLite and
+  PostgreSQL.
+- Representative DuckDB SQL strings are only modestly larger than the SQLite
+  equivalents, so the gap is not mainly query-size bloat from CypherGlot.
+- Profiling points at SQLGlot's DuckDB dialect generator path: it does more
+  parse/tokenize/generator-setup work during render than the SQLite or
+  PostgreSQL dialects.
+- The benchmark is already running against compiled SQLGlot, so this remaining
+  gap is not caused by falling back to the pure-Python SQLGlot build.
 
 SQLGlot PostgreSQL-to-SQLite comparison summary from the same run:
 
 | Implementation | Method | Queries | p50 | p95 | p99 |
 | --- | --- | ---: | ---: | ---: | ---: |
-| compiled (`sqlglotc`) | `tokenize(...)` | 22 | `12.59 us` | `29.34 us` | `32.90 us` |
-| compiled (`sqlglotc`) | `parse_one(...)` | 22 | `33.50 us` | `87.42 us` | `99.38 us` |
-| compiled (`sqlglotc`) | `parse_one(...).sql(...)` | 22 | `95.66 us` | `245.78 us` | `289.36 us` |
-| compiled (`sqlglotc`) | `transpile(...)` | 22 | `58.27 us` | `141.88 us` | `156.76 us` |
-| pure Python | `tokenize(...)` | 22 | `45.72 us` | `122.88 us` | `155.53 us` |
-| pure Python | `parse_one(...)` | 22 | `121.56 us` | `314.93 us` | `375.29 us` |
-| pure Python | `parse_one(...).sql(...)` | 22 | `217.20 us` | `539.22 us` | `641.75 us` |
-| pure Python | `transpile(...)` | 22 | `169.12 us` | `408.76 us` | `474.00 us` |
+| compiled (`sqlglotc`) | `tokenize(...)` | 22 | `12.74 us` | `27.16 us` | `32.82 us` |
+| compiled (`sqlglotc`) | `parse_one(...)` | 22 | `34.98 us` | `89.50 us` | `99.48 us` |
+| compiled (`sqlglotc`) | `parse_one(...).sql(...)` | 22 | `100.56 us` | `244.00 us` | `272.03 us` |
+| compiled (`sqlglotc`) | `transpile(...)` | 22 | `62.47 us` | `145.10 us` | `156.95 us` |
+| pure Python | `tokenize(...)` | 22 | `46.68 us` | `128.08 us` | `158.06 us` |
+| pure Python | `parse_one(...)` | 22 | `124.34 us` | `306.69 us` | `364.06 us` |
+| pure Python | `parse_one(...).sql(...)` | 22 | `223.63 us` | `547.47 us` | `652.66 us` |
+| pure Python | `transpile(...)` | 22 | `169.48 us` | `420.80 us` | `487.60 us` |
 
-Vector-aware normalization queries from the same baseline:
-
-| Query | p50 | p95 | p99 |
-| --- | ---: | ---: | ---: |
-| `vector_query_nodes_match` | `0.98 ms` | `1.03 ms` | `1.60 ms` |
-| `vector_query_nodes_yield_where` | `1.15 ms` | `1.26 ms` | `1.49 ms` |
+Compiled SQLGlot is clearly faster than the pure-Python build, but the Cypher
+to DuckDB render bottleneck persists even on the compiled path. That is why
+the current DuckDB compile gap is best understood as a dialect-specific SQLGlot
+render cost rather than as leftover CypherGlot lowering debt.
 
 ## Runtime benchmark
 
@@ -332,8 +356,12 @@ Read the backends this way:
 
 - SQLite suites are compile-plus-execute timings through CypherGlot, reported
   for indexed and unindexed layouts.
-- DuckDB is OLAP-only and reads the SQLite-ingested dataset through the SQLite
-  extension.
+- PostgreSQL suites run the same corpus through CypherGlot with PostgreSQL
+  schema setup, ingest, index configuration, and execution for both statement
+  queries and rendered programs.
+- DuckDB is included in the runtime benchmark too, but through a narrower
+  statement-only OLAP path over the SQLite-ingested fixture. It does not run
+  the full mutation/rendered-program path that SQLite and PostgreSQL do.
 - Neo4j runs the same Cypher corpus directly, so its timings are direct
   execution timings rather than compiler-plus-runtime timings.
 

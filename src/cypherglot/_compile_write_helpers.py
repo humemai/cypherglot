@@ -19,7 +19,7 @@ from ._compile_type_aware_common import (
     _compile_type_aware_predicate,
 )
 from ._normalize_support import NodePattern, Predicate, RelationshipPattern
-from .ir import GraphRelationalReadIR
+from .ir import GraphRelationalReadIR, SQLBackend
 from .schema import GraphSchema
 
 
@@ -139,6 +139,7 @@ def _compile_direct_matched_node_relationship_write_sql(
     predicates: tuple[Predicate, ...],
     relationship: RelationshipPattern,
     graph_schema: GraphSchema,
+    backend: SQLBackend,
     merge: bool,
 ) -> str:
     (
@@ -158,6 +159,7 @@ def _compile_direct_matched_node_relationship_write_sql(
             right=right,
             predicates=predicates,
             graph_schema=graph_schema,
+            backend=backend,
             require_label_message=require_label_message,
             predicate_message=predicate_message,
         )
@@ -170,6 +172,7 @@ def _compile_direct_matched_node_relationship_write_sql(
         joins=[],
         where_parts=where_parts,
         graph_schema=graph_schema,
+        backend=backend,
         left_label=left_endpoint.label,
         right_label=right_endpoint.label,
         require_label_message=endpoint_label_message,
@@ -187,6 +190,7 @@ def _compile_direct_matched_node_pair_relationship_write_sql(
     predicates: tuple[Predicate, ...],
     relationship: RelationshipPattern,
     graph_schema: GraphSchema,
+    backend: SQLBackend,
     merge: bool,
 ) -> str:
     (
@@ -216,6 +220,7 @@ def _compile_direct_matched_node_pair_relationship_write_sql(
         right=right,
         predicates=predicates,
         graph_schema=graph_schema,
+        backend=backend,
         require_label_message=require_label_message,
         predicate_message=predicate_message,
     )
@@ -227,6 +232,7 @@ def _compile_direct_matched_node_pair_relationship_write_sql(
         joins=[],
         where_parts=where_parts,
         graph_schema=graph_schema,
+        backend=backend,
         left_label=left_endpoint.label,
         right_label=right_endpoint.label,
         require_label_message=endpoint_label_message,
@@ -242,6 +248,7 @@ def _compile_direct_matched_node_relationship_source_parts(
     right: NodePattern,
     predicates: tuple[Predicate, ...],
     graph_schema: GraphSchema,
+    backend: SQLBackend,
     require_label_message: str,
     predicate_message: str,
 ) -> tuple[str, str, list[str], object | None, NodePattern, NodePattern]:
@@ -252,6 +259,7 @@ def _compile_direct_matched_node_relationship_source_parts(
         node=match_node,
         predicates=predicates,
         graph_schema=graph_schema,
+        backend=backend,
         require_label_message=require_label_message,
         predicate_message=predicate_message,
     )
@@ -273,6 +281,7 @@ def _compile_direct_matched_node_pair_relationship_source_parts(
     right: NodePattern,
     predicates: tuple[Predicate, ...],
     graph_schema: GraphSchema,
+    backend: SQLBackend,
     require_label_message: str,
     predicate_message: str,
 ) -> tuple[
@@ -294,6 +303,7 @@ def _compile_direct_matched_node_pair_relationship_source_parts(
         right_node=right_match,
         predicates=predicates,
         graph_schema=graph_schema,
+        backend=backend,
         require_label_message=require_label_message,
         predicate_message=predicate_message,
     )
@@ -320,6 +330,7 @@ def _compile_node_source_parts(
     node: NodePattern,
     predicates: tuple[Predicate, ...],
     graph_schema: GraphSchema,
+    backend: SQLBackend,
     require_label_message: str,
     predicate_message: str,
 ) -> tuple[str, list[str], object | None]:
@@ -337,6 +348,7 @@ def _compile_node_source_parts(
             ),
             operator="=",
             value=value,
+            backend=backend,
         )
         for field, value in node.properties
     ]
@@ -344,7 +356,12 @@ def _compile_node_source_parts(
         if predicate.alias != alias:
             raise ValueError(predicate_message)
         where_parts.append(
-            _compile_type_aware_match_node_predicate(alias, node_type, predicate)
+            _compile_type_aware_match_node_predicate(
+                alias,
+                node_type,
+                predicate,
+                backend=backend,
+            )
         )
     return f"FROM {node_type.table_name} AS {alias}", where_parts, node_type
 
@@ -355,6 +372,7 @@ def _compile_node_pair_source_parts(
     right_node: NodePattern,
     predicates: tuple[Predicate, ...],
     graph_schema: GraphSchema,
+    backend: SQLBackend,
     require_label_message: str,
     predicate_message: str,
 ) -> tuple[str, list[str], object | None, object | None]:
@@ -374,6 +392,7 @@ def _compile_node_pair_source_parts(
             ),
             operator="=",
             value=value,
+            backend=backend,
         )
         for field, value in left_node.properties
     ]
@@ -386,18 +405,29 @@ def _compile_node_pair_source_parts(
             ),
             operator="=",
             value=value,
+            backend=backend,
         )
         for field, value in right_node.properties
     )
     for predicate in predicates:
         if predicate.alias == left_alias:
             where_parts.append(
-                _compile_type_aware_match_node_predicate(left_alias, left_type, predicate)
+                _compile_type_aware_match_node_predicate(
+                    left_alias,
+                    left_type,
+                    predicate,
+                    backend=backend,
+                )
             )
             continue
         if predicate.alias == right_alias:
             where_parts.append(
-                _compile_type_aware_match_node_predicate(right_alias, right_type, predicate)
+                _compile_type_aware_match_node_predicate(
+                    right_alias,
+                    right_type,
+                    predicate,
+                    backend=backend,
+                )
             )
             continue
         raise ValueError(predicate_message)
@@ -435,6 +465,7 @@ def _compile_resolved_match_relationship_write_sql(
     joins: list[str],
     where_parts: list[str],
     graph_schema: GraphSchema,
+    backend: SQLBackend,
     left_label: str | None,
     right_label: str | None,
     require_label_message: str,
@@ -471,6 +502,7 @@ def _compile_resolved_match_relationship_write_sql(
                     ),
                     operator="=",
                     value=value,
+                    backend=backend,
                 )
             )
         guarded_where_parts.append(
@@ -522,6 +554,7 @@ def _compile_resolved_match_relationship_write_from_aliases(
     joins: list[str],
     where_parts: list[str],
     graph_schema: GraphSchema,
+    backend: SQLBackend,
     left_label: str | None,
     right_label: str | None,
     require_label_message: str,
@@ -548,6 +581,7 @@ def _compile_resolved_match_relationship_write_from_aliases(
         joins=joins,
         where_parts=where_parts,
         graph_schema=graph_schema,
+        backend=backend,
         left_label=left_label,
         right_label=right_label,
         require_label_message=require_label_message,
@@ -563,6 +597,7 @@ def _compile_traversal_relationship_write_sql(
     right: NodePattern,
     relationship: RelationshipPattern,
     graph_schema: GraphSchema,
+    backend: SQLBackend,
     merge: bool,
 ) -> str:
     endpoint_label_message, mismatch_message = (
@@ -574,6 +609,7 @@ def _compile_traversal_relationship_write_sql(
             left=left,
             right=right,
             graph_schema=graph_schema,
+            backend=backend,
         )
     )
     return _compile_resolved_match_relationship_write_from_aliases(
@@ -584,6 +620,7 @@ def _compile_traversal_relationship_write_sql(
         joins=joins,
         where_parts=where_parts,
         graph_schema=graph_schema,
+        backend=backend,
         left_label=left_node.label,
         right_label=right_node.label,
         require_label_message=endpoint_label_message,
@@ -600,6 +637,7 @@ def _compile_direct_fresh_endpoint_relationship_program(
     predicates: tuple[Predicate, ...],
     relationship: RelationshipPattern,
     graph_schema: GraphSchema,
+    backend: SQLBackend,
     merge: bool,
 ) -> CompiledCypherProgram:
     (
@@ -618,6 +656,7 @@ def _compile_direct_fresh_endpoint_relationship_program(
             right=right,
             predicates=predicates,
             graph_schema=graph_schema,
+            backend=backend,
             require_label_message=source_require_label_message,
             predicate_message=source_predicate_message,
         )
@@ -626,6 +665,7 @@ def _compile_direct_fresh_endpoint_relationship_program(
         left=left,
         right=right,
         relationship=relationship,
+        backend=backend,
         matched_aliases={alias},
         all_matched_sql=(
             _compile_direct_matched_node_relationship_write_sql(
@@ -635,6 +675,7 @@ def _compile_direct_fresh_endpoint_relationship_program(
                 predicates=predicates,
                 relationship=relationship,
                 graph_schema=graph_schema,
+                backend=backend,
                 merge=merge,
             )
             if left.alias == alias and right.alias == alias
@@ -660,6 +701,7 @@ def _compile_traversal_fresh_endpoint_relationship_program(
     right: NodePattern,
     relationship: RelationshipPattern,
     graph_schema: GraphSchema,
+    backend: SQLBackend,
     merge: bool,
 ) -> CompiledCypherProgram:
     (
@@ -674,12 +716,14 @@ def _compile_traversal_fresh_endpoint_relationship_program(
             left=left,
             right=right,
             graph_schema=graph_schema,
+            backend=backend,
         )
     )
     return _compile_match_fresh_endpoint_relationship_program(
         left=left,
         right=right,
         relationship=relationship,
+        backend=backend,
         matched_aliases=set(alias_map),
         all_matched_sql=(
             _compile_traversal_relationship_write_sql(
@@ -688,6 +732,7 @@ def _compile_traversal_fresh_endpoint_relationship_program(
                 right=right,
                 relationship=relationship,
                 graph_schema=graph_schema,
+                backend=backend,
                 merge=merge,
             )
             if left.alias in alias_map and right.alias in alias_map
@@ -714,6 +759,7 @@ def _compile_traversal_relationship_source_parts(
     left: NodePattern,
     right: NodePattern,
     graph_schema: GraphSchema,
+    backend: SQLBackend,
 ) -> tuple[str, list[str], list[str], dict[str, str], NodePattern, NodePattern]:
     from .compile import (
         _compile_type_aware_traversal_write_source_components,
@@ -724,6 +770,7 @@ def _compile_traversal_relationship_source_parts(
         _compile_type_aware_traversal_write_source_components(
             source,
             graph_schema,
+            backend,
         )
     )
 
@@ -742,6 +789,7 @@ def _compile_match_fresh_endpoint_relationship_program(
     left: NodePattern,
     right: NodePattern,
     relationship: RelationshipPattern,
+    backend: SQLBackend,
     matched_aliases: set[str],
     all_matched_sql: str | None,
     source_from_sql: str,
@@ -818,6 +866,7 @@ def _compile_match_fresh_endpoint_relationship_program(
                     ),
                     operator="=",
                     value=value,
+                    backend=backend,
                 )
             )
         for field, value in new_endpoint.properties:
@@ -830,6 +879,7 @@ def _compile_match_fresh_endpoint_relationship_program(
                     ),
                     operator="=",
                     value=value,
+                    backend=backend,
                 )
             )
         exists_sql = _assemble_select_sql(

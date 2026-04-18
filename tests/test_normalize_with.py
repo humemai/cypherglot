@@ -32,6 +32,48 @@ class TestNormalize(unittest.TestCase):
         self.assertEqual(normalized.returns[0].column_name, "name")
         self.assertEqual(normalized.order_by[0].kind, "scalar")
 
+    def test_normalize_cypher_text_normalizes_derived_scalar_with_binding(self) -> None:
+        normalized = cypherglot.normalize_cypher_text(
+            "MATCH (u:User) WITH lower(u.name) AS lowered RETURN lowered ORDER BY lowered"
+        )
+
+        self.assertEqual(type(normalized).__name__, "NormalizedMatchWithReturn")
+        self.assertEqual(normalized.bindings[0].binding_kind, "scalar")
+        self.assertIsNotNone(normalized.bindings[0].expression)
+        assert normalized.bindings[0].expression is not None
+        self.assertEqual(normalized.bindings[0].expression.kind, "lower")
+        self.assertEqual(normalized.bindings[0].expression.alias, "u")
+        self.assertEqual(normalized.bindings[0].expression.field, "name")
+        self.assertEqual(normalized.bindings[0].output_alias, "lowered")
+        self.assertEqual(normalized.returns[0].column_name, "lowered")
+        self.assertEqual(normalized.order_by[0].kind, "scalar")
+
+    def test_normalize_cypher_text_normalizes_endpoint_derived_with_binding(
+        self,
+    ) -> None:
+        normalized = cypherglot.normalize_cypher_text(
+            "MATCH (a:User)-[r:KNOWS]->(b:User) WITH startNode(r).name AS start_name, endNode(r).id AS end_id RETURN start_name, end_id ORDER BY end_id, start_name"
+        )
+
+        self.assertEqual(type(normalized).__name__, "NormalizedMatchWithReturn")
+        self.assertEqual(normalized.bindings[0].binding_kind, "scalar")
+        self.assertIsNotNone(normalized.bindings[0].expression)
+        self.assertIsNotNone(normalized.bindings[1].expression)
+        assert normalized.bindings[0].expression is not None
+        assert normalized.bindings[1].expression is not None
+        self.assertEqual(normalized.bindings[0].expression.kind, "start_node")
+        self.assertEqual(normalized.bindings[0].expression.alias, "r")
+        self.assertEqual(normalized.bindings[0].expression.field, "name")
+        self.assertEqual(normalized.bindings[0].output_alias, "start_name")
+        self.assertEqual(normalized.bindings[1].expression.kind, "end_node")
+        self.assertEqual(normalized.bindings[1].expression.alias, "r")
+        self.assertEqual(normalized.bindings[1].expression.field, "id")
+        self.assertEqual(normalized.bindings[1].output_alias, "end_id")
+        self.assertEqual(normalized.returns[0].column_name, "start_name")
+        self.assertEqual(normalized.returns[1].column_name, "end_id")
+        self.assertEqual(normalized.order_by[0].alias, "end_id")
+        self.assertEqual(normalized.order_by[1].alias, "start_name")
+
     def test_normalize_cypher_text_normalizes_with_entity_passthrough_return(self) -> None:
         normalized = cypherglot.normalize_cypher_text(
             "MATCH (u:User) WITH u AS person, u.name AS name RETURN person, name ORDER BY name"

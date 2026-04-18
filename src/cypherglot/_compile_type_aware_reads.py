@@ -12,8 +12,10 @@ from ._compile_type_aware_common import (
     _compile_type_aware_match_relationship_predicate,
     _compile_type_aware_node_field_expression,
     _compile_type_aware_predicate,
+    _is_type_aware_entity_field_numeric,
 )
 from ._compile_type_aware_read_projections import (
+    _is_type_aware_constant_projection,
     _compile_type_aware_match_node_group_by,
     _compile_type_aware_match_node_select_expressions,
     _compile_type_aware_match_relationship_group_by,
@@ -31,7 +33,7 @@ from ._normalize_support import (
     RelationshipPattern,
     ReturnItem,
 )
-from .ir import GraphRelationalReadIR
+from .ir import GraphRelationalReadIR, SQLBackend
 from .normalize import NormalizedMatchChain, NormalizedMatchRelationship
 from .schema import GraphSchema
 
@@ -39,6 +41,7 @@ from .schema import GraphSchema
 def _compile_type_aware_match_node_sql(
     statement: GraphRelationalReadIR,
     graph_schema: GraphSchema,
+    backend: SQLBackend,
 ) -> str:
     node = statement.node
     if node.label is None:
@@ -61,6 +64,7 @@ def _compile_type_aware_match_node_sql(
                 ),
                 operator="=",
                 value=value,
+                backend=backend,
             )
         )
 
@@ -71,7 +75,12 @@ def _compile_type_aware_match_node_sql(
                 "predicates on the matched node alias."
             )
         where_parts.append(
-            _compile_type_aware_match_node_predicate(alias, node_type, predicate)
+            _compile_type_aware_match_node_predicate(
+                alias,
+                node_type,
+                predicate,
+                backend=backend,
+            )
         )
 
     select_parts: list[str] = []
@@ -80,6 +89,7 @@ def _compile_type_aware_match_node_sql(
             alias,
             node_type,
             item,
+            backend=backend,
         ):
             select_parts.append(f'{expression} AS "{output_name}"')
     select_sql = ", ".join(select_parts)
@@ -88,11 +98,13 @@ def _compile_type_aware_match_node_sql(
         node_type,
         statement.order_by,
         statement.returns,
+        backend=backend,
     )
     group_sql = _compile_type_aware_match_node_group_by(
         alias,
         node_type,
         statement.returns,
+        backend=backend,
     )
 
     return _assemble_select_sql(
@@ -111,6 +123,7 @@ def _compile_type_aware_match_node_sql(
 def _compile_type_aware_match_relationship_sql(
     statement: GraphRelationalReadIR,
     graph_schema: GraphSchema,
+    backend: SQLBackend,
 ) -> str:
     if _is_variable_length_relationship(statement.relationship):
         from ._compile_type_aware_variable_length import (
@@ -120,6 +133,7 @@ def _compile_type_aware_match_relationship_sql(
         return compile_type_aware_variable_length_match_relationship_sql(
             statement,
             graph_schema,
+            backend=backend,
         )
 
     if (
@@ -165,6 +179,7 @@ def _compile_type_aware_match_relationship_sql(
                 ),
                 operator="=",
                 value=value,
+                backend=backend,
             )
         )
     for field, value in statement.relationship.properties:
@@ -177,6 +192,7 @@ def _compile_type_aware_match_relationship_sql(
                 ),
                 operator="=",
                 value=value,
+                backend=backend,
             )
         )
     for field, value in statement.right.properties:
@@ -189,6 +205,7 @@ def _compile_type_aware_match_relationship_sql(
                 ),
                 operator="=",
                 value=value,
+                backend=backend,
             )
         )
 
@@ -199,6 +216,7 @@ def _compile_type_aware_match_relationship_sql(
                     left_alias,
                     left_type,
                     predicate,
+                    backend=backend,
                 )
             )
             continue
@@ -208,6 +226,7 @@ def _compile_type_aware_match_relationship_sql(
                     right_alias,
                     right_type,
                     predicate,
+                    backend=backend,
                 )
             )
             continue
@@ -217,6 +236,7 @@ def _compile_type_aware_match_relationship_sql(
                     relationship_alias,
                     edge_type,
                     predicate,
+                    backend=backend,
                 )
             )
             continue
@@ -238,6 +258,7 @@ def _compile_type_aware_match_relationship_sql(
             right_alias,
             right_type,
             item,
+            backend=backend,
         ):
             select_parts.append(f'{expression} AS "{output_name}"')
     select_sql = ", ".join(select_parts)
@@ -250,6 +271,7 @@ def _compile_type_aware_match_relationship_sql(
         right_type,
         statement.order_by,
         statement.returns,
+        backend=backend,
     )
     group_sql = _compile_type_aware_match_relationship_group_by(
         left_alias,
@@ -259,6 +281,7 @@ def _compile_type_aware_match_relationship_sql(
         right_alias,
         right_type,
         statement.returns,
+        backend=backend,
     )
 
     return _assemble_select_sql(
@@ -289,6 +312,7 @@ def _compile_type_aware_match_relationship_sql(
 def _compile_type_aware_optional_match_node_sql(
     statement: GraphRelationalReadIR,
     graph_schema: GraphSchema,
+    backend: SQLBackend,
 ) -> str:
     node = statement.node
     if node.label is None:
@@ -311,6 +335,7 @@ def _compile_type_aware_optional_match_node_sql(
                 ),
                 operator="=",
                 value=value,
+                backend=backend,
             )
         )
 
@@ -321,7 +346,12 @@ def _compile_type_aware_optional_match_node_sql(
                 "predicates on the matched node alias in OPTIONAL MATCH."
             )
         on_parts.append(
-            _compile_type_aware_match_node_predicate(alias, node_type, predicate)
+            _compile_type_aware_match_node_predicate(
+                alias,
+                node_type,
+                predicate,
+                backend=backend,
+            )
         )
 
     select_parts: list[str] = []
@@ -330,6 +360,7 @@ def _compile_type_aware_optional_match_node_sql(
             alias,
             node_type,
             item,
+            backend=backend,
         ):
             select_parts.append(f'{expression} AS "{output_name}"')
     select_sql = ", ".join(select_parts)
@@ -338,11 +369,13 @@ def _compile_type_aware_optional_match_node_sql(
         node_type,
         statement.order_by,
         statement.returns,
+        backend=backend,
     )
     group_sql = _compile_type_aware_match_node_group_by(
         alias,
         node_type,
         statement.returns,
+        backend=backend,
     )
 
     return _assemble_select_sql(
@@ -361,18 +394,21 @@ def _compile_type_aware_optional_match_node_sql(
 def _compile_type_aware_match_chain_sql(
     statement: GraphRelationalReadIR,
     graph_schema: GraphSchema,
+    backend: SQLBackend,
 ) -> str:
     from_sql, joins, where_parts, alias_specs = _compile_type_aware_chain_source_components(
         nodes=statement.nodes,
         relationships=statement.relationships,
         predicates=statement.predicates,
         graph_schema=graph_schema,
+        backend=backend,
     )
     select_parts: list[str] = []
     for item in statement.returns:
         for expression, output_name in _compile_type_aware_chain_select_expressions(
             item,
             alias_specs,
+            backend=backend,
         ):
             select_parts.append(f'{expression} AS "{output_name}"')
     select_sql = ", ".join(select_parts)
@@ -380,10 +416,12 @@ def _compile_type_aware_match_chain_sql(
         statement.order_by,
         statement.returns,
         alias_specs,
+        backend=backend,
     )
     group_sql = _compile_type_aware_chain_group_by(
         statement.returns,
         alias_specs,
+        backend=backend,
     )
     return _assemble_select_sql(
         select_sql=select_sql,
@@ -404,6 +442,7 @@ def _compile_type_aware_chain_source_components(
     relationships: tuple[RelationshipPattern, ...],
     predicates: tuple[Predicate, ...],
     graph_schema: GraphSchema,
+    backend: SQLBackend,
 ) -> tuple[str, list[str], list[str], dict[str, _TypeAwareAliasSpec]]:
     edge_aliases = [
         relationship.alias or f"__cg_edge_{index}"
@@ -486,6 +525,7 @@ def _compile_type_aware_chain_source_components(
                     ),
                     operator="=",
                     value=value,
+                    backend=backend,
                 )
             )
 
@@ -510,6 +550,7 @@ def _compile_type_aware_chain_source_components(
                     ),
                     operator="=",
                     value=value,
+                    backend=backend,
                 )
             )
 
@@ -526,6 +567,7 @@ def _compile_type_aware_chain_source_components(
                     alias_spec.table_alias,
                     alias_spec.entity_type,
                     predicate,
+                    backend=backend,
                 )
             )
             continue
@@ -534,6 +576,7 @@ def _compile_type_aware_chain_source_components(
                 alias_spec.table_alias,
                 alias_spec.entity_type,
                 predicate,
+                backend=backend,
             )
         )
 
@@ -549,18 +592,25 @@ def _compile_type_aware_chain_source_components(
 def _compile_type_aware_chain_select_expression(
     item: ReturnItem,
     alias_specs: dict[str, _TypeAwareAliasSpec],
+    backend: SQLBackend,
 ) -> str:
     if item.kind in _AGGREGATE_SQL_NAMES:
-        return _compile_type_aware_chain_aggregate_return_expression(item, alias_specs)
+        return _compile_type_aware_chain_aggregate_return_expression(
+            item,
+            alias_specs,
+            backend=backend,
+        )
     return _compile_type_aware_chain_return_expression(
         item,
         alias_specs,
+        backend=backend,
     )
 
 
 def _compile_type_aware_chain_select_expressions(
     item: ReturnItem,
     alias_specs: dict[str, _TypeAwareAliasSpec],
+    backend: SQLBackend,
 ) -> list[tuple[str, str]]:
     if item.kind in _AGGREGATE_SQL_NAMES:
         return [
@@ -568,6 +618,7 @@ def _compile_type_aware_chain_select_expressions(
                 _compile_type_aware_chain_aggregate_return_expression(
                     item,
                     alias_specs,
+                    backend=backend,
                 ),
                 item.column_name,
             )
@@ -669,6 +720,7 @@ def _compile_type_aware_chain_select_expressions(
             _compile_type_aware_chain_select_expression(
                 item,
                 alias_specs,
+                backend=backend,
             ),
             item.column_name,
         )
@@ -678,6 +730,7 @@ def _compile_type_aware_chain_select_expressions(
 def _compile_type_aware_chain_return_expression(
     item: ReturnItem,
     alias_specs: dict[str, _TypeAwareAliasSpec],
+    backend: SQLBackend,
 ) -> str:
     alias_spec = alias_specs.get(item.alias)
     if alias_spec is None:
@@ -690,6 +743,13 @@ def _compile_type_aware_chain_return_expression(
         field_expression_resolver=(
             lambda field: _compile_type_aware_alias_field_expression(alias_spec, field)
         ),
+        field_is_statically_numeric=(
+            lambda field: _is_type_aware_entity_field_numeric(
+                alias_spec.entity_type,
+                field,
+            )
+        ),
+        backend=backend,
     )
     if scalar_expression is not None:
         return scalar_expression
@@ -699,6 +759,7 @@ def _compile_type_aware_chain_return_expression(
             alias_spec.table_alias,
             alias_spec.entity_type,
             item,
+            backend=backend,
         )
 
     if item.kind in {"start_node", "end_node"}:
@@ -721,6 +782,7 @@ def _compile_type_aware_chain_return_expression(
                 field=item.field,
                 kind="field" if item.field is not None else "entity",
             ),
+            backend=backend,
         )
 
     _require_type_aware_relational_support(
@@ -739,8 +801,8 @@ def _compile_type_aware_chain_return_expression(
 def _compile_type_aware_chain_aggregate_return_expression(
     item: ReturnItem,
     alias_specs: dict[str, _TypeAwareAliasSpec],
+    backend: SQLBackend,
 ) -> str:
-    function_name = _AGGREGATE_SQL_NAMES[item.kind]
     if item.kind == "count":
         if item.alias == "*":
             return "COUNT(*)"
@@ -750,7 +812,7 @@ def _compile_type_aware_chain_aggregate_return_expression(
                 "Unknown aggregate alias "
                 f"{item.alias!r} for fixed-length multi-hop MATCH."
             )
-        return f"{function_name}({alias_spec.table_alias}.id)"
+        return f'{_AGGREGATE_SQL_NAMES[item.kind]}({alias_spec.table_alias}.id)'
     if item.field is None:
         raise ValueError(
             "Type-aware fixed-length multi-hop aggregate lowering currently "
@@ -762,7 +824,17 @@ def _compile_type_aware_chain_aggregate_return_expression(
             f"Unknown aggregate alias {item.alias!r} for fixed-length multi-hop MATCH."
         )
     inner = _compile_type_aware_alias_field_expression(alias_spec, item.field)
-    return f"{function_name}({inner})"
+    from ._compile_type_aware_read_projections import _compile_type_aware_aggregate_expression
+
+    return _compile_type_aware_aggregate_expression(
+        item.kind,
+        inner,
+        backend,
+        cast_operand=not _is_type_aware_entity_field_numeric(
+            alias_spec.entity_type,
+            item.field,
+        ),
+    )
 
 
 def _compile_type_aware_alias_field_expression(
@@ -786,6 +858,7 @@ def _compile_type_aware_chain_order_by(
     order_by: tuple[OrderItem, ...],
     returns: tuple[ReturnItem, ...],
     alias_specs: dict[str, _TypeAwareAliasSpec],
+    backend: SQLBackend,
 ) -> str | None:
     if not order_by:
         return None
@@ -807,6 +880,8 @@ def _compile_type_aware_chain_order_by(
                         f'"{matched_return.column_name}" {item.direction.upper()}'
                     )
                     continue
+                if _is_type_aware_constant_projection(matched_return):
+                    continue
                 if matched_return.kind in {
                     "entity",
                     "properties",
@@ -818,6 +893,7 @@ def _compile_type_aware_chain_order_by(
                         for expression, _ in _compile_type_aware_chain_select_expressions(
                             matched_return,
                             alias_specs,
+                            backend=backend,
                         )
                     )
                     continue
@@ -825,6 +901,7 @@ def _compile_type_aware_chain_order_by(
                     f"{_compile_type_aware_chain_return_expression(
                         matched_return,
                         alias_specs,
+                        backend=backend,
                     )} "
                     f"{item.direction.upper()}"
                 )
@@ -838,12 +915,13 @@ def _compile_type_aware_chain_order_by(
             )
         expression = _compile_type_aware_alias_field_expression(alias_spec, item.field)
         parts.append(f"{expression} {item.direction.upper()}")
-    return ", ".join(parts)
+    return ", ".join(parts) or None
 
 
 def _compile_type_aware_chain_group_by(
     returns: tuple[ReturnItem, ...],
     alias_specs: dict[str, _TypeAwareAliasSpec],
+    backend: SQLBackend,
 ) -> str | None:
     if not any(item.kind in _AGGREGATE_SQL_NAMES for item in returns):
         return None
@@ -862,6 +940,7 @@ def _compile_type_aware_chain_group_by(
                 for expression, _ in _compile_type_aware_chain_select_expressions(
                     item,
                     alias_specs,
+                    backend=backend,
                 )
             )
             continue
@@ -869,6 +948,7 @@ def _compile_type_aware_chain_group_by(
             _compile_type_aware_chain_return_expression(
                 item,
                 alias_specs,
+                backend=backend,
             )
         )
     if not group_items:

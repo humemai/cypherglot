@@ -56,6 +56,7 @@ class WithBinding:
     binding_kind: Literal["entity", "scalar"]
     alias_kind: Literal["node", "relationship"] | None = None
     source_field: str | None = None
+    expression: WithReturnItem | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -314,9 +315,8 @@ class NormalizedMatchWithReturn:
 class NormalizedUnwind:
     kind: Literal["unwind"]
     alias: str
-    source_kind: Literal["literal", "parameter"]
+    source_kind: Literal["literal"]
     source_items: tuple[CypherValue, ...] = ()
-    source_param_name: str | None = None
     returns: tuple[WithReturnItem, ...] = ()
     order_by: tuple[WithOrderItem, ...] = ()
     limit: int | None = None
@@ -1393,7 +1393,7 @@ def _normalize_unwind_query(result: CypherParseResult, single_part_query) -> Nor
 
 
 def _parse_unwind_source(text: str) -> tuple[
-    Literal["literal", "parameter"], tuple[CypherValue, ...], str | None
+    Literal["literal"], tuple[CypherValue, ...]
 ]:
     from ._normalize_with_helpers import _parse_unwind_source as _impl
 
