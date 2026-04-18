@@ -80,6 +80,7 @@ class SQLiteRuntimeTests(unittest.TestCase):
         rows = self.conn.execute(
             cypherglot.to_sql(
                 "MATCH (u:User) RETURN u.name ORDER BY u.name",
+                backend="sqlite",
                 schema_context=self.schema_context,
             )
         ).fetchall()
@@ -92,6 +93,7 @@ class SQLiteRuntimeTests(unittest.TestCase):
         rows = self.conn.execute(
             cypherglot.to_sql(
                 "MATCH (u:User) RETURN u ORDER BY u.name",
+                backend="sqlite",
                 schema_context=self.schema_context,
             )
         ).fetchall()
@@ -104,6 +106,7 @@ class SQLiteRuntimeTests(unittest.TestCase):
         rows = self.conn.execute(
             cypherglot.to_sql(
                 "MATCH (u:User) WITH u.name AS name RETURN name ORDER BY name",
+                backend="sqlite",
                 schema_context=self.schema_context,
             )
         ).fetchall()
@@ -117,6 +120,7 @@ class SQLiteRuntimeTests(unittest.TestCase):
             cypherglot.to_sql(
                 "MATCH (a:User)-[:KNOWS*1..2]->(b:User) "
                 "WHERE a.name = 'Alice' RETURN b.name AS friend ORDER BY friend",
+                backend="sqlite",
                 schema_context=self.schema_context,
             )
         ).fetchall()
@@ -129,6 +133,7 @@ class SQLiteRuntimeTests(unittest.TestCase):
         rows = self.conn.execute(
             cypherglot.to_sql(
                 "OPTIONAL MATCH (u:User) WHERE u.name = 'Alice' RETURN u.name AS name",
+                backend="sqlite",
                 schema_context=self.schema_context,
             )
         ).fetchall()
@@ -141,6 +146,7 @@ class SQLiteRuntimeTests(unittest.TestCase):
         rows = self.conn.execute(
             cypherglot.to_sql(
                 "OPTIONAL MATCH (u:User) WHERE u.name = 'Cara' RETURN u.name AS name",
+                backend="sqlite",
                 schema_context=self.schema_context,
             )
         ).fetchall()
@@ -153,6 +159,7 @@ class SQLiteRuntimeTests(unittest.TestCase):
         rows = self.conn.execute(
             cypherglot.to_sql(
                 "MATCH (u:User) RETURN count(*) AS total",
+                backend="sqlite",
                 schema_context=self.schema_context,
             )
         ).fetchall()
@@ -166,6 +173,7 @@ class SQLiteRuntimeTests(unittest.TestCase):
             cypherglot.to_sql(
                 "MATCH (u:User) RETURN u.name AS name, count(*) AS total "
                 "ORDER BY total DESC, name ASC",
+                backend="sqlite",
                 schema_context=self.schema_context,
             )
         ).fetchall()
@@ -181,6 +189,7 @@ class SQLiteRuntimeTests(unittest.TestCase):
                 "RETURN id(a) AS uid, type(r) AS rel_type, "
                 "startNode(r).id AS start_id, "
                 "endNode(r).id AS end_id ORDER BY uid",
+                backend="sqlite",
                 schema_context=self.schema_context,
             )
         ).fetchall()
@@ -192,11 +201,15 @@ class SQLiteRuntimeTests(unittest.TestCase):
 
         with self.assertRaisesRegex(
             ValueError,
-            "relational output mode does not yet support whole-entity or introspection returns",
+            (
+                "relational output mode does not yet support whole-entity or "
+                "introspection returns"
+            ),
         ):
             cypherglot.to_sql(
                 "MATCH (u:User) RETURN properties(u) AS props, labels(u) AS labels "
                 "ORDER BY u.name",
+                backend="sqlite",
                 schema_context=self.schema_context,
             )
 
@@ -205,16 +218,21 @@ class SQLiteRuntimeTests(unittest.TestCase):
 
         with self.assertRaisesRegex(
             ValueError,
-            "relational output mode does not yet support whole-entity or introspection returns",
+            (
+                "relational output mode does not yet support whole-entity or "
+                "introspection returns"
+            ),
         ):
             cypherglot.to_sql(
                 "MATCH (a:User)-[r:KNOWS]->(b:User) RETURN keys(r) AS rel_keys",
+                backend="sqlite",
                 schema_context=self.schema_context,
             )
 
     def test_compiled_create_program_executes_on_sqlite(self) -> None:
         program = cypherglot.render_cypher_program_text(
             "CREATE (:User {name: 'Alice'})",
+            backend="sqlite",
             schema_context=self.schema_context,
         )
 
@@ -223,6 +241,7 @@ class SQLiteRuntimeTests(unittest.TestCase):
         rows = self.conn.execute(
             cypherglot.to_sql(
                 "MATCH (u:User) RETURN u.name ORDER BY u.name",
+                backend="sqlite",
                 schema_context=self.schema_context,
             )
         ).fetchall()
@@ -235,6 +254,7 @@ class SQLiteRuntimeTests(unittest.TestCase):
         self.conn.execute(
             cypherglot.to_sql(
                 "MATCH (u:User {name: 'Alice'}) SET u.age = 31",
+                backend="sqlite",
                 schema_context=self.schema_context,
             )
         )
@@ -253,6 +273,7 @@ class SQLiteRuntimeTests(unittest.TestCase):
             cypherglot.to_sql(
                 "MATCH (a:User)-[r:KNOWS]->(b:User) "
                 "WHERE a.name = $name SET r.since = 2021, r.strength = 2",
+                backend="sqlite",
                 schema_context=self.schema_context,
             ),
             {"name": "Alice"},
@@ -271,6 +292,7 @@ class SQLiteRuntimeTests(unittest.TestCase):
         self.conn.execute(
             cypherglot.to_sql(
                 "MATCH (u:User {name: 'Alice'}) DETACH DELETE u",
+                backend="sqlite",
                 schema_context=self.schema_context,
             )
         )
@@ -289,6 +311,7 @@ class SQLiteRuntimeTests(unittest.TestCase):
         self.conn.execute(
             cypherglot.to_sql(
                 "MATCH (a:User)-[r:KNOWS]->(b:User) WHERE a.name = 'Alice' DELETE r",
+                backend="sqlite",
                 schema_context=self.schema_context,
             )
         )
@@ -309,6 +332,7 @@ class SQLiteRuntimeTests(unittest.TestCase):
         self.conn.execute(
             cypherglot.to_sql(
                 "MATCH (a:User)-[r:KNOWS]->(b:User) CREATE (a)-[:INTRODUCED]->(b)",
+                backend="sqlite",
                 schema_context=self.schema_context,
             )
         )
@@ -326,6 +350,7 @@ class SQLiteRuntimeTests(unittest.TestCase):
         sql = cypherglot.to_sql(
             "MATCH (a:User)-[r:KNOWS]->(b:User) "
             "MERGE (a)-[:INTRODUCED]->(b)",
+            backend="sqlite",
             schema_context=self.schema_context,
         )
 
@@ -349,6 +374,7 @@ class SQLiteRuntimeTests(unittest.TestCase):
         program = cypherglot.render_cypher_program_text(
             "MATCH (a:User)-[r:KNOWS]->(b:User) "
             "CREATE (a)-[:INTRODUCED_TO_PERSON]->(:Person {name: 'Cara'})",
+            backend="sqlite",
             schema_context=self.schema_context,
         )
 
@@ -378,6 +404,7 @@ class SQLiteRuntimeTests(unittest.TestCase):
         program = cypherglot.render_cypher_program_text(
             "MATCH (a:User)-[r:KNOWS]->(b:User) "
             "MERGE (a)-[:INTRODUCED_TO_PERSON]->(:Person {name: 'Cara'})",
+            backend="sqlite",
             schema_context=self.schema_context,
         )
 

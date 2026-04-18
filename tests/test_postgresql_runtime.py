@@ -1,10 +1,13 @@
 from __future__ import annotations
 
-import os
 import re
 import unittest
 
 import cypherglot
+from tests._postgres_runtime_support import (
+    acquire_postgresql_test_dsn,
+    release_postgresql_test_dsn,
+)
 from cypherglot.render import RenderedCypherLoop, RenderedCypherProgram
 from cypherglot.schema import (
     CompilerSchemaContext,
@@ -20,38 +23,23 @@ try:
 except ImportError:  # pragma: no cover - optional test dependency
     psycopg2 = None  # type: ignore[assignment]
 
-_POSTGRES_DSN = os.environ.get("CYPHERGLOT_TEST_POSTGRES_DSN", "")
 
-
-def _pg_available() -> bool:
-    if psycopg2 is None:
-        return False
-    if not _POSTGRES_DSN:
-        return False
-    try:
-        conn = psycopg2.connect(_POSTGRES_DSN)
-        conn.close()
-        return True
-    except psycopg2.Error:  # pragma: no cover
-        return False
-
-
-_pg_reason = (
-    "psycopg2 is not installed"
-    if psycopg2 is None
-    else (
-        "CYPHERGLOT_TEST_POSTGRES_DSN is not set"
-        if not _POSTGRES_DSN
-        else "PostgreSQL server is not reachable"
-    )
-)
-
-
-@unittest.skipUnless(_pg_available(), _pg_reason)
 class PostgreSQLRuntimeTests(unittest.TestCase):
+    _postgres_dsn: str
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls._postgres_dsn = acquire_postgresql_test_dsn()
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        release_postgresql_test_dsn()
+        super().tearDownClass()
+
     def setUp(self) -> None:
         assert psycopg2 is not None
-        self.conn = psycopg2.connect(_POSTGRES_DSN)
+        self.conn = psycopg2.connect(self._postgres_dsn)
         self.conn.autocommit = False
         self.graph_schema = GraphSchema(
             node_types=(
@@ -60,6 +48,7 @@ class PostgreSQLRuntimeTests(unittest.TestCase):
                     properties=(
                         PropertyField("name", "string"),
                         PropertyField("age", "integer"),
+                        PropertyField("score", "float"),
                     ),
                 ),
                 NodeTypeSpec(
@@ -68,6 +57,11 @@ class PostgreSQLRuntimeTests(unittest.TestCase):
                 ),
             ),
             edge_types=(
+                EdgeTypeSpec(
+                    name="KNOWS",
+                    source_type="User",
+                    target_type="User",
+                ),
                 EdgeTypeSpec(
                     name="WORKS_AT",
                     source_type="User",
@@ -107,6 +101,122 @@ class PostgreSQLRuntimeTests(unittest.TestCase):
             rows = cur.fetchall()
 
         self.assertEqual(rows, [("Alice",), ("Bob",)])
+
+    def test_compiled_derived_with_return_executes_on_postgresql(self) -> None:
+        self._seed_graph()
+
+        sql = cypherglot.to_sql(
+            (
+                "MATCH (u:User) WITH lower(u.name) AS lowered "
+                "RETURN lowered ORDER BY lowered"
+            ),
+            schema_context=self.schema_context,
+            dialect="postgres",
+            backend="postgresql",
+        )
+
+        with self.conn.cursor() as cur:
+            cur.execute(sql)
+            rows = cur.fetchall()
+
+        self.assertEqual(rows, [("alice",), ("bob",)])
+
+    def test_compiled_endpoint_derived_with_return_executes_on_postgresql(
+        self,
+    ) -> None:
+        self._seed_employment_graph()
+
+        sql = cypherglot.to_sql(
+            (
+                "MATCH (a:User)-[r:WORKS_AT]->(b:Company) "
+                "WITH startNode(r).name AS employee, endNode(r).name AS employer "
+                "RETURN employee, employer ORDER BY employer, employee"
+            ),
+            schema_context=self.schema_context,
+            dialect="postgres",
+            backend="postgresql",
+        )
+
+        with self.conn.cursor() as cur:
+            cur.execute(sql)
+            rows = cur.fetchall()
+
+        self.assertEqual(rows, [("Alice", "Acme")])
+
+    def test_compiled_variable_length_derived_with_return_executes_on_postgresql(
+        self,
+    ) -> None:
+        self._seed_knows_graph()
+
+        sql = cypherglot.to_sql(
+            (
+                "MATCH (a:User)-[:KNOWS*1..2]->(b:User) "
+                "WITH lower(b.name) AS lowered "
+                "RETURN lowered ORDER BY lowered"
+            ),
+            schema_context=self.schema_context,
+            dialect="postgres",
+            backend="postgresql",
+        )
+
+        with self.conn.cursor() as cur:
+            cur.execute(sql)
+            rows = cur.fetchall()
+
+        self.assertEqual(rows, [("bob",), ("cara",), ("cara",)])
+
+    def test_compiled_grouped_derived_with_aggregate_executes_on_postgresql(
+        self,
+    ) -> None:
+        self._seed_grouped_graph()
+
+        sql = cypherglot.to_sql(
+            (
+                "MATCH (u:User) WITH lower(u.name) AS lowered, "
+                "u.score AS score RETURN lowered, avg(score) AS mean "
+                "ORDER BY mean DESC, lowered"
+            ),
+            schema_context=self.schema_context,
+            dialect="postgres",
+            backend="postgresql",
+        )
+
+        with self.conn.cursor() as cur:
+            cur.execute(sql)
+            rows = cur.fetchall()
+
+        self.assertEqual(rows, [("bob", 2.8), ("alice", 2.1)])
+
+    def test_compiled_numeric_predicates_execute_on_postgresql(self) -> None:
+        self._seed_grouped_graph()
+
+        age_sql = cypherglot.to_sql(
+            (
+                "MATCH (u:User) WHERE u.age >= 18 "
+                "RETURN u.name AS name ORDER BY name"
+            ),
+            schema_context=self.schema_context,
+            dialect="postgres",
+            backend="postgresql",
+        )
+        with_sql = cypherglot.to_sql(
+            (
+                "MATCH (u:User) WITH toInteger(u.score) AS score_int "
+                "RETURN score_int >= 2 AS ge_two ORDER BY ge_two"
+            ),
+            schema_context=self.schema_context,
+            dialect="postgres",
+            backend="postgresql",
+        )
+
+        with self.conn.cursor() as cur:
+            cur.execute(age_sql)
+            age_rows = cur.fetchall()
+            cur.execute(with_sql)
+            predicate_rows = cur.fetchall()
+
+        self.assertEqual(age_rows, [("Alice",), ("Alice",), ("Bob",)])
+        self.assertEqual(predicate_rows, [(False,), (True,), (True,)])
 
     def test_compiled_merge_node_program_executes_on_postgresql(self) -> None:
         self._seed_graph()
@@ -335,14 +445,59 @@ class PostgreSQLRuntimeTests(unittest.TestCase):
     def _seed_graph(self) -> None:
         with self.conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO cg_node_user (id, name, age) VALUES (%s, %s, %s)",
-                (1, "Alice", 30),
+                (
+                    "INSERT INTO cg_node_user (id, name, age, score) "
+                    "VALUES (%s, %s, %s, %s)"
+                ),
+                (1, "Alice", 30, 1.2),
             )
             cur.execute(
-                "INSERT INTO cg_node_user (id, name, age) VALUES (%s, %s, %s)",
-                (2, "Bob", 25),
+                (
+                    "INSERT INTO cg_node_user (id, name, age, score) "
+                    "VALUES (%s, %s, %s, %s)"
+                ),
+                (2, "Bob", 25, 2.8),
             )
             cur.execute("SELECT setval('cg_node_user_id_seq', %s)", (2,))
+        self.conn.commit()
+
+    def _seed_knows_graph(self) -> None:
+        with self.conn.cursor() as cur:
+            cur.executemany(
+                (
+                    "INSERT INTO cg_node_user (id, name, age, score) "
+                    "VALUES (%s, %s, %s, %s)"
+                ),
+                [
+                    (1, "Alice", 30, 1.2),
+                    (2, "Bob", 25, 2.8),
+                    (3, "Cara", 4, 4.4),
+                ],
+            )
+            cur.execute("SELECT setval('cg_node_user_id_seq', %s)", (3,))
+            cur.executemany(
+                "INSERT INTO cg_edge_knows (id, from_id, to_id) VALUES (%s, %s, %s)",
+                [(1, 1, 2), (2, 2, 3)],
+            )
+            cur.execute("SELECT setval('cg_edge_knows_id_seq', %s)", (2,))
+
+        self.conn.commit()
+
+    def _seed_grouped_graph(self) -> None:
+        with self.conn.cursor() as cur:
+            cur.executemany(
+                (
+                    "INSERT INTO cg_node_user (id, name, age, score) "
+                    "VALUES (%s, %s, %s, %s)"
+                ),
+                [
+                    (1, "Alice", 30, 1.2),
+                    (2, "Bob", 25, 2.8),
+                    (3, "Alice", 22, 3.0),
+                ],
+            )
+            cur.execute("SELECT setval('cg_node_user_id_seq', %s)", (3,))
+
         self.conn.commit()
 
     def _seed_employment_graph(self) -> None:
@@ -371,10 +526,12 @@ class PostgreSQLRuntimeTests(unittest.TestCase):
 
         with self.conn.cursor() as cur:
             cur.execute("DROP TABLE IF EXISTS cg_edge_works_at CASCADE")
+            cur.execute("DROP TABLE IF EXISTS cg_edge_knows CASCADE")
             cur.execute("DROP TABLE IF EXISTS cg_node_user CASCADE")
             cur.execute("DROP TABLE IF EXISTS cg_node_company CASCADE")
             cur.execute("DROP SEQUENCE IF EXISTS cg_node_user_id_seq CASCADE")
             cur.execute("DROP SEQUENCE IF EXISTS cg_node_company_id_seq CASCADE")
+            cur.execute("DROP SEQUENCE IF EXISTS cg_edge_knows_id_seq CASCADE")
             cur.execute("DROP SEQUENCE IF EXISTS cg_edge_works_at_id_seq CASCADE")
 
         self.conn.commit()

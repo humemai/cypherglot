@@ -82,7 +82,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
         self.assertEqual(len(program.steps), 1)
         loop = program.steps[0]
         self.assertIsInstance(loop, cypherglot.CompiledCypherLoop)
@@ -130,7 +131,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
         filtered_right_program = cypherglot.compile_cypher_program_text(
             "MATCH (a:User)-[r:KNOWS]->(b:User {name: 'Bob'}) CREATE (a)-[:INTRODUCED]->(:Person {name: 'Erin'})",
             schema_context=CompilerSchemaContext.type_aware(
@@ -159,7 +161,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         filtered_left_loop = filtered_left_program.steps[0]
         assert isinstance(filtered_left_loop, cypherglot.CompiledCypherLoop)
@@ -205,7 +208,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         type_aware_loop = type_aware_program.steps[0]
         self.assertIsInstance(type_aware_loop, cypherglot.CompiledCypherLoop)
@@ -253,7 +257,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
         filtered_right_program = cypherglot.compile_cypher_program_text(
             "MATCH (a:User)-[r:KNOWS]->(b:User {name: 'Bob'}) MERGE (a)-[:INTRODUCED]->(:Person {name: 'Erin'})",
             schema_context=CompilerSchemaContext.type_aware(
@@ -282,7 +287,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         filtered_left_loop = filtered_left_program.steps[0]
         assert isinstance(filtered_left_loop, cypherglot.CompiledCypherLoop)
@@ -322,7 +328,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(len(type_aware_program.steps), 1)
         type_aware_loop = type_aware_program.steps[0]
@@ -367,7 +374,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
         filtered_right_program = cypherglot.compile_cypher_program_text(
             "MATCH (a:User)-[r:WORKS_AT]->(b:Company {name: 'Bravo'}) CREATE (:User {name: 'Erin'})-[:WORKS_AT {since: 2026}]->(b)",
             schema_context=CompilerSchemaContext.type_aware(
@@ -392,7 +400,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         filtered_left_loop = filtered_left_program.steps[0]
         assert isinstance(filtered_left_loop, cypherglot.CompiledCypherLoop)
@@ -431,7 +440,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
         combined_filtered_program = cypherglot.compile_cypher_program_text(
             "MATCH (a:User {name: 'Alice'})-[r:WORKS_AT]->(b:Company) WHERE r.since = 2020 CREATE (:User {name: 'Gina'})-[:WORKS_AT {since: 2028}]->(b)",
             schema_context=CompilerSchemaContext.type_aware(
@@ -456,7 +466,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         relationship_filtered_loop = relationship_filtered_program.steps[0]
         assert isinstance(relationship_filtered_loop, cypherglot.CompiledCypherLoop)
@@ -495,7 +506,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         right_and_relationship_loop = right_and_relationship_program.steps[0]
         assert isinstance(right_and_relationship_loop, cypherglot.CompiledCypherLoop)
@@ -528,7 +540,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         all_filters_loop = all_filters_program.steps[0]
         assert isinstance(all_filters_loop, cypherglot.CompiledCypherLoop)
@@ -566,7 +579,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
         self.assertEqual(len(program.steps), 1)
         loop = program.steps[0]
         self.assertIsInstance(loop, cypherglot.CompiledCypherLoop)
@@ -617,7 +631,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         type_aware_loop = type_aware_program.steps[0]
         self.assertIsInstance(type_aware_loop, cypherglot.CompiledCypherLoop)
@@ -662,7 +677,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         type_aware_loop = type_aware_program.steps[0]
         assert isinstance(type_aware_loop, cypherglot.CompiledCypherLoop)
@@ -695,7 +711,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
         filtered_right_program = cypherglot.compile_cypher_program_text(
             "MATCH (a:User)-[r:WORKS_AT]->(b:Company {name: 'Bravo'}) MERGE (:User {name: 'Erin'})-[:WORKS_AT {since: 2026}]->(b)",
             schema_context=CompilerSchemaContext.type_aware(
@@ -720,7 +737,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         filtered_left_loop = filtered_left_program.steps[0]
         assert isinstance(filtered_left_loop, cypherglot.CompiledCypherLoop)
@@ -759,7 +777,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
         combined_filtered_program = cypherglot.compile_cypher_program_text(
             "MATCH (a:User {name: 'Alice'})-[r:WORKS_AT]->(b:Company) WHERE r.since = 2020 MERGE (:User {name: 'Gina'})-[:WORKS_AT {since: 2028}]->(b)",
             schema_context=CompilerSchemaContext.type_aware(
@@ -784,7 +803,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         relationship_filtered_loop = relationship_filtered_program.steps[0]
         assert isinstance(relationship_filtered_loop, cypherglot.CompiledCypherLoop)
@@ -823,7 +843,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         right_and_relationship_loop = right_and_relationship_program.steps[0]
         assert isinstance(right_and_relationship_loop, cypherglot.CompiledCypherLoop)
@@ -856,7 +877,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         all_filters_loop = all_filters_program.steps[0]
         assert isinstance(all_filters_loop, cypherglot.CompiledCypherLoop)
@@ -887,7 +909,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         type_aware_loop = type_aware_program.steps[0]
         assert isinstance(type_aware_loop, cypherglot.CompiledCypherLoop)
@@ -929,7 +952,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         type_aware_loop = type_aware_program.steps[0]
         assert isinstance(type_aware_loop, cypherglot.CompiledCypherLoop)
@@ -969,7 +993,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         type_aware_loop = type_aware_program.steps[0]
         assert isinstance(type_aware_loop, cypherglot.CompiledCypherLoop)

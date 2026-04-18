@@ -15,6 +15,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "MATCH (a:User)-[r:KNOWS]->(b:User)-[s:WORKS_AT]->(c:Company) "
                 "RETURN a.name AS user_name, c.name AS company ORDER BY company"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -30,6 +31,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "MATCH (a:User)-[:KNOWS*0..2]->(b:User) "
                 "RETURN a.name AS user_name, b.name AS friend ORDER BY friend, user_name"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -49,6 +51,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
 
         aggregate_sql = cypherglot.to_sql(
             "MATCH (a:User)-[:KNOWS*0..2]->(b:User) RETURN sum(b.age) AS total_age",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -65,6 +68,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                     "MATCH (a:User)-[:KNOWS*0..2]->(b:User) RETURN b AS friend_node, properties(b) AS friend_props, "
                     "labels(b) AS friend_labels, keys(b) AS friend_keys, b.name AS friend ORDER BY friend"
                 ),
+                backend="sqlite",
                 schema_context=self._type_aware_schema_context(),
             )
 
@@ -74,6 +78,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "RETURN lower(b.name) AS lower_friend, toString(b.age) AS age_text "
                 "ORDER BY age_text, lower_friend"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -93,12 +98,30 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
 
         id_sql = cypherglot.to_sql(
             "MATCH (a:User)-[:KNOWS*0..2]->(b:User) RETURN id(b) AS friend_id ORDER BY friend_id",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
         id_rows = self.conn.execute(id_sql).fetchall()
 
         self.assertEqual(id_rows, [(1,), (2,), (2,), (3,), (3,), (3,)])
+
+        derived_with_sql = cypherglot.to_sql(
+            (
+                "MATCH (a:User)-[:KNOWS*0..2]->(b:User) "
+                "WITH lower(b.name) AS lowered "
+                "RETURN lowered ORDER BY lowered"
+            ),
+            backend="sqlite",
+            schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
+        )
+
+        derived_with_rows = self.conn.execute(derived_with_sql).fetchall()
+
+        self.assertEqual(
+            derived_with_rows,
+            [("alice",), ("bob",), ("bob",), ("cara",), ("cara",), ("cara",)],
+        )
 
     def test_type_aware_bounded_variable_length_match_grouped_count_executes_on_sqlite(
         self,
@@ -110,6 +133,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "MATCH (a:User)-[:KNOWS*0..2]->(b:User) "
                 "RETURN b.name AS friend, count(b) AS total ORDER BY total DESC, friend"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -126,6 +150,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                     "MATCH (a:User)-[:KNOWS*0..2]->(b:User) "
                     "RETURN labels(b) AS friend_labels, count(b) AS total ORDER BY total DESC, friend_labels"
                 ),
+                backend="sqlite",
                 schema_context=self._type_aware_schema_context(),
             )
 
@@ -139,6 +164,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                         "MATCH (a:User)-[:KNOWS*0..2]->(b:User) "
                         "RETURN keys(b) AS friend_keys, count(b) AS total ORDER BY total DESC, friend_keys"
                     ),
+                    backend="sqlite",
                     schema_context=self._type_aware_schema_context(),
                 )
             ).fetchall()
@@ -148,6 +174,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "MATCH (a:User)-[:KNOWS*0..2]->(b:User) "
                 "RETURN lower(b.name) AS lowered_name, count(b) AS total ORDER BY total DESC, lowered_name"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -160,6 +187,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "MATCH (a:User)-[:KNOWS*0..2]->(b:User) "
                 "RETURN toString(b.age) AS age_text, count(b) AS total ORDER BY total DESC, age_text"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -172,6 +200,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "MATCH (a:User)-[:KNOWS*0..2]->(b:User) "
                 "RETURN id(b) AS friend_id, count(b) AS total ORDER BY total DESC, friend_id"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -184,6 +213,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "MATCH (a:User)-[:KNOWS*0..2]->(b:User) "
                 "RETURN b AS friend, count(b) AS total ORDER BY friend, total"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 self.graph_schema,
             ),
@@ -205,6 +235,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "MATCH (a:User)-[:KNOWS*0..2]->(b:User) "
                 "RETURN properties(b) AS props, count(b) AS total ORDER BY props, total"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 self.graph_schema,
             ),
@@ -232,6 +263,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "RETURN type(r) AS first_rel_type, startNode(s).name AS employee, "
                 "endNode(s) AS employer ORDER BY first_rel_type, employee"
             ),
+            backend="sqlite",
             schema_context=self._type_aware_schema_context(),
         )
 
@@ -253,6 +285,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                     "keys(s) AS rel_keys, startNode(s).name AS employee, endNode(s).id AS company_id "
                     "ORDER BY friend_props, friend_labels, rel_keys, employee, company_id"
                 ),
+                backend="sqlite",
                 schema_context=self._type_aware_schema_context(),
             )
 
@@ -272,6 +305,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                     "labels(c) AS company_labels, startNode(s).id AS employee_id, endNode(s).name AS company_name "
                     "ORDER BY rel_props, friend_keys, company_labels, employee_id, company_name"
                 ),
+                backend="sqlite",
                 schema_context=self._type_aware_schema_context(),
             )
 
@@ -291,6 +325,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                     "keys(s) AS rel_keys, startNode(s).name AS employee, endNode(s).id AS company_id, "
                     "count(s) AS total ORDER BY total DESC"
                 ),
+                backend="sqlite",
                 schema_context=self._type_aware_schema_context(),
             )
 
@@ -310,6 +345,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                     "labels(c) AS company_labels, startNode(s).id AS employee_id, endNode(s).name AS company_name, "
                     "count(s) AS total ORDER BY total DESC"
                 ),
+                backend="sqlite",
                 schema_context=self._type_aware_schema_context(),
             )
 
@@ -318,6 +354,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
 
         sql = cypherglot.to_sql(
             "OPTIONAL MATCH (u:User) WHERE u.name = 'Cara' RETURN u.name AS name",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -335,6 +372,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "RETURN person.name AS display_name, id(person) AS person_id "
                 "ORDER BY display_name, person_id"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -351,6 +389,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "WITH b AS friend, c.name AS company "
                 "RETURN friend.name AS friend_name, company ORDER BY company"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -368,6 +407,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "MATCH (a:User)-[:KNOWS*0..2]->(b:User) "
                 "WITH b AS friend RETURN friend.name AS name ORDER BY name"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -388,6 +428,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                     "RETURN friend AS friend_node, properties(friend) AS friend_props, "
                     "labels(friend) AS friend_labels, keys(friend) AS friend_keys, friend.name AS name ORDER BY name"
                 ),
+                backend="sqlite",
                 schema_context=self._type_aware_schema_context(),
             )
 
@@ -397,6 +438,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "RETURN lower(friend.name) AS lower_name, toString(friend.age) AS age_text "
                 "ORDER BY age_text, lower_name"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -419,6 +461,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "MATCH (a:User)-[:KNOWS*0..2]->(b:User) WITH b AS friend "
                 "RETURN id(friend) AS friend_id ORDER BY friend_id"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -436,6 +479,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "MATCH (a:User)-[:KNOWS*0..2]->(b:User) WITH b AS friend "
                 "RETURN friend.name AS name, count(friend) AS total ORDER BY total DESC, name"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -448,6 +492,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "MATCH (a:User)-[:KNOWS*0..2]->(b:User) WITH b AS friend "
                 "RETURN friend.name AS name, sum(friend.age) AS total_age ORDER BY total_age DESC, name"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -464,6 +509,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                     "MATCH (a:User)-[:KNOWS*0..2]->(b:User) WITH b AS friend "
                     "RETURN labels(friend) AS friend_labels, count(friend) AS total ORDER BY total DESC, friend_labels"
                 ),
+                backend="sqlite",
                 schema_context=self._type_aware_schema_context(),
             )
 
@@ -476,6 +522,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                     "MATCH (a:User)-[:KNOWS*0..2]->(b:User) WITH b AS friend "
                     "RETURN keys(friend) AS friend_keys, count(friend) AS total ORDER BY total DESC, friend_keys"
                 ),
+                backend="sqlite",
                 schema_context=self._type_aware_schema_context(),
             )
 
@@ -484,6 +531,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "MATCH (a:User)-[:KNOWS*0..2]->(b:User) WITH b AS friend "
                 "RETURN lower(friend.name) AS lowered_name, count(friend) AS total ORDER BY total DESC, lowered_name"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -496,6 +544,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "MATCH (a:User)-[:KNOWS*0..2]->(b:User) WITH b AS friend "
                 "RETURN toString(friend.age) AS age_text, count(friend) AS total ORDER BY total DESC, age_text"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -508,6 +557,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "MATCH (a:User)-[:KNOWS*0..2]->(b:User) WITH b AS friend "
                 "RETURN id(friend) AS friend_id, count(friend) AS total ORDER BY total DESC, friend_id"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -520,6 +570,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "MATCH (a:User)-[:KNOWS*0..2]->(b:User) WITH b AS friend "
                 "RETURN friend AS user, count(friend) AS total ORDER BY user, total"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 self.graph_schema,
             ),
@@ -542,6 +593,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "RETURN properties(friend) AS props, count(friend) AS total "
                 "ORDER BY props, total"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 self.graph_schema,
             ),
@@ -572,6 +624,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "RETURN startNode(rel).name AS employee, endNode(rel) AS employer, "
                 "type(rel) AS rel_type ORDER BY employee, rel_type"
             ),
+            backend="sqlite",
             schema_context=self._type_aware_schema_context(),
         )
 
@@ -596,6 +649,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                     "keys(rel) AS rel_keys, startNode(rel).name AS employee, endNode(rel).id AS company_id "
                     "ORDER BY friend_props, friend_labels, rel_keys, employee, company_id"
                 ),
+                backend="sqlite",
                 schema_context=self._type_aware_schema_context(),
             )
 
@@ -616,6 +670,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                     "labels(company) AS company_labels, startNode(rel).id AS employee_id, endNode(rel).name AS company_name "
                     "ORDER BY rel_props, friend_keys, company_labels, employee_id, company_name"
                 ),
+                backend="sqlite",
                 schema_context=self._type_aware_schema_context(),
             )
 
@@ -636,6 +691,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                     "keys(rel) AS rel_keys, startNode(rel).name AS employee, endNode(rel).id AS company_id, "
                     "count(rel) AS total ORDER BY total DESC"
                 ),
+                backend="sqlite",
                 schema_context=self._type_aware_schema_context(),
             )
 
@@ -656,6 +712,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                     "labels(company) AS company_labels, startNode(rel).id AS employee_id, endNode(rel).name AS company_name, "
                     "count(rel) AS total ORDER BY total DESC"
                 ),
+                backend="sqlite",
                 schema_context=self._type_aware_schema_context(),
             )
 
@@ -669,6 +726,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "MATCH (a:User)-[r:KNOWS]->(b:User)-[s:WORKS_AT]->(c:Company) "
                 "RETURN c.name AS company, count(s) AS total ORDER BY total DESC, company"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -686,6 +744,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "MATCH (a:User)-[r:KNOWS]->(b:User)-[s:WORKS_AT]->(c:Company) "
                 "RETURN sum(s.since) AS total_since"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -703,6 +762,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "MATCH (a:User)-[r:KNOWS]->(b:User)-[s:WORKS_AT]->(c:Company) "
                 "RETURN count(*) AS total"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -720,6 +780,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "MATCH (a:User)-[r:KNOWS]->(b:User)-[s:WORKS_AT]->(c:Company) "
                 "RETURN count(s) AS total"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -737,6 +798,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "MATCH (a:User)-[r:KNOWS]->(b:User)-[s:WORKS_AT]->(c:Company) "
                 "RETURN c.name AS company, count(*) AS total ORDER BY total DESC, company"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -755,6 +817,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "RETURN c.name AS company, sum(s.since) AS total_since "
                 "ORDER BY total_since DESC, company"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -772,6 +835,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "MATCH (a:User)-[r:KNOWS]->(b:User)-[s:WORKS_AT]->(c:Company) "
                 "RETURN min(s.since) AS first_since"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -790,6 +854,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "RETURN c.name AS company, max(s.since) AS latest_since "
                 "ORDER BY latest_since DESC, company"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -808,6 +873,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "WITH c.name AS company, s AS rel "
                 "RETURN company, avg(rel.since) AS mean_since ORDER BY mean_since DESC, company"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -825,6 +891,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "MATCH (a:User)-[r:KNOWS]->(b:User)-[s:WORKS_AT]->(c:Company) "
                 "WITH s AS rel RETURN max(rel.since) AS latest_since"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -842,6 +909,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "MATCH (a:User)-[r:KNOWS]->(b:User)-[s:WORKS_AT]->(c:Company) "
                 "WITH s AS rel RETURN count(*) AS total"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -859,6 +927,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "MATCH (a:User)-[r:KNOWS]->(b:User)-[s:WORKS_AT]->(c:Company) "
                 "WITH s AS rel RETURN count(rel) AS total"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -877,6 +946,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "WITH c.name AS company, s AS rel "
                 "RETURN company, count(*) AS total ORDER BY total DESC, company"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -895,6 +965,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "WITH c.name AS company, s AS rel "
                 "RETURN company, count(rel) AS total ORDER BY total DESC, company"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -912,6 +983,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "MATCH (a:User)-[r:KNOWS]->(b:User)-[s:WORKS_AT]->(c:Company) "
                 "WITH s AS rel RETURN sum(rel.since) AS total_since"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -930,6 +1002,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "WITH c.name AS company, s AS rel "
                 "RETURN company, min(rel.since) AS first_since ORDER BY first_since DESC, company"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -946,6 +1019,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "RETURN startNode(s) AS employee, endNode(s) AS employer, c.name AS company "
                 "ORDER BY company"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 self.graph_schema,
             ),
@@ -970,6 +1044,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "s AS rel, properties(s) AS rel_props, c.name AS company_name "
                 "ORDER BY company_name"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 self.graph_schema,
             ),
@@ -994,6 +1069,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "RETURN startNode(rel) AS employee, endNode(rel) AS employer, company.name AS company_name "
                 "ORDER BY company_name"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 self.graph_schema,
             ),
@@ -1019,6 +1095,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "rel AS job, properties(rel) AS job_props, company.name AS company_name "
                 "ORDER BY company_name"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 self.graph_schema,
             ),
@@ -1043,6 +1120,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "s AS rel, properties(s) AS rel_props, count(s) AS total "
                 "ORDER BY total DESC"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 self.graph_schema,
             ),
@@ -1068,6 +1146,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "rel AS job, properties(rel) AS job_props, count(rel) AS total "
                 "ORDER BY total DESC"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 self.graph_schema,
             ),
@@ -1085,6 +1164,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
 
         sql = cypherglot.to_sql(
             "MATCH (u:User) RETURN u AS user ORDER BY u.name",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 self.graph_schema,
             ),
@@ -1109,6 +1189,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "RETURN b.name AS company, count(r) AS total "
                 "ORDER BY total DESC, company"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -1126,6 +1207,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "RETURN company, count(rel) AS total "
                 "ORDER BY total DESC, company"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -1143,6 +1225,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "MATCH (u:User) RETURN u AS user, count(u) AS total "
                 "ORDER BY total DESC, u.name"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 self.graph_schema,
             ),
@@ -1168,6 +1251,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "startNode(r).id AS start_id, endNode(r).id AS end_id "
                 "ORDER BY uid"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -1187,6 +1271,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                     "MATCH (u:User) RETURN properties(u) AS props, labels(u) AS labels, "
                     "keys(u) AS user_keys ORDER BY u.name"
                 ),
+                backend="sqlite",
                 schema_context=self._type_aware_schema_context(),
             )
 
@@ -1199,6 +1284,7 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "RETURN startNode(r) AS start, endNode(r) AS ending "
                 "ORDER BY b.name"
             ),
+            backend="sqlite",
             schema_context=self._type_aware_schema_context(),
         )
 
@@ -1227,5 +1313,6 @@ class TypeAwareSQLitePathRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                     "startNode(rel).name AS start_name, endNode(rel).id AS company_id "
                     "ORDER BY start_name"
                 ),
+                backend="sqlite",
                 schema_context=self._type_aware_schema_context(),
             )

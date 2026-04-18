@@ -289,10 +289,9 @@ def _validate_unwind_shape(result: CypherParseResult, single_part_query_ctx) -> 
 	source_text = _context_text(result, unwind_ctx.oC_Expression()).strip()
 	if not (
 		(source_text.startswith("[") and source_text.endswith("]"))
-		or re.fullmatch(r"\$[A-Za-z_][A-Za-z0-9_]*", source_text) is not None
 	):
 		raise ValueError(
-			"CypherGlot currently requires UNWIND sources to be list literals or named parameters."
+			"CypherGlot currently requires UNWIND sources to be list literals."
 		)
 
 	alias = _context_text(result, unwind_ctx.oC_Variable()).strip()

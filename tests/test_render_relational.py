@@ -56,6 +56,7 @@ class RenderTests(unittest.TestCase):
     def test_to_sql_renders_type_aware_relational_output_mode_scalar_returns(self) -> None:
         sql = cypherglot.to_sql(
             "MATCH (u:User) RETURN id(u) AS user_id, u.name AS name ORDER BY user_id, name",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -75,13 +76,17 @@ class RenderTests(unittest.TestCase):
             'ORDER BY u.id ASC, u.name ASC',
         )
 
-    def test_to_sql_rejects_type_aware_relational_output_mode_json_constructor_returns(self) -> None:
+    def test_to_sql_rejects_non_scalar_packaging_returns(self) -> None:
         with self.assertRaisesRegex(
             ValueError,
-            "relational output mode does not yet support whole-entity or introspection returns",
+            (
+                "relational output mode does not yet support whole-entity or "
+                "introspection returns"
+            ),
         ):
             cypherglot.to_sql(
                 "MATCH (u:User) RETURN labels(u) AS labels, keys(u) AS keys",
+                backend="sqlite",
                 schema_context=CompilerSchemaContext.type_aware(
                     GraphSchema(
                         node_types=(
@@ -101,6 +106,7 @@ class RenderTests(unittest.TestCase):
                 "MATCH (u:User) RETURN u AS user, properties(u) AS props, u.name AS name "
                 "ORDER BY name"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -136,6 +142,7 @@ class RenderTests(unittest.TestCase):
                     "WITH a AS person, r AS rel "
                     "RETURN labels(person) AS labels, keys(rel) AS keys"
                 ),
+                backend="sqlite",
                 schema_context=CompilerSchemaContext.type_aware(
                     GraphSchema(
                         node_types=(
@@ -168,6 +175,7 @@ class RenderTests(unittest.TestCase):
                     "MATCH (a:User)-[r:KNOWS]->(b:User)-[s:WORKS_AT]->(c:Company) "
                     "RETURN labels(b) AS friend_labels, keys(s) AS rel_keys"
                 ),
+                backend="sqlite",
                 schema_context=CompilerSchemaContext.type_aware(
                     GraphSchema(
                         node_types=(
@@ -206,6 +214,7 @@ class RenderTests(unittest.TestCase):
                     "WITH b AS friend, s AS rel "
                     "RETURN labels(friend) AS friend_labels, keys(rel) AS rel_keys"
                 ),
+                backend="sqlite",
                 schema_context=CompilerSchemaContext.type_aware(
                     GraphSchema(
                         node_types=(
@@ -237,6 +246,7 @@ class RenderTests(unittest.TestCase):
                 "MATCH (a:User)-[r:WORKS_AT]->(b:Company) "
                 "RETURN r AS rel, properties(r) AS props, b.name AS company ORDER BY company"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -276,6 +286,7 @@ class RenderTests(unittest.TestCase):
                 "RETURN startNode(r) AS start, endNode(r) AS ending, r.since AS since "
                 "ORDER BY since"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -321,6 +332,7 @@ class RenderTests(unittest.TestCase):
                 "RETURN startNode(r) AS start, endNode(r) AS ending, r AS rel "
                 "ORDER BY start, ending, rel"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -364,6 +376,7 @@ class RenderTests(unittest.TestCase):
     def test_to_sql_renders_type_aware_relational_output_mode_grouped_direct_node_entity(self) -> None:
         sql = cypherglot.to_sql(
             "MATCH (u:User) RETURN u AS user, count(u) AS total ORDER BY total DESC",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -391,6 +404,7 @@ class RenderTests(unittest.TestCase):
                 "MATCH (a:User)-[r:WORKS_AT]->(b:Company) "
                 "RETURN r AS rel, count(r) AS total ORDER BY total DESC"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -428,6 +442,7 @@ class RenderTests(unittest.TestCase):
                 "RETURN startNode(r) AS start, endNode(r) AS ending, count(r) AS total "
                 "ORDER BY total DESC"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -470,6 +485,7 @@ class RenderTests(unittest.TestCase):
                 "RETURN person AS user, properties(person) AS props, person.name AS name "
                 "ORDER BY name"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -508,6 +524,7 @@ class RenderTests(unittest.TestCase):
                 "WITH r AS rel, b.name AS company "
                 "RETURN rel AS edge, properties(rel) AS props, company ORDER BY company"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -556,6 +573,7 @@ class RenderTests(unittest.TestCase):
                 "RETURN startNode(rel) AS start_person, endNode(rel) AS employer, rel.since AS since "
                 "ORDER BY since"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -613,6 +631,7 @@ class RenderTests(unittest.TestCase):
                 "RETURN startNode(rel) AS start, endNode(rel) AS ending, rel AS edge "
                 "ORDER BY start, ending, edge"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -677,6 +696,7 @@ class RenderTests(unittest.TestCase):
                 "MATCH (u:User) WITH u AS person "
                 "RETURN person AS user, count(person) AS total ORDER BY total DESC"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -709,6 +729,7 @@ class RenderTests(unittest.TestCase):
                 "WITH r AS rel "
                 "RETURN rel AS edge, count(rel) AS total ORDER BY total DESC"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -749,6 +770,7 @@ class RenderTests(unittest.TestCase):
     def test_to_sql_renders_type_aware_match_node_field_access(self) -> None:
         sql = cypherglot.to_sql(
             "MATCH (u:User) WHERE u.name = $name RETURN u.name LIMIT 1",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -774,6 +796,7 @@ class RenderTests(unittest.TestCase):
                 "MATCH (a:User)-[r:WORKS_AT]->(b:Company) "
                 "WHERE r.since >= $since RETURN b.name AS company"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -806,6 +829,7 @@ class RenderTests(unittest.TestCase):
     def test_to_sql_renders_type_aware_direct_node_aggregates(self) -> None:
         sql = cypherglot.to_sql(
             "MATCH (u:User) RETURN u.name AS name, avg(u.score) AS mean ORDER BY mean DESC",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -836,6 +860,7 @@ class RenderTests(unittest.TestCase):
                 "coalesce(u.name, 'unknown') AS display_name "
                 "ORDER BY lower_name, name_len, age_text, display_name"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -854,9 +879,9 @@ class RenderTests(unittest.TestCase):
 
         self.assertEqual(
             sql,
-            'SELECT LOWER(u.name) AS "lower_name", LENGTH(u.name) AS "name_len", '
+            'SELECT LOWER(u.name) AS "lower_name", LENGTH(CAST(u.name AS TEXT)) AS "name_len", '
             'CAST(u.age AS TEXT) AS "age_text", COALESCE(u.name, \'unknown\') AS "display_name" '
-            'FROM cg_node_user AS u ORDER BY LOWER(u.name) ASC, LENGTH(u.name) ASC, '
+            'FROM cg_node_user AS u ORDER BY LOWER(u.name) ASC, LENGTH(CAST(u.name AS TEXT)) ASC, '
             'CAST(u.age AS TEXT) ASC, COALESCE(u.name, \'unknown\') ASC',
         )
 
@@ -866,6 +891,7 @@ class RenderTests(unittest.TestCase):
                 "MATCH (a:User)-[r:WORKS_AT]->(b:Company) "
                 "RETURN a.name AS name, count(r) AS total ORDER BY total DESC"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -902,6 +928,7 @@ class RenderTests(unittest.TestCase):
                 "RETURN lower(r.note) AS lower_note, size(type(r)) AS type_len, "
                 "toString(r.since) AS since_text ORDER BY lower_note, type_len, since_text"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -925,11 +952,11 @@ class RenderTests(unittest.TestCase):
 
         self.assertEqual(
             sql,
-            'SELECT LOWER(r.note) AS "lower_note", LENGTH(\'WORKS_AT\') AS "type_len", '
+            'SELECT LOWER(r.note) AS "lower_note", LENGTH(CAST(\'WORKS_AT\' AS TEXT)) AS "type_len", '
             'CAST(r.since AS TEXT) AS "since_text" FROM cg_edge_works_at AS r '
             'JOIN cg_node_user AS a ON a.id = r.from_id '
             'JOIN cg_node_company AS b ON b.id = r.to_id '
-            'ORDER BY LOWER(r.note) ASC, LENGTH(\'WORKS_AT\') ASC, CAST(r.since AS TEXT) ASC',
+            'ORDER BY LOWER(r.note) ASC, LENGTH(CAST(\'WORKS_AT\' AS TEXT)) ASC, CAST(r.since AS TEXT) ASC',
         )
 
     def test_to_sql_renders_type_aware_match_with_return(self) -> None:
@@ -939,6 +966,7 @@ class RenderTests(unittest.TestCase):
                 "WHERE name = $name RETURN person.name AS display_name, name "
                 "ORDER BY display_name, name"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(

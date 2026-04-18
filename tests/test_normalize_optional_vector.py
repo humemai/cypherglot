@@ -130,6 +130,13 @@ class TestNormalize(unittest.TestCase):
         self.assertEqual(normalized.order_by[0].kind, "scalar")
         self.assertEqual(normalized.limit, 2)
 
+    def test_normalize_cypher_text_rejects_parameter_unwind(self) -> None:
+        with self.assertRaisesRegex(
+            ValueError,
+            "requires UNWIND sources to be list literals",
+        ):
+            cypherglot.normalize_cypher_text("UNWIND $items AS x RETURN x")
+
     def test_normalize_cypher_text_normalizes_optional_match(self) -> None:
         normalized = cypherglot.normalize_cypher_text(
             "OPTIONAL MATCH (u:User) WHERE u.name = 'Alice' RETURN u.name ORDER BY u.name LIMIT 1"

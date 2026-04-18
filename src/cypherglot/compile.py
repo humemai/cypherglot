@@ -12,10 +12,7 @@ from ._compiled_program import (
     _require_single_statement_program,
     _single_statement_program,
 )
-from ._compile_duckdb import _compile_duckdb_backend_program
-from ._compile_read_helpers import (
-    _compile_unwind_sql,
-)
+from ._compile_unwind import _compile_unwind_sql
 from ._compile_sql_utils import (
     _assemble_delete_sql,
     _assemble_insert_select_sql,
@@ -98,7 +95,7 @@ def compile_cypher_text(
     text: str,
     *,
     schema_context: CompilerSchemaContext | None = None,
-    backend: SQLBackend | str = SQLBackend.SQLITE,
+    backend: SQLBackend | str | None = None,
 ) -> exp.Expression:
     logger.debug("Compiling Cypher text")
     try:
@@ -120,7 +117,7 @@ def compile_cypher_program_text(
     text: str,
     *,
     schema_context: CompilerSchemaContext | None = None,
-    backend: SQLBackend | str = SQLBackend.SQLITE,
+    backend: SQLBackend | str | None = None,
 ) -> CompiledCypherProgram:
     logger.debug("Compiling Cypher program text")
     program = compile_normalized_cypher_program(
@@ -139,7 +136,7 @@ def compile_normalized_cypher_statement(
     statement: NormalizedCypherStatement,
     *,
     schema_context: CompilerSchemaContext | None = None,
-    backend: SQLBackend | str = SQLBackend.SQLITE,
+    backend: SQLBackend | str | None = None,
 ) -> exp.Expression:
     logger.debug(
         "Compiling normalized Cypher statement",
@@ -160,7 +157,7 @@ def compile_normalized_cypher_program(
     statement: NormalizedCypherStatement,
     *,
     schema_context: CompilerSchemaContext | None = None,
-    backend: SQLBackend | str = SQLBackend.SQLITE,
+    backend: SQLBackend | str | None = None,
 ) -> CompiledCypherProgram:
     resolved_schema_context = _require_supported_schema_context(schema_context)
     resolved_backend = _resolve_sql_backend(backend)
@@ -181,14 +178,18 @@ def compile_normalized_cypher_program(
         backend=resolved_backend,
         lowerers={
             SQLBackend.SQLITE: _compile_graph_relational_backend_program,
-            SQLBackend.DUCKDB: _compile_duckdb_backend_program,
+            SQLBackend.DUCKDB: _compile_graph_relational_backend_program,
             SQLBackend.POSTGRESQL: _compile_graph_relational_backend_program,
         },
     )
     return program
 
 
-def _resolve_sql_backend(backend: SQLBackend | str) -> SQLBackend:
+def _resolve_sql_backend(backend: SQLBackend | str | None) -> SQLBackend:
+    if backend is None:
+        raise ValueError(
+            "CypherGlot compilation requires an explicit SQL backend."
+        )
     if isinstance(backend, SQLBackend):
         return backend
     return SQLBackend(backend)
@@ -232,6 +233,7 @@ def _compile_graph_relational_backend_program(
         return _compile_create_relationship_program(
             write_query,
             graph_schema=graph_schema,
+            backend=backend_ir.backend,
         )
 
     if family == "create-relationship-from-separate-patterns":
@@ -249,6 +251,7 @@ def _compile_graph_relational_backend_program(
         return _compile_merge_node_program(
             write_query,
             graph_schema=graph_schema,
+            backend=backend_ir.backend,
         )
 
     if family == "merge-relationship":
@@ -256,36 +259,57 @@ def _compile_graph_relational_backend_program(
         return _compile_merge_relationship_program(
             write_query,
             graph_schema=graph_schema,
+            backend=backend_ir.backend,
         )
 
     if family == "match-node":
         assert read_query is not None
         return _single_statement_program(
-            _compile_type_aware_match_node_sql(read_query, graph_schema)
+            _compile_type_aware_match_node_sql(
+                read_query,
+                graph_schema,
+                backend=backend_ir.backend,
+            )
         )
 
     if family == "optional-match-node":
         assert read_query is not None
         return _single_statement_program(
-            _compile_type_aware_optional_match_node_sql(read_query, graph_schema)
+            _compile_type_aware_optional_match_node_sql(
+                read_query,
+                graph_schema,
+                backend=backend_ir.backend,
+            )
         )
 
     if family == "match-relationship":
         assert read_query is not None
         return _single_statement_program(
-            _compile_type_aware_match_relationship_sql(read_query, graph_schema)
+            _compile_type_aware_match_relationship_sql(
+                read_query,
+                graph_schema,
+                backend=backend_ir.backend,
+            )
         )
 
     if family == "match-chain":
         assert read_query is not None
         return _single_statement_program(
-            _compile_type_aware_match_chain_sql(read_query, graph_schema)
+            _compile_type_aware_match_chain_sql(
+                read_query,
+                graph_schema,
+                backend=backend_ir.backend,
+            )
         )
 
     if family == "match-with-return":
         assert read_query is not None
         return _single_statement_program(
-            _compile_type_aware_match_with_return_sql(read_query, graph_schema)
+            _compile_type_aware_match_with_return_sql(
+                read_query,
+                graph_schema,
+                backend=backend_ir.backend,
+            )
         )
 
     if family == "unwind":
@@ -302,25 +326,41 @@ def _compile_graph_relational_backend_program(
     if family == "set-node":
         assert isinstance(write_query, GraphRelationalSetNodeWriteIR)
         return _single_statement_program(
-            _compile_set_node_sql(write_query, graph_schema=graph_schema)
+                _compile_set_node_sql(
+                    write_query,
+                    graph_schema=graph_schema,
+                    backend=backend_ir.backend,
+                )
         )
 
     if family == "set-relationship":
         assert isinstance(write_query, GraphRelationalSetRelationshipWriteIR)
         return _single_statement_program(
-            _compile_set_relationship_sql(write_query, graph_schema=graph_schema)
+                _compile_set_relationship_sql(
+                    write_query,
+                    graph_schema=graph_schema,
+                    backend=backend_ir.backend,
+                )
         )
 
     if family == "delete-node":
         assert isinstance(write_query, GraphRelationalDeleteNodeWriteIR)
         return _single_statement_program(
-            _compile_delete_node_sql(write_query, graph_schema=graph_schema)
+                _compile_delete_node_sql(
+                    write_query,
+                    graph_schema=graph_schema,
+                    backend=backend_ir.backend,
+                )
         )
 
     if family == "delete-relationship":
         assert isinstance(write_query, GraphRelationalDeleteRelationshipWriteIR)
         return _single_statement_program(
-            _compile_delete_relationship_sql(write_query, graph_schema=graph_schema)
+                _compile_delete_relationship_sql(
+                    write_query,
+                    graph_schema=graph_schema,
+                    backend=backend_ir.backend,
+                )
         )
 
     if family == "match-merge-relationship":
@@ -332,6 +372,7 @@ def _compile_graph_relational_backend_program(
             _compile_match_merge_relationship_sql(
                 write_query,
                 graph_schema=graph_schema,
+                backend=backend_ir.backend,
             )
         )
 
@@ -347,6 +388,7 @@ def _compile_graph_relational_backend_program(
             predicates=write_query.predicates,
             relationship=write_query.relationship,
             graph_schema=graph_schema,
+            backend=backend_ir.backend,
             merge=True,
         )
 
@@ -361,6 +403,7 @@ def _compile_graph_relational_backend_program(
             right=write_query.right,
             relationship=write_query.relationship,
             graph_schema=graph_schema,
+            backend=backend_ir.backend,
             merge=True,
         )
 
@@ -376,6 +419,7 @@ def _compile_graph_relational_backend_program(
             predicates=write_query.predicates,
             relationship=write_query.relationship,
             graph_schema=graph_schema,
+            backend=backend_ir.backend,
             merge=False,
         )
 
@@ -390,6 +434,7 @@ def _compile_graph_relational_backend_program(
             right=write_query.right,
             relationship=write_query.relationship,
             graph_schema=graph_schema,
+            backend=backend_ir.backend,
             merge=False,
         )
 
@@ -402,6 +447,7 @@ def _compile_graph_relational_backend_program(
             _compile_match_create_relationship_between_nodes_sql(
                 write_query,
                 graph_schema=graph_schema,
+                backend=backend_ir.backend,
             )
         )
 
@@ -417,6 +463,7 @@ def _compile_graph_relational_backend_program(
 def _compile_set_node_sql(
     statement: GraphRelationalSetNodeWriteIR,
     graph_schema: GraphSchema,
+    backend: SQLBackend,
 ) -> str:
     alias = statement.node.alias
     if statement.node.label is None:
@@ -434,6 +481,7 @@ def _compile_set_node_sql(
             ),
             operator="=",
             value=value,
+            backend=backend,
         )
         for field, value in statement.node.properties
     ]
@@ -444,7 +492,12 @@ def _compile_set_node_sql(
                 "predicates only on the matched node alias."
             )
         where_parts.append(
-            _compile_type_aware_match_node_predicate(alias, node_type, predicate)
+            _compile_type_aware_match_node_predicate(
+                alias,
+                node_type,
+                predicate,
+                backend=backend,
+            )
         )
 
     assignments_sql = _compile_type_aware_set_assignments(
@@ -463,6 +516,7 @@ def _compile_set_node_sql(
 def _compile_set_relationship_sql(
     statement: GraphRelationalSetRelationshipWriteIR,
     graph_schema: GraphSchema,
+    backend: SQLBackend,
 ) -> str:
     relationship_alias = statement.relationship.alias or "edge"
     left_alias = statement.left.alias
@@ -518,6 +572,7 @@ def _compile_set_relationship_sql(
                 ),
                 operator="=",
                 value=value,
+                backend=backend,
             )
         )
     for field, value in statement.relationship.properties:
@@ -530,6 +585,7 @@ def _compile_set_relationship_sql(
                 ),
                 operator="=",
                 value=value,
+                backend=backend,
             )
         )
     if distinct_endpoints:
@@ -543,6 +599,7 @@ def _compile_set_relationship_sql(
                     ),
                     operator="=",
                     value=value,
+                    backend=backend,
                 )
             )
 
@@ -553,6 +610,7 @@ def _compile_set_relationship_sql(
                     left_alias,
                     left_type,
                     predicate,
+                    backend=backend,
                 )
             )
             continue
@@ -562,6 +620,7 @@ def _compile_set_relationship_sql(
                     right_alias,
                     right_type,
                     predicate,
+                    backend=backend,
                 )
             )
             continue
@@ -571,6 +630,7 @@ def _compile_set_relationship_sql(
                     relationship_alias,
                     edge_type,
                     predicate,
+                    backend=backend,
                 )
             )
             continue
@@ -600,6 +660,7 @@ def _compile_set_relationship_sql(
 def _compile_delete_node_sql(
     statement: GraphRelationalDeleteNodeWriteIR,
     graph_schema: GraphSchema,
+    backend: SQLBackend,
 ) -> str:
     alias = statement.node.alias
     if statement.node.label is None:
@@ -617,6 +678,7 @@ def _compile_delete_node_sql(
             ),
             operator="=",
             value=value,
+            backend=backend,
         )
         for field, value in statement.node.properties
     ]
@@ -627,7 +689,12 @@ def _compile_delete_node_sql(
                 "predicates only on the matched node alias."
             )
         where_parts.append(
-            _compile_type_aware_match_node_predicate(alias, node_type, predicate)
+              _compile_type_aware_match_node_predicate(
+                 alias,
+                 node_type,
+                 predicate,
+                 backend=backend,
+              )
         )
 
     return _assemble_delete_sql(
@@ -640,6 +707,7 @@ def _compile_delete_node_sql(
 def _compile_delete_relationship_sql(
     statement: GraphRelationalDeleteRelationshipWriteIR,
     graph_schema: GraphSchema,
+    backend: SQLBackend,
 ) -> str:
     relationship_alias = statement.relationship.alias or "edge"
     distinct_endpoints = _create_relationship_uses_distinct_nodes(
@@ -676,6 +744,7 @@ def _compile_delete_relationship_sql(
                 ),
                 operator="=",
                 value=value,
+                backend=backend,
             )
         )
     for field, value in statement.relationship.properties:
@@ -688,6 +757,7 @@ def _compile_delete_relationship_sql(
                 ),
                 operator="=",
                 value=value,
+                backend=backend,
             )
         )
     if distinct_endpoints:
@@ -701,6 +771,7 @@ def _compile_delete_relationship_sql(
                     ),
                     operator="=",
                     value=value,
+                    backend=backend,
                 )
             )
     else:
@@ -718,6 +789,7 @@ def _compile_delete_relationship_sql(
                     statement.left.alias,
                     left_type,
                     predicate,
+                    backend=backend,
                 )
             )
             continue
@@ -727,6 +799,7 @@ def _compile_delete_relationship_sql(
                     statement.right.alias,
                     right_type,
                     predicate,
+                    backend=backend,
                 )
             )
             continue
@@ -736,6 +809,7 @@ def _compile_delete_relationship_sql(
                     relationship_alias,
                     edge_type,
                     predicate,
+                    backend=backend,
                 )
             )
             continue
@@ -789,6 +863,7 @@ def _compile_delete_relationship_sql(
 def _compile_type_aware_merge_node_sql(
     node: NodePattern,
     graph_schema: GraphSchema,
+    backend: SQLBackend,
 ) -> str:
     if node.label is None:
         raise ValueError(
@@ -805,6 +880,7 @@ def _compile_type_aware_merge_node_sql(
             ),
             operator="=",
             value=value,
+            backend=backend,
         )
         for field, value in node.properties
     ]
@@ -980,7 +1056,8 @@ def _resolve_type_aware_property_column(entity_type: object, field: str) -> str:
             return property_field.column_name
 
     raise ValueError(
-        "Type-aware CREATE lowering requires write properties to exist in the schema contract."
+        "Type-aware CREATE lowering requires write properties to exist in the "
+        "schema contract."
     )
 
 
@@ -1034,10 +1111,12 @@ def _resolve_write_endpoint_node_pattern_from_traversal_source(
 def _compile_type_aware_traversal_write_source_components(
     source: GraphRelationalReadIR,
     graph_schema: GraphSchema,
+    backend: SQLBackend,
 ) -> tuple[str, list[str], list[str], dict[str, str]]:
     if source.source_kind == "relationship-chain":
         raise ValueError(
-            "Type-aware traversal-backed writes currently support only one-hop MATCH sources."
+            "Type-aware traversal-backed writes currently support only one-hop "
+            "MATCH sources."
         )
     if source.source_kind != "relationship":
         raise ValueError(
@@ -1047,27 +1126,35 @@ def _compile_type_aware_traversal_write_source_components(
     relationship = source.relationship
     if _is_variable_length_relationship(relationship):
         raise ValueError(
-            "Type-aware traversal-backed writes currently support only fixed-length one-hop MATCH sources."
+            "Type-aware traversal-backed writes currently support only "
+            "fixed-length one-hop MATCH sources."
         )
     if relationship.type_name is None or "|" in relationship.type_name:
         raise ValueError(
-            "Type-aware traversal-backed writes currently require exactly one relationship type in the MATCH source."
+            "Type-aware traversal-backed writes currently require exactly one "
+            "relationship type in the MATCH source."
         )
     if relationship.direction != "out":
         raise ValueError(
-            "Type-aware traversal-backed writes currently support only outgoing one-hop MATCH sources."
+            "Type-aware traversal-backed writes currently support only "
+            "outgoing one-hop MATCH sources."
         )
     if source.left.label is None or source.right.label is None:
         raise ValueError(
-            "Type-aware traversal-backed writes currently require explicit endpoint labels in the MATCH source."
+            "Type-aware traversal-backed writes currently require explicit "
+            "endpoint labels in the MATCH source."
         )
 
     edge_type = graph_schema.edge_type(relationship.type_name)
     left_type = graph_schema.node_type(source.left.label)
     right_type = graph_schema.node_type(source.right.label)
-    if left_type.name != edge_type.source_type or right_type.name != edge_type.target_type:
+    if (
+        left_type.name != edge_type.source_type
+        or right_type.name != edge_type.target_type
+    ):
         raise ValueError(
-            "Type-aware traversal-backed writes currently require the MATCH source labels to match the relationship schema contract."
+            "Type-aware traversal-backed writes currently require the MATCH "
+            "source labels to match the relationship schema contract."
         )
 
     relationship_alias = relationship.alias or "edge"
@@ -1079,12 +1166,21 @@ def _compile_type_aware_traversal_write_source_components(
     )
     if distinct_endpoints:
         joins = [
-            f"JOIN {left_type.table_name} AS {left_alias} ON {left_alias}.id = {relationship_alias}.from_id",
-            f"JOIN {right_type.table_name} AS {right_alias} ON {right_alias}.id = {relationship_alias}.to_id",
+            (
+                f"JOIN {left_type.table_name} AS {left_alias} "
+                f"ON {left_alias}.id = {relationship_alias}.from_id"
+            ),
+            (
+                f"JOIN {right_type.table_name} AS {right_alias} "
+                f"ON {right_alias}.id = {relationship_alias}.to_id"
+            ),
         ]
     else:
         joins = [
-            f"JOIN {left_type.table_name} AS {left_alias} ON {left_alias}.id = {relationship_alias}.from_id"
+            (
+                f"JOIN {left_type.table_name} AS {left_alias} "
+                f"ON {left_alias}.id = {relationship_alias}.from_id"
+            )
         ]
     where_parts: list[str] = []
 
@@ -1098,6 +1194,7 @@ def _compile_type_aware_traversal_write_source_components(
                 ),
                 operator="=",
                 value=value,
+                backend=backend,
             )
         )
     for field, value in relationship.properties:
@@ -1110,6 +1207,7 @@ def _compile_type_aware_traversal_write_source_components(
                 ),
                 operator="=",
                 value=value,
+                backend=backend,
             )
         )
     if distinct_endpoints:
@@ -1123,6 +1221,7 @@ def _compile_type_aware_traversal_write_source_components(
                     ),
                     operator="=",
                     value=value,
+                    backend=backend,
                 )
             )
     else:
@@ -1131,12 +1230,22 @@ def _compile_type_aware_traversal_write_source_components(
     for predicate in source.predicates:
         if predicate.alias == left_alias:
             where_parts.append(
-                _compile_type_aware_match_node_predicate(left_alias, left_type, predicate)
+                _compile_type_aware_match_node_predicate(
+                    left_alias,
+                    left_type,
+                    predicate,
+                    backend=backend,
+                )
             )
             continue
         if predicate.alias == right_alias:
             where_parts.append(
-                _compile_type_aware_match_node_predicate(right_alias, right_type, predicate)
+                _compile_type_aware_match_node_predicate(
+                    right_alias,
+                    right_type,
+                    predicate,
+                    backend=backend,
+                )
             )
             continue
         if predicate.alias == relationship_alias:
@@ -1145,11 +1254,13 @@ def _compile_type_aware_traversal_write_source_components(
                     relationship_alias,
                     edge_type,
                     predicate,
+                    backend=backend,
                 )
             )
             continue
         raise ValueError(
-            "Type-aware traversal-backed writes currently support predicates only on the one-hop MATCH source aliases."
+            "Type-aware traversal-backed writes currently support predicates "
+            "only on the one-hop MATCH source aliases."
         )
 
     alias_map = {
@@ -1174,5 +1285,3 @@ def _require_single_relationship_type(relationship: RelationshipPattern) -> str:
             "relationship type."
         )
     return relationship.type_name
-
-

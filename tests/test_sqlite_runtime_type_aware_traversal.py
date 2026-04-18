@@ -23,6 +23,7 @@ class TypeAwareSQLiteTraversalRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "MATCH (a:User)-[r:KNOWS]->(b:User) "
                 "CREATE (a)-[:INTRODUCED]->(:Person {name: 'Cara'})"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -43,6 +44,7 @@ class TypeAwareSQLiteTraversalRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "MATCH (a:User {name: 'Alice'})-[r:KNOWS]->(b:User) "
                 "MERGE (a)-[:INTRODUCED]->(:Person {name: 'Dana'})"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
         filtered_right_program = cypherglot.render_cypher_program_text(
@@ -50,6 +52,7 @@ class TypeAwareSQLiteTraversalRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "MATCH (a:User)-[r:KNOWS]->(b:User {name: 'Bob'}) "
                 "MERGE (a)-[:INTRODUCED]->(:Person {name: 'Erin'})"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -83,6 +86,7 @@ class TypeAwareSQLiteTraversalRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "MATCH (a:User)-[r:KNOWS]->(a:User) "
                 "CREATE (a)-[:INTRODUCED]->(:Person {name: 'Cara'})"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -105,6 +109,7 @@ class TypeAwareSQLiteTraversalRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
 
         program = cypherglot.render_cypher_program_text(
             "MATCH (a:User)-[r:WORKS_AT]->(b:Company {name: 'Acme'}) CREATE (:User {name: 'Cara'})-[:WORKS_AT {since: 2024}]->(b)",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -122,10 +127,12 @@ class TypeAwareSQLiteTraversalRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
 
         filtered_left_program = cypherglot.render_cypher_program_text(
             "MATCH (a:User {name: 'Alice'})-[r:WORKS_AT]->(b:Company) CREATE (:User {name: 'Dana'})-[:WORKS_AT {since: 2025}]->(b)",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
         filtered_right_program = cypherglot.render_cypher_program_text(
             "MATCH (a:User)-[r:WORKS_AT]->(b:Company {name: 'Bravo'}) CREATE (:User {name: 'Erin'})-[:WORKS_AT {since: 2026}]->(b)",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -150,10 +157,12 @@ class TypeAwareSQLiteTraversalRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
 
         relationship_filtered_program = cypherglot.render_cypher_program_text(
             "MATCH (a:User)-[r:WORKS_AT]->(b:Company) WHERE r.since = 2020 CREATE (:User {name: 'Fiona'})-[:WORKS_AT {since: 2027}]->(b)",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
         combined_filtered_program = cypherglot.render_cypher_program_text(
             "MATCH (a:User {name: 'Alice'})-[r:WORKS_AT]->(b:Company) WHERE r.since = 2020 CREATE (:User {name: 'Gina'})-[:WORKS_AT {since: 2028}]->(b)",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -178,6 +187,7 @@ class TypeAwareSQLiteTraversalRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
 
         right_and_relationship_program = cypherglot.render_cypher_program_text(
             "MATCH (a:User)-[r:WORKS_AT]->(b:Company {name: 'Bravo'}) WHERE r.since = 2021 CREATE (:User {name: 'Hana'})-[:WORKS_AT {since: 2029}]->(b)",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -201,6 +211,7 @@ class TypeAwareSQLiteTraversalRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
 
         all_filters_program = cypherglot.render_cypher_program_text(
             "MATCH (a:User {name: 'Bob'})-[r:WORKS_AT]->(b:Company {name: 'Bravo'}) WHERE r.since = 2021 CREATE (:User {name: 'Iris'})-[:WORKS_AT {since: 2030}]->(b)",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -232,6 +243,7 @@ class TypeAwareSQLiteTraversalRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "MATCH (a:User)-[r:WORKS_AT]->(b:Company) "
                 "WHERE a.name = 'Alice' CREATE (a)-[:WORKS_AT {since: 2024}]->(b)"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -256,6 +268,7 @@ class TypeAwareSQLiteTraversalRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
 
         sql = cypherglot.to_sql(
             "MATCH (a:User)-[r:KNOWS]->(a:User) CREATE (a)-[:KNOWS]->(a)",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -280,6 +293,7 @@ class TypeAwareSQLiteTraversalRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "MATCH (a:User)-[r:KNOWS]->(b:User) "
                 "MERGE (a)-[:INTRODUCED]->(:Person {name: 'Cara'})"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -311,6 +325,7 @@ class TypeAwareSQLiteTraversalRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "MATCH (a:User)-[r:KNOWS]->(a:User) "
                 "MERGE (a)-[:INTRODUCED]->(:Person {name: 'Cara'})"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -334,6 +349,7 @@ class TypeAwareSQLiteTraversalRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
 
         program = cypherglot.render_cypher_program_text(
             "MATCH (a:User)-[r:WORKS_AT]->(b:Company {name: 'Acme'}) MERGE (:User {name: 'Cara'})-[:WORKS_AT {since: 2024}]->(b)",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -352,10 +368,12 @@ class TypeAwareSQLiteTraversalRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
 
         filtered_left_program = cypherglot.render_cypher_program_text(
             "MATCH (a:User {name: 'Alice'})-[r:WORKS_AT]->(b:Company) MERGE (:User {name: 'Dana'})-[:WORKS_AT {since: 2025}]->(b)",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
         filtered_right_program = cypherglot.render_cypher_program_text(
             "MATCH (a:User)-[r:WORKS_AT]->(b:Company {name: 'Bravo'}) MERGE (:User {name: 'Erin'})-[:WORKS_AT {since: 2026}]->(b)",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -382,10 +400,12 @@ class TypeAwareSQLiteTraversalRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
 
         relationship_filtered_program = cypherglot.render_cypher_program_text(
             "MATCH (a:User)-[r:WORKS_AT]->(b:Company) WHERE r.since = 2020 MERGE (:User {name: 'Fiona'})-[:WORKS_AT {since: 2027}]->(b)",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
         combined_filtered_program = cypherglot.render_cypher_program_text(
             "MATCH (a:User {name: 'Alice'})-[r:WORKS_AT]->(b:Company) WHERE r.since = 2020 MERGE (:User {name: 'Gina'})-[:WORKS_AT {since: 2028}]->(b)",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -412,6 +432,7 @@ class TypeAwareSQLiteTraversalRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
 
         right_and_relationship_program = cypherglot.render_cypher_program_text(
             "MATCH (a:User)-[r:WORKS_AT]->(b:Company {name: 'Bravo'}) WHERE r.since = 2021 MERGE (:User {name: 'Hana'})-[:WORKS_AT {since: 2029}]->(b)",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -436,6 +457,7 @@ class TypeAwareSQLiteTraversalRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
 
         all_filters_program = cypherglot.render_cypher_program_text(
             "MATCH (a:User {name: 'Bob'})-[r:WORKS_AT]->(b:Company {name: 'Bravo'}) WHERE r.since = 2021 MERGE (:User {name: 'Iris'})-[:WORKS_AT {since: 2030}]->(b)",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -470,6 +492,7 @@ class TypeAwareSQLiteTraversalRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
 
         program = cypherglot.render_cypher_program_text(
             "MATCH (a:User)-[r:KNOWS]->(a:User) MERGE (:User {name: 'Cara'})-[:KNOWS]->(a)",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -498,6 +521,7 @@ class TypeAwareSQLiteTraversalRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
 
         program = cypherglot.render_cypher_program_text(
             "MATCH (a:User)-[r:KNOWS]->(a:User) CREATE (:User {name: 'Cara'})-[:KNOWS]->(a)",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -523,6 +547,7 @@ class TypeAwareSQLiteTraversalRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
                 "MATCH (a:User)-[r:WORKS_AT]->(b:Company) "
                 "WHERE a.name = 'Alice' MERGE (a)-[:WORKS_AT {since: 2020}]->(b)"
             ),
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 
@@ -582,10 +607,12 @@ class TypeAwareSQLiteTraversalRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
 
         create_sql = cypherglot.to_sql(
             "MATCH (a:User {name: 'Alice'})-[r:WORKS_AT]->(b:Company {name: 'Acme'}) WHERE r.since = 2020 CREATE (a)-[:INTRODUCED]->(b)",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(local_schema),
         )
         merge_sql = cypherglot.to_sql(
             "MATCH (a:User {name: 'Alice'})-[r:WORKS_AT]->(b:Company {name: 'Acme'}) WHERE r.since = 2020 MERGE (a)-[:INTRODUCED]->(b)",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(local_schema),
         )
 
@@ -613,6 +640,7 @@ class TypeAwareSQLiteTraversalRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
 
         sql = cypherglot.to_sql(
             "MATCH (a:User)-[r:KNOWS]->(a:User) MERGE (a)-[:KNOWS]->(a)",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(self.graph_schema),
         )
 

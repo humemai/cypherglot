@@ -54,6 +54,27 @@ def _public_api_schema_context() -> CompilerSchemaContext:
 
 class CompileTests(unittest.TestCase):
 
+    def test_compile_unwind_literal_query(self) -> None:
+        expression = cypherglot.compile_cypher_text(
+            "UNWIND [1, 2, 3] AS x RETURN x AS value ORDER BY value DESC LIMIT 2",
+            schema_context=_public_api_schema_context(),
+        
+            backend="sqlite",)
+
+        self.assertEqual(
+            expression.sql(dialect="sqlite"),
+            'SELECT with_q."__cg_with_scalar_x" AS "value" FROM (SELECT 1 AS "__cg_with_scalar_x" UNION ALL SELECT 2 AS "__cg_with_scalar_x" UNION ALL SELECT 3 AS "__cg_with_scalar_x") AS with_q ORDER BY with_q."__cg_with_scalar_x" DESC LIMIT 2',
+        )
+    def test_compile_cypher_text_requires_explicit_backend(self) -> None:
+        with self.assertRaisesRegex(
+            ValueError,
+            "requires an explicit SQL backend",
+        ):
+            cypherglot.compile_cypher_text(
+                "MATCH (u:User) RETURN u.name",
+                schema_context=_public_api_schema_context(),
+            )
+
     def test_compile_type_aware_relational_output_mode_rejects_with_labels_and_keys(self) -> None:
         with self.assertRaisesRegex(
             ValueError,
@@ -83,7 +104,8 @@ class CompileTests(unittest.TestCase):
                         ),
                     ),
                 ),
-            )
+            
+            backend="sqlite",)
 
     def test_compile_type_aware_relational_output_mode_rejects_direct_chain_labels_and_keys(
         self,
@@ -120,7 +142,8 @@ class CompileTests(unittest.TestCase):
                         ),
                     ),
                 ),
-            )
+            
+            backend="sqlite",)
 
     def test_compile_type_aware_relational_output_mode_rejects_with_chain_labels_and_keys(
         self,
@@ -158,7 +181,8 @@ class CompileTests(unittest.TestCase):
                         ),
                     ),
                 ),
-            )
+            
+            backend="sqlite",)
 
     def test_compile_type_aware_relational_output_mode_expands_direct_relationship_entity_and_properties(self) -> None:
         expression = cypherglot.compile_cypher_text(
@@ -185,7 +209,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 ),
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             expression.sql(),
@@ -227,7 +252,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 ),
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             expression.sql(),
@@ -255,7 +281,8 @@ class CompileTests(unittest.TestCase):
                     edge_types=(),
                 ),
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             expression.sql(),
@@ -287,7 +314,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 ),
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             expression.sql(),
@@ -329,7 +357,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 ),
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             expression.sql(),
@@ -364,7 +393,8 @@ class CompileTests(unittest.TestCase):
                     edge_types=(),
                 ),
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             expression.sql(),
@@ -407,7 +437,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 ),
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             expression.sql(),
@@ -458,7 +489,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 ),
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             expression.sql(),
@@ -515,7 +547,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 ),
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             expression.sql(),
@@ -568,7 +601,8 @@ class CompileTests(unittest.TestCase):
                     edge_types=(),
                 ),
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             expression.sql(),
@@ -605,7 +639,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 ),
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             expression.sql(),
@@ -639,7 +674,8 @@ class CompileTests(unittest.TestCase):
                     edge_types=(),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             expression.sql(),
@@ -656,7 +692,8 @@ class CompileTests(unittest.TestCase):
                     edge_types=(),
                 )
             ),
-        )
+        
+            backend="sqlite",)
         grouped_expression = cypherglot.compile_cypher_text(
             "MATCH (u:User) RETURN u.name AS name, avg(u.score) AS mean ORDER BY mean DESC",
             schema_context=CompilerSchemaContext.type_aware(
@@ -673,7 +710,8 @@ class CompileTests(unittest.TestCase):
                     edge_types=(),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             count_expression.sql(),
@@ -707,13 +745,14 @@ class CompileTests(unittest.TestCase):
                     edge_types=(),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             expression.sql(),
-            'SELECT LOWER(u.name) AS "lower_name", LENGTH(u.name) AS "name_len", '
+            'SELECT LOWER(u.name) AS "lower_name", LENGTH(CAST(u.name AS TEXT)) AS "name_len", '
             'CAST(u.age AS TEXT) AS "age_text", COALESCE(u.name, \'unknown\') AS "display_name" '
-            'FROM cg_node_user AS u ORDER BY LOWER(u.name) ASC, LENGTH(u.name) ASC, '
+            'FROM cg_node_user AS u ORDER BY LOWER(u.name) ASC, LENGTH(CAST(u.name AS TEXT)) ASC, '
             'CAST(u.age AS TEXT) ASC, COALESCE(u.name, \'unknown\') ASC',
         )
 
@@ -746,7 +785,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             expression.sql(),
@@ -780,7 +820,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             expression.sql(),
@@ -813,7 +854,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             grouped_expression.sql(),
@@ -850,14 +892,15 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             expression.sql(),
-            'SELECT LOWER(r.note) AS "lower_note", LENGTH(\'WORKS_AT\') AS "type_len", '
+            'SELECT LOWER(r.note) AS "lower_note", LENGTH(CAST(\'WORKS_AT\' AS TEXT)) AS "type_len", '
             'CAST(r.since AS TEXT) AS "since_text" FROM cg_edge_works_at AS r '
             'JOIN cg_node_user AS a ON a.id = r.from_id '
             'JOIN cg_node_company AS b ON b.id = r.to_id '
-            'ORDER BY LOWER(r.note) ASC, LENGTH(\'WORKS_AT\') ASC, CAST(r.since AS TEXT) ASC',
+            'ORDER BY LOWER(r.note) ASC, LENGTH(CAST(\'WORKS_AT\' AS TEXT)) ASC, CAST(r.since AS TEXT) ASC',
         )
 

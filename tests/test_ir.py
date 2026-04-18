@@ -51,6 +51,22 @@ class GraphRelationalIRTests(unittest.TestCase):
         self.assertIn(SQLBackend.SQLITE, ir_program.backend_capabilities)
         self.assertIn(SQLBackend.DUCKDB, ir_program.backend_capabilities)
         self.assertIn(SQLBackend.POSTGRESQL, ir_program.backend_capabilities)
+        sqlite_capabilities = ir_program.backend_capabilities[SQLBackend.SQLITE]
+        duckdb_capabilities = ir_program.backend_capabilities[SQLBackend.DUCKDB]
+        postgresql_capabilities = ir_program.backend_capabilities[
+            SQLBackend.POSTGRESQL
+        ]
+        self.assertIsNone(sqlite_capabilities.render_dialect)
+        self.assertIsNone(sqlite_capabilities.numeric_coercion_sql_type)
+        self.assertFalse(sqlite_capabilities.numeric_coercion_is_tolerant)
+        self.assertFalse(sqlite_capabilities.integer_cast_requires_truncation)
+        self.assertEqual(duckdb_capabilities.render_dialect, "duckdb")
+        self.assertEqual(duckdb_capabilities.numeric_coercion_sql_type, "DOUBLE")
+        self.assertTrue(duckdb_capabilities.numeric_coercion_is_tolerant)
+        self.assertTrue(duckdb_capabilities.integer_cast_requires_truncation)
+        self.assertEqual(postgresql_capabilities.render_dialect, "postgres")
+        self.assertIsNone(postgresql_capabilities.numeric_coercion_sql_type)
+        self.assertTrue(postgresql_capabilities.integer_cast_requires_truncation)
 
     def test_build_graph_relational_ir_for_create_node(self) -> None:
         statement = normalize_cypher_text("CREATE (:User {name: 'Alice'})")

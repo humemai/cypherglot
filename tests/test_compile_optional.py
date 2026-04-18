@@ -70,7 +70,8 @@ class CompileTests(unittest.TestCase):
                     edge_types=(),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             expression.sql(),
@@ -97,7 +98,8 @@ class CompileTests(unittest.TestCase):
                     edge_types=(),
                 ),
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             expression.sql(),
@@ -114,7 +116,8 @@ class CompileTests(unittest.TestCase):
                 "CALL db.index.vector.queryNodes('user_embedding_idx', 1, $query) "
                 "YIELD node, score RETURN node.id, score",
                 schema_context=_public_api_schema_context(),
-            )
+            
+            backend="sqlite",)
 
     def test_compile_single_statement_api_rejects_vector_aware_query_nodes(self) -> None:
         with self.assertRaisesRegex(
@@ -125,13 +128,15 @@ class CompileTests(unittest.TestCase):
                 "CALL db.index.vector.queryNodes('user_embedding_idx', 3, $query) "
                 "YIELD node, score WHERE node.region = 'west' RETURN node.id, score",
                 schema_context=_public_api_schema_context(),
-            )
+            
+            backend="sqlite",)
 
     def test_compile_match_with_scalar_rebinding(self) -> None:
         expression = cypherglot.compile_cypher_text(
             "MATCH (u:User) WITH u.name AS name RETURN name ORDER BY name",
             schema_context=_public_api_schema_context(),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             expression.sql(),
@@ -144,15 +149,18 @@ class CompileTests(unittest.TestCase):
         expression = cypherglot.compile_cypher_text(
             "MATCH (u:User) WITH u AS person, u.name AS name RETURN person, name ORDER BY name",
             schema_context=_public_api_schema_context(),
-        )
+        
+            backend="sqlite",)
         ordered_expression = cypherglot.compile_cypher_text(
             "MATCH (u:User) WITH u AS person RETURN person AS user ORDER BY user",
             schema_context=_public_api_schema_context(),
-        )
+        
+            backend="sqlite",)
         relationship_ordered_expression = cypherglot.compile_cypher_text(
             "MATCH (a:User)-[r:KNOWS]->(b:User) WITH r AS rel RETURN rel AS edge ORDER BY edge",
             schema_context=_public_api_schema_context(),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             expression.sql(),
@@ -211,7 +219,8 @@ class CompileTests(unittest.TestCase):
         expression = cypherglot.compile_cypher_text(
             "MATCH (a:User)-[r:KNOWS]->(b:User)-[s:WORKS_AT]->(c:Company) RETURN a.name AS user_name, c.name AS company ORDER BY company",
             schema_context=_public_api_schema_context(),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             expression.sql(),
@@ -225,7 +234,8 @@ class CompileTests(unittest.TestCase):
         expression = cypherglot.compile_cypher_text(
             "MATCH (a:User)-[r:KNOWS]->(b:User)-[s:WORKS_AT]->(c:Company) WITH b AS friend, c.name AS company RETURN friend.name, company ORDER BY company",
             schema_context=_public_api_schema_context(),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             expression.sql(),
@@ -243,15 +253,18 @@ class CompileTests(unittest.TestCase):
         expression = cypherglot.compile_cypher_text(
             "MATCH (a:User)-[:KNOWS*1..2]->(b:User) RETURN a.name AS user_name, b.name AS friend ORDER BY friend",
             schema_context=_public_api_schema_context(),
-        )
+        
+            backend="sqlite",)
         zero_hop_expression = cypherglot.compile_cypher_text(
             "MATCH (a:User)-[:KNOWS*0..2]->(b:User) RETURN a.name AS user_name, b.name AS friend ORDER BY friend",
             schema_context=_public_api_schema_context(),
-        )
+        
+            backend="sqlite",)
         alias_expression = cypherglot.compile_cypher_text(
             "MATCH (a:User)-[r:KNOWS*1..2]->(b:User) RETURN a.name AS user_name, b.name AS friend ORDER BY friend",
             schema_context=_public_api_schema_context(),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             expression.sql(),
@@ -284,11 +297,13 @@ class CompileTests(unittest.TestCase):
         expression = cypherglot.compile_cypher_text(
             "MATCH (a:User)-[:KNOWS*..2]->(b:User) WITH b AS friend RETURN friend.name ORDER BY friend.name",
             schema_context=_public_api_schema_context(),
-        )
+        
+            backend="sqlite",)
         zero_hop_expression = cypherglot.compile_cypher_text(
             "MATCH (a:User)-[:KNOWS*0..2]->(b:User) WITH b AS friend RETURN friend.name ORDER BY friend.name",
             schema_context=_public_api_schema_context(),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             expression.sql(),
@@ -334,5 +349,6 @@ class CompileTests(unittest.TestCase):
             cypherglot.compile_cypher_text(
                 "CREATE (:User {name: 'Alice'})",
                 schema_context=_public_api_schema_context(),
-            )
+            
+            backend="sqlite",)
 

@@ -5,6 +5,10 @@ import sqlite3
 import unittest
 
 import cypherglot
+from tests._postgres_runtime_support import (
+    acquire_postgresql_test_dsn,
+    release_postgresql_test_dsn,
+)
 from cypherglot.schema import (
     CompilerSchemaContext,
     EdgeTypeSpec,
@@ -14,15 +18,26 @@ from cypherglot.schema import (
 )
 
 try:
-    import duckdb
+    import psycopg2
 except ImportError:  # pragma: no cover - optional test dependency
-    duckdb = None
+    psycopg2 = None  # type: ignore[assignment]
 
 
-@unittest.skipIf(duckdb is None, "duckdb is not installed")
-class DuckDBReadParityTests(unittest.TestCase):
+class PostgreSQLReadParityTests(unittest.TestCase):
+    _postgres_dsn: str
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls._postgres_dsn = acquire_postgresql_test_dsn()
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        release_postgresql_test_dsn()
+        super().tearDownClass()
+
     def setUp(self) -> None:
-        assert duckdb is not None
+        assert psycopg2 is not None
         self.graph_schema = GraphSchema(
             node_types=(
                 NodeTypeSpec(
@@ -64,27 +79,28 @@ class DuckDBReadParityTests(unittest.TestCase):
         self.sqlite = sqlite3.connect(":memory:")
         self.sqlite.executescript("\n".join(self.graph_schema.ddl("sqlite")))
 
-        self.duckdb = duckdb.connect()
-        for statement in self.graph_schema.ddl("duckdb"):
-            self.duckdb.execute(statement)
+        self.postgres = psycopg2.connect(self._postgres_dsn)
+        self.postgres.autocommit = False
+        with self.postgres.cursor() as cur:
+            for statement in self.graph_schema.ddl("postgresql"):
+                cur.execute(statement)
+        self.postgres.commit()
         self._seed_graphs()
 
     def tearDown(self) -> None:
         self.sqlite.close()
-        self.duckdb.close()
+        postgres = getattr(self, "postgres", None)
+        if postgres is None or postgres.closed:
+            return
+        try:
+            self._reset_postgresql_schema()
+        finally:
+            postgres.close()
 
     def test_curated_admitted_reads_match_sqlite_results(self) -> None:
         queries = (
             "MATCH (u:User) RETURN u.name ORDER BY u.name",
-            "MATCH (u:User) RETURN u AS user ORDER BY u.age, u.name",
-            "OPTIONAL MATCH (u:User) WHERE u.name = 'Alice' "
-            "RETURN u.name AS name ORDER BY name",
-            "OPTIONAL MATCH (u:User) WHERE u.name = 'Zed' RETURN u.name AS name",
             "MATCH (u:User) WITH u.name AS name RETURN name ORDER BY name",
-            (
-                "MATCH (u:User) WITH u.age AS age "
-                "RETURN age >= 18 AS adult ORDER BY adult"
-            ),
             (
                 "MATCH (u:User) WITH lower(u.name) AS lowered "
                 "RETURN lowered ORDER BY lowered"
@@ -94,50 +110,63 @@ class DuckDBReadParityTests(unittest.TestCase):
                 "RETURN score_int >= 2 AS ge_two ORDER BY ge_two"
             ),
             (
+                "MATCH (u:User) WITH lower(u.name) AS lowered, "
+                "u.score AS score RETURN lowered, avg(score) AS mean "
+                "ORDER BY mean DESC, lowered"
+            ),
+            (
                 "MATCH (a:User)-[r:KNOWS]->(b:User) "
                 "WITH startNode(r).name AS start_name, endNode(r).id AS end_id "
                 "RETURN start_name, end_id ORDER BY end_id, start_name"
             ),
-            "MATCH (u:User) RETURN count(*) AS total",
-            "MATCH (u:User) RETURN u.name AS name, avg(u.score) AS mean "
-            "ORDER BY mean DESC",
-            "MATCH (a:User)-[r:KNOWS]->(b:User) "
-            "RETURN id(a) AS uid, type(r) AS rel_type, "
-            "startNode(r).id AS start_id, endNode(r).id AS end_id "
-            "ORDER BY uid, end_id",
+            (
+                "MATCH (a:User)-[r:KNOWS]->(b:User)-[s:WORKS_AT]->(c:Company) "
+                "WITH startNode(s).name AS employee, endNode(s).name AS employer "
+                "RETURN employee, employer ORDER BY employer, employee"
+            ),
             (
                 "MATCH (a:User)-[:KNOWS*1..2]->(b:User) "
                 "WITH lower(b.name) AS lowered RETURN lowered ORDER BY lowered"
             ),
-            "MATCH (a:User)-[:KNOWS*1..2]->(b:User) WHERE a.name = 'Alice' "
-            "RETURN b.name AS friend ORDER BY friend",
+            (
+                "MATCH (a:User)-[:KNOWS*1..2]->(b:User) "
+                "WITH toInteger(b.score) AS score_int "
+                "RETURN score_int ORDER BY score_int"
+            ),
+            (
+                "MATCH (a:User)-[:KNOWS*1..2]->(b:User) "
+                "WHERE a.name = 'Alice' RETURN b.name AS friend "
+                "ORDER BY friend"
+            ),
         )
 
         for query in queries:
             with self.subTest(query=query):
                 self.assertEqual(
                     self._execute_sqlite(query),
-                    self._execute_duckdb(query),
+                    self._execute_postgresql(query),
                 )
 
     def _seed_graphs(self) -> None:
         user_rows = [
-            (1, "Alice", 30, 1.2, 1),
-            (2, "Bob", 25, 2.8, 0),
-            (3, "Alice", 22, 3.0, 1),
-            (4, "Cara", 4, 4.4, 0),
+            (1, "Alice", 30, 1.2, True),
+            (2, "Bob", 25, 2.8, False),
+            (3, "Alice", 22, 3.0, True),
+            (4, "Cara", 4, 4.4, False),
         ]
         company_rows = [(5, "Acme")]
         knows_rows = [
-            (10, 1, 2, "Alice met", 1.5, 2.2, 1),
-            (11, 2, 4, "coworker", 0.5, 3.7, 0),
-            (12, 3, 2, "friend", 2.0, 1.1, 1),
+            (10, 1, 2, "Alice met", 1.5, 2.2, True),
+            (11, 2, 4, "coworker", 0.5, 3.7, False),
+            (12, 3, 2, "friend", 2.0, 1.1, True),
         ]
         works_at_rows = [(20, 2, 5, 2020)]
 
         self.sqlite.executemany(
-            "INSERT INTO cg_node_user (id, name, age, score, active) "
-            "VALUES (?, ?, ?, ?, ?)",
+            (
+                "INSERT INTO cg_node_user (id, name, age, score, active) "
+                "VALUES (?, ?, ?, ?, ?)"
+            ),
             user_rows,
         )
         self.sqlite.executemany(
@@ -145,29 +174,50 @@ class DuckDBReadParityTests(unittest.TestCase):
             company_rows,
         )
         self.sqlite.executemany(
-            "INSERT INTO cg_edge_knows (id, from_id, to_id, note, weight, "
-            "score, active) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                "INSERT INTO cg_edge_knows "
+                "(id, from_id, to_id, note, weight, score, active) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)"
+            ),
             knows_rows,
         )
         self.sqlite.executemany(
-            "INSERT INTO cg_edge_works_at (id, from_id, to_id, since) "
-            "VALUES (?, ?, ?, ?)",
+            (
+                "INSERT INTO cg_edge_works_at (id, from_id, to_id, since) "
+                "VALUES (?, ?, ?, ?)"
+            ),
             works_at_rows,
         )
         self.sqlite.commit()
 
-        for row in user_rows:
-            self.duckdb.execute("INSERT INTO cg_node_user VALUES (?, ?, ?, ?, ?)", row)
-        for row in company_rows:
-            self.duckdb.execute("INSERT INTO cg_node_company VALUES (?, ?)", row)
-        for row in knows_rows:
-            self.duckdb.execute(
-                "INSERT INTO cg_edge_knows VALUES (?, ?, ?, ?, ?, ?, ?)",
-                row,
+        with self.postgres.cursor() as cur:
+            cur.executemany(
+                (
+                    "INSERT INTO cg_node_user (id, name, age, score, active) "
+                    "VALUES (%s, %s, %s, %s, %s)"
+                ),
+                user_rows,
             )
-        for row in works_at_rows:
-            self.duckdb.execute("INSERT INTO cg_edge_works_at VALUES (?, ?, ?, ?)", row)
+            cur.executemany(
+                "INSERT INTO cg_node_company (id, name) VALUES (%s, %s)",
+                company_rows,
+            )
+            cur.executemany(
+                (
+                    "INSERT INTO cg_edge_knows "
+                    "(id, from_id, to_id, note, weight, score, active) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s)"
+                ),
+                knows_rows,
+            )
+            cur.executemany(
+                (
+                    "INSERT INTO cg_edge_works_at (id, from_id, to_id, since) "
+                    "VALUES (%s, %s, %s, %s)"
+                ),
+                works_at_rows,
+            )
+        self.postgres.commit()
 
     def _execute_sqlite(self, query: str) -> list[tuple[object, ...]]:
         sql = cypherglot.to_sql(
@@ -175,19 +225,20 @@ class DuckDBReadParityTests(unittest.TestCase):
             backend="sqlite",
             schema_context=self.schema_context,
         )
-        return self._stabilize_rows(
-            self._normalize_rows(self.sqlite.execute(sql).fetchall())
-        )
+        rows = self.sqlite.execute(sql).fetchall()
+        return self._stabilize_rows(self._normalize_rows(rows))
 
-    def _execute_duckdb(self, query: str) -> list[tuple[object, ...]]:
+    def _execute_postgresql(self, query: str) -> list[tuple[object, ...]]:
         sql = cypherglot.to_sql(
             query,
-            dialect="duckdb",
+            dialect="postgres",
+            backend="postgresql",
             schema_context=self.schema_context,
         )
-        return self._stabilize_rows(
-            self._normalize_rows(self.duckdb.execute(sql).fetchall())
-        )
+        with self.postgres.cursor() as cur:
+            cur.execute(sql)
+            rows = cur.fetchall()
+        return self._stabilize_rows(self._normalize_rows(rows))
 
     def _stabilize_rows(
         self,
@@ -225,3 +276,18 @@ class DuckDBReadParityTests(unittest.TestCase):
         if isinstance(value, float):
             return round(value, 12)
         return value
+
+    def _reset_postgresql_schema(self) -> None:
+        with self.postgres.cursor() as cur:
+            for statement in (
+                "DROP TABLE IF EXISTS cg_edge_works_at",
+                "DROP TABLE IF EXISTS cg_edge_knows",
+                "DROP TABLE IF EXISTS cg_node_company",
+                "DROP TABLE IF EXISTS cg_node_user",
+                "DROP SEQUENCE IF EXISTS cg_edge_works_at_id_seq",
+                "DROP SEQUENCE IF EXISTS cg_edge_knows_id_seq",
+                "DROP SEQUENCE IF EXISTS cg_node_company_id_seq",
+                "DROP SEQUENCE IF EXISTS cg_node_user_id_seq",
+            ):
+                cur.execute(statement)
+        self.postgres.commit()

@@ -535,7 +535,11 @@ class TestValidate(unittest.TestCase):
             ),
             (
                 "UNWIND 1 AS x RETURN x",
-                "requires UNWIND sources to be list literals or named parameters",
+                "requires UNWIND sources to be list literals",
+            ),
+            (
+                "UNWIND $items AS x RETURN x",
+                "requires UNWIND sources to be list literals",
             ),
         ]
 

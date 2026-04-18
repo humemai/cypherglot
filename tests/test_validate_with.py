@@ -20,6 +20,20 @@ class TestValidate(unittest.TestCase):
 
         self.assertEqual(type(validated).__name__, "OC_MultiPartQueryContext")
 
+    def test_validate_cypher_text_accepts_derived_scalar_with_binding(self) -> None:
+        validated = cypherglot.validate_cypher_text(
+            "MATCH (u:User) WITH lower(u.name) AS lowered RETURN lowered ORDER BY lowered"
+        )
+
+        self.assertEqual(type(validated).__name__, "OC_MultiPartQueryContext")
+
+    def test_validate_cypher_text_accepts_endpoint_derived_with_binding(self) -> None:
+        validated = cypherglot.validate_cypher_text(
+            "MATCH (a:User)-[r:KNOWS]->(b:User) WITH startNode(r).name AS start_name, endNode(r).id AS end_id RETURN start_name, end_id ORDER BY end_id, start_name"
+        )
+
+        self.assertEqual(type(validated).__name__, "OC_MultiPartQueryContext")
+
     def test_validate_cypher_text_accepts_with_entity_passthrough_return(self) -> None:
         validated = cypherglot.validate_cypher_text(
             "MATCH (u:User) WITH u AS person, u.name AS name RETURN person, name ORDER BY name"

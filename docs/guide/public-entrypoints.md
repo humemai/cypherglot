@@ -132,92 +132,22 @@ What each step is doing:
 - `to_sql(...)` renders that expression to SQL text.
 
 For this query family, the rendered SQL is a single `SELECT ...` statement.
-For this particular admitted path, the checked-in compatibility rendering still
-uses the legacy `nodes` / `node_labels` layout even though the long-term schema
-direction is the generated type-aware contract described in the
-[Schema Contract](schema-contract.md) guide. One checked-in test currently
-expects output in this shape:
+On the intended type-aware path, a representative query shape looks like this:
 
 ```sql
-SELECT JSON_EXTRACT(u.properties, '$.name') AS "u.name"
-FROM nodes AS u
-JOIN node_labels AS u_label_0 ON u_label_0.node_id = u.id
-AND u_label_0.label = 'User'
-WHERE JSON_EXTRACT(u.properties, '$.name') = :name
+SELECT u.name
+FROM cg_node_user AS u
+WHERE u.name = :name
+ORDER BY u.name
 LIMIT 1
 ```
 
-The generated SQLGlot AST for this example is a `Select` expression. Written via
-`expression.to_s()`, it currently looks like this on that same legacy
-compatibility path:
-
-```python
-Select(
-  kind=None,
-  hint=None,
-  distinct=None,
-  expressions=[
-    Alias(
-      this=JSONExtract(
-        this=Column(
-          this=Identifier(this=properties, quoted=False),
-          table=Identifier(this=u, quoted=False)),
-        expression=JSONPath(
-          expressions=[
-            JSONPathRoot(),
-            JSONPathKey(this=name)])),
-      alias=Identifier(this='u.name', quoted=True))],
-  limit=Limit(
-    this=None,
-    expression=Literal(this=1, is_string=False)),
-  from_=From(
-    this=Table(
-      this=Identifier(this=nodes, quoted=False),
-      alias=TableAlias(this=Identifier(this=u, quoted=False)))),
-  joins=[
-    Join(
-      this=Table(
-        this=Identifier(this=node_labels, quoted=False),
-        alias=TableAlias(this=Identifier(this=u_label_0, quoted=False))),
-      on=And(
-        this=EQ(
-          this=Column(
-            this=Identifier(this=node_id, quoted=False),
-            table=Identifier(this=u_label_0, quoted=False)),
-          expression=Column(
-            this=Identifier(this=id, quoted=False),
-            table=Identifier(this=u, quoted=False))),
-        expression=EQ(
-          this=Column(
-            this=Identifier(this=label, quoted=False),
-            table=Identifier(this=u_label_0, quoted=False)),
-          expression=Literal(this='User', is_string=True))))],
-  where=Where(
-    this=EQ(
-      this=JSONExtract(
-        this=Column(
-          this=Identifier(this=properties, quoted=False),
-          table=Identifier(this=u, quoted=False)),
-        expression=JSONPath(
-          expressions=[
-            JSONPathRoot(),
-            JSONPathKey(this=name)])),
-      expression=Placeholder(this=name))),
-  order=Order(
-    this=None,
-    expressions=[
-      Ordered(
-        this=JSONExtract(
-          this=Column(
-            this=Identifier(this=properties, quoted=False),
-            table=Identifier(this=u, quoted=False)),
-          expression=JSONPath(
-            expressions=[
-              JSONPathRoot(),
-              JSONPathKey(this=name)])),
-        desc=False,
-        nulls_first=True)]))
-```
+The generated SQLGlot AST for the current product path is still a `Select`
+expression, but it now hangs off ordinary typed table and column references
+instead of generic property blobs. The exact aliasing and quoting details come
+from the active schema context and backend renderer; the important contract is
+that admitted reads lower through generated `cg_node_*` / `cg_edge_*` tables
+and typed columns.
 
 ## Walkthrough: multi-step write program
 
@@ -257,154 +187,21 @@ The distinction matters:
 That is why `to_sql(...)` rejects these shapes. A multi-step write cannot be
 represented honestly as one flat SQL string without losing structure.
 
-For this example, the generated program contains one loop with one source query
-AST and three body-statement ASTs. As with the earlier single-statement read,
-this concrete example still reflects the currently emitted legacy compatibility
-layout for the admitted path shown here, not the intended long-term type-aware
-storage contract.
+For this example, the generated program still contains one loop with one source
+query and a small body of write statements. On the intended type-aware path,
+the useful mental model is:
 
-Loop source AST via `loop.source.to_s()`:
+1. read matched `x.id` rows from the generated `Begin` node table
+2. insert the fresh `End` node into its generated node table and capture the
+   created id
+3. insert the `TYPE` relationship into its generated edge table using the
+   matched source id and the created target id
 
-```python
-Select(
-  kind=None,
-  hint=None,
-  distinct=None,
-  expressions=[
-    Alias(
-      this=Column(
-        this=Identifier(this=id, quoted=False),
-        table=Identifier(this=x, quoted=False)),
-      alias=Identifier(this=match_node_id, quoted=False))],
-  from_=From(
-    this=Table(
-      this=Identifier(this=nodes, quoted=False),
-      alias=TableAlias(this=Identifier(this=x, quoted=False)))),
-  where=Where(
-    this=Exists(
-      this=Select(
-        kind=None,
-        hint=None,
-        distinct=None,
-        expressions=[Literal(this=1, is_string=False)],
-        from_=From(
-          this=Table(
-            this=Identifier(this=node_labels, quoted=False),
-            alias=TableAlias(
-              this=Identifier(this=x_label_filter_0, quoted=False)))),
-        where=Where(
-          this=And(
-            this=EQ(
-              this=Column(
-                this=Identifier(this=node_id, quoted=False),
-                table=Identifier(this=x_label_filter_0, quoted=False)),
-              expression=Column(
-                this=Identifier(this=id, quoted=False),
-                table=Identifier(this=x, quoted=False))),
-            expression=EQ(
-              this=Column(
-                this=Identifier(this=label, quoted=False),
-                table=Identifier(this=x_label_filter_0, quoted=False)),
-              expression=Literal(this='Begin', is_string=True))))))))
-```
-
-First body statement AST via `loop.body[0].sql.to_s()`:
-
-```python
-Insert(
-  hint=None,
-  is_function=False,
-  this=Schema(
-    this=Table(this=Identifier(this=nodes, quoted=False)),
-    expressions=[Identifier(this=properties, quoted=False)]),
-  stored=False,
-  by_name=False,
-  exists=False,
-  where=False,
-  partition=False,
-  settings=False,
-  default=False,
-  expression=Values(
-    expressions=[
-      Tuple(
-        expressions=[
-          JSONObject(
-            expressions=[
-              JSONKeyValue(
-                this=Literal(this='name', is_string=True),
-                expression=Literal(this='finish', is_string=True))])])]),
-  returning=Returning(
-    expressions=[Column(this=Identifier(this=id, quoted=False))]),
-  overwrite=False,
-  ignore=False,
-  source=False)
-```
-
-Second body statement AST via `loop.body[1].sql.to_s()`:
-
-```python
-Insert(
-  hint=None,
-  is_function=False,
-  this=Schema(
-    this=Table(this=Identifier(this=node_labels, quoted=False)),
-    expressions=[
-      Identifier(this=node_id, quoted=False),
-      Identifier(this=label, quoted=False)]),
-  stored=False,
-  by_name=False,
-  exists=False,
-  where=False,
-  partition=False,
-  settings=False,
-  default=False,
-  expression=Values(
-    expressions=[
-      Tuple(
-        expressions=[
-          Placeholder(this=created_node_id),
-          Literal(this='End', is_string=True)])]),
-  conflict=None,
-  returning=None,
-  overwrite=False,
-  ignore=False,
-  source=False)
-```
-
-Third body statement AST via `loop.body[2].sql.to_s()`:
-
-```python
-Insert(
-  hint=None,
-  is_function=False,
-  this=Schema(
-    this=Table(this=Identifier(this=edges, quoted=False)),
-    expressions=[
-      Identifier(this=type, quoted=False),
-      Identifier(this=from_id, quoted=False),
-      Identifier(this=to_id, quoted=False),
-      Identifier(this=properties, quoted=False)]),
-  stored=False,
-  by_name=False,
-  exists=False,
-  where=False,
-  partition=False,
-  settings=False,
-  default=False,
-  expression=Values(
-    expressions=[
-      Tuple(
-        expressions=[
-          Literal(this='TYPE', is_string=True),
-          Placeholder(this=match_node_id),
-          Placeholder(this=created_node_id),
-          Literal(this='{}', is_string=True)])]),
-  conflict=None,
-  returning=None,
-  overwrite=False,
-  ignore=False,
-  source=False)
-```
+The exact SQLGlot AST node spelling depends on the active schema context, but
+the public contract is the step structure: `to_sqlglot_program(...)` preserves
+the multi-step program shape, while `render_cypher_program_text(...)` renders
+each step separately. It is not a promise that admitted writes flatten into one
+SQL string or route through the legacy generic table family.
 
 ## Walkthrough: vector-aware normalization handoff
 

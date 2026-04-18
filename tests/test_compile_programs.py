@@ -61,7 +61,8 @@ class CompileTests(unittest.TestCase):
         ):
             cypherglot.compile_cypher_program_text(
                 "CREATE (:User {name: 'Alice'})",
-            )
+            
+            backend="sqlite",)
 
     def test_compile_program_create_node(self) -> None:
         program = cypherglot.compile_cypher_program_text(
@@ -77,7 +78,8 @@ class CompileTests(unittest.TestCase):
                     edge_types=(),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(len(program.steps), 1)
         self.assertIsInstance(program.steps[0], cypherglot.CompiledCypherStatement)
@@ -110,7 +112,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(len(program.steps), 3)
         self.assertEqual(
@@ -143,7 +146,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(len(program.steps), 2)
         self.assertEqual(program.steps[0].bind_columns, ("left_node_id",))
@@ -180,7 +184,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(len(program.steps), 3)
         self.assertEqual(program.steps[0].bind_columns, ("first_node_id",))
@@ -203,7 +208,8 @@ class CompileTests(unittest.TestCase):
             cypherglot.compile_cypher_text(
                 "MERGE (:User {name: 'Alice'})-[:WORKS_AT {since: 2020}]->(:Company {name: 'Acme'})",
                 schema_context=_public_api_schema_context(),
-            )
+            
+            backend="sqlite",)
 
     def test_compile_program_merge_node(self) -> None:
         program = cypherglot.compile_cypher_program_text(
@@ -219,7 +225,8 @@ class CompileTests(unittest.TestCase):
                     edge_types=(),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(len(program.steps), 1)
         stmt = program.steps[0]
@@ -257,7 +264,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(len(program.steps), 3)
         self.assertIsInstance(program.steps[0], cypherglot.CompiledCypherStatement)
@@ -296,7 +304,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(len(program.steps), 2)
 
@@ -317,6 +326,7 @@ class CompileTests(unittest.TestCase):
     def test_compile_traversal_self_loop_existing_endpoint_write_sql(self) -> None:
         create_sql = cypherglot.to_sql(
             "MATCH (a:User)-[r:KNOWS]->(a:User) CREATE (a)-[:KNOWS]->(a)",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -337,6 +347,7 @@ class CompileTests(unittest.TestCase):
         )
         merge_sql = cypherglot.to_sql(
             "MATCH (a:User)-[r:KNOWS]->(a:User) MERGE (a)-[:KNOWS]->(a)",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -368,6 +379,7 @@ class CompileTests(unittest.TestCase):
     def test_compile_traversal_self_loop_relationship_set_delete_sql(self) -> None:
         set_sql = cypherglot.to_sql(
             "MATCH (a:User)-[r:KNOWS]->(a:User) WHERE a.name = 'Alice' SET r.since = 2021",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -389,6 +401,7 @@ class CompileTests(unittest.TestCase):
         )
         delete_sql = cypherglot.to_sql(
             "MATCH (a:User)-[r:KNOWS]->(a:User) WHERE a.name = 'Alice' DELETE r",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -421,6 +434,7 @@ class CompileTests(unittest.TestCase):
     def test_compile_match_relationship_set_delete_with_right_endpoint_filter(self) -> None:
         set_sql = cypherglot.to_sql(
             "MATCH (a:User)-[r:WORKS_AT]->(b:Company {name: 'Acme'}) SET r.since = 2025",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -446,6 +460,7 @@ class CompileTests(unittest.TestCase):
         )
         delete_sql = cypherglot.to_sql(
             "MATCH (a:User)-[r:WORKS_AT]->(b:Company {name: 'Acme'}) DELETE r",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -482,6 +497,7 @@ class CompileTests(unittest.TestCase):
     def test_compile_match_relationship_set_delete_with_relationship_filter(self) -> None:
         set_sql = cypherglot.to_sql(
             "MATCH (a:User)-[r:WORKS_AT]->(b:Company) WHERE r.since = 2020 SET r.since = 2025",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -507,6 +523,7 @@ class CompileTests(unittest.TestCase):
         )
         delete_sql = cypherglot.to_sql(
             "MATCH (a:User)-[r:WORKS_AT]->(b:Company) WHERE r.since = 2020 DELETE r",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -543,6 +560,7 @@ class CompileTests(unittest.TestCase):
     def test_compile_match_relationship_set_delete_with_combined_filters(self) -> None:
         set_sql = cypherglot.to_sql(
             "MATCH (a:User)-[r:WORKS_AT]->(b:Company {name: 'Acme'}) WHERE r.since = 2020 SET r.since = 2025",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -568,6 +586,7 @@ class CompileTests(unittest.TestCase):
         )
         delete_sql = cypherglot.to_sql(
             "MATCH (a:User)-[r:WORKS_AT]->(b:Company {name: 'Acme'}) WHERE r.since = 2020 DELETE r",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -606,6 +625,7 @@ class CompileTests(unittest.TestCase):
     ) -> None:
         left_and_relationship_set_sql = cypherglot.to_sql(
             "MATCH (a:User)-[r:WORKS_AT]->(b:Company) WHERE a.name = 'Alice' AND r.since = 2020 SET r.since = 2025",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -631,6 +651,7 @@ class CompileTests(unittest.TestCase):
         )
         left_and_relationship_delete_sql = cypherglot.to_sql(
             "MATCH (a:User)-[r:WORKS_AT]->(b:Company) WHERE a.name = 'Alice' AND r.since = 2020 DELETE r",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -656,6 +677,7 @@ class CompileTests(unittest.TestCase):
         )
         both_endpoints_set_sql = cypherglot.to_sql(
             "MATCH (a:User {name: 'Alice'})-[r:WORKS_AT]->(b:Company {name: 'Acme'}) SET r.since = 2025",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -681,6 +703,7 @@ class CompileTests(unittest.TestCase):
         )
         both_endpoints_delete_sql = cypherglot.to_sql(
             "MATCH (a:User {name: 'Alice'})-[r:WORKS_AT]->(b:Company {name: 'Acme'}) DELETE r",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -725,6 +748,7 @@ class CompileTests(unittest.TestCase):
     def test_compile_match_relationship_set_delete_with_all_filters(self) -> None:
         set_sql = cypherglot.to_sql(
             "MATCH (a:User {name: 'Alice'})-[r:WORKS_AT]->(b:Company {name: 'Acme'}) WHERE r.since = 2020 SET r.since = 2025",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(
@@ -750,6 +774,7 @@ class CompileTests(unittest.TestCase):
         )
         delete_sql = cypherglot.to_sql(
             "MATCH (a:User {name: 'Alice'})-[r:WORKS_AT]->(b:Company {name: 'Acme'}) WHERE r.since = 2020 DELETE r",
+            backend="sqlite",
             schema_context=CompilerSchemaContext.type_aware(
                 GraphSchema(
                     node_types=(

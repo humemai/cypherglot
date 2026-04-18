@@ -105,6 +105,12 @@ class SchemaCommandTests(unittest.TestCase):
         ):
             graph_schema_from_text("CREATE NODE User (name);")
 
+        with self.assertRaisesRegex(
+            SchemaContractError,
+            "Invalid property declaration",
+        ):
+            graph_schema_from_text("CREATE NODE User (profile JSON);")
+
     def test_graph_schema_from_text_rejects_invalid_or_empty_input(self) -> None:
         with self.assertRaisesRegex(SchemaContractError, "must not be empty"):
             graph_schema_from_text("  ")

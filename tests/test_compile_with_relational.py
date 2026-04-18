@@ -89,7 +89,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 ),
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             expression.sql(),
@@ -153,7 +154,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 ),
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             expression.sql(),
@@ -222,7 +224,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 ),
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             expression.sql(),
@@ -292,7 +295,8 @@ class CompileTests(unittest.TestCase):
                         ),
                     )
                 ),
-            )
+            
+            backend="sqlite",)
 
     def test_compile_type_aware_match_with_start_node_requires_endpoint_binding(self) -> None:
         with self.assertRaisesRegex(ValueError, "explicit rebound endpoint node bindings"):
@@ -319,7 +323,8 @@ class CompileTests(unittest.TestCase):
                         ),
                     )
                 ),
-            )
+            
+            backend="sqlite",)
 
     def test_compile_type_aware_match_with_grouped_aggregates(self) -> None:
         expression = cypherglot.compile_cypher_text(
@@ -341,7 +346,8 @@ class CompileTests(unittest.TestCase):
                     edge_types=(),
                 )
             ),
-        )
+        
+            backend="sqlite",)
         relationship_expression = cypherglot.compile_cypher_text(
             (
                 "MATCH (a:User)-[r:WORKS_AT]->(b:Company) "
@@ -363,7 +369,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             expression.sql(),
@@ -408,7 +415,8 @@ class CompileTests(unittest.TestCase):
                     edge_types=(),
                 )
             ),
-        )
+        
+            backend="sqlite",)
         relationship_expression = cypherglot.compile_cypher_text(
             (
                 "MATCH (a:User)-[r:WORKS_AT]->(b:Company) "
@@ -435,7 +443,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             node_expression.sql(),
@@ -482,12 +491,13 @@ class CompileTests(unittest.TestCase):
                     edge_types=(),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             expression.sql(),
             'SELECT LOWER(with_q."__cg_with_person_prop_name") AS "lower_name", '
-            'LENGTH(with_q."__cg_with_scalar_name") AS "name_len", '
+            'LENGTH(CAST(with_q."__cg_with_scalar_name" AS TEXT)) AS "name_len", '
             'CAST(with_q."__cg_with_scalar_age" AS TEXT) AS "age_text", '
             'COALESCE(with_q."__cg_with_person_prop_name", \'unknown\') AS "display_name" '
             'FROM (SELECT u.id AS "__cg_with_person_id", '
@@ -497,7 +507,7 @@ class CompileTests(unittest.TestCase):
             'u.age AS "__cg_with_scalar_age" '
             'FROM cg_node_user AS u) AS with_q '
             'ORDER BY LOWER(with_q."__cg_with_person_prop_name") ASC, '
-            'LENGTH(with_q."__cg_with_scalar_name") ASC, '
+            'LENGTH(CAST(with_q."__cg_with_scalar_name" AS TEXT)) ASC, '
             'CAST(with_q."__cg_with_scalar_age" AS TEXT) ASC, '
             'COALESCE(with_q."__cg_with_person_prop_name", \'unknown\') ASC',
         )
@@ -530,12 +540,13 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             expression.sql(),
             'SELECT LOWER(with_q."__cg_with_rel_prop_note") AS "lower_note", '
-            'LENGTH(\'WORKS_AT\') AS "type_len", '
+            'LENGTH(CAST(\'WORKS_AT\' AS TEXT)) AS "type_len", '
             'CAST(with_q."__cg_with_scalar_since" AS TEXT) AS "since_text", '
             'COALESCE(with_q."__cg_with_scalar_note", \'unknown\') AS "display_note" '
             'FROM (SELECT r.id AS "__cg_with_rel_id", '
@@ -549,7 +560,7 @@ class CompileTests(unittest.TestCase):
             'JOIN cg_node_user AS a ON a.id = r.from_id '
             'JOIN cg_node_company AS b ON b.id = r.to_id) AS with_q '
             'ORDER BY LOWER(with_q."__cg_with_rel_prop_note") ASC, '
-            'LENGTH(\'WORKS_AT\') ASC, '
+            'LENGTH(CAST(\'WORKS_AT\' AS TEXT)) ASC, '
             'CAST(with_q."__cg_with_scalar_since" AS TEXT) ASC, '
             'COALESCE(with_q."__cg_with_scalar_note", \'unknown\') ASC',
         )
@@ -575,7 +586,8 @@ class CompileTests(unittest.TestCase):
                     edge_types=(),
                 )
             ),
-        )
+        
+            backend="sqlite",)
         relationship_expression = cypherglot.compile_cypher_text(
             (
                 "MATCH (a:User)-[r:WORKS_AT]->(b:Company) WITH r AS rel "
@@ -598,7 +610,8 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             node_expression.sql(),
@@ -648,7 +661,8 @@ class CompileTests(unittest.TestCase):
                     edge_types=(),
                 )
             ),
-        )
+        
+            backend="sqlite",)
         relationship_expression = cypherglot.compile_cypher_text(
             (
                 "MATCH (a:User)-[r:WORKS_AT]->(b:Company) "
@@ -675,13 +689,14 @@ class CompileTests(unittest.TestCase):
                     ),
                 )
             ),
-        )
+        
+            backend="sqlite",)
 
         self.assertEqual(
             node_expression.sql(),
             'SELECT with_q."__cg_with_person_prop_age" >= 18 AS "adult", '
             'with_q."__cg_with_scalar_name" = \'Alice\' AS "is_alice", '
-            'LENGTH(with_q."__cg_with_scalar_name") >= 3 AS "long_name", '
+            'LENGTH(CAST(with_q."__cg_with_scalar_name" AS TEXT)) >= 3 AS "long_name", '
             'NOT with_q."__cg_with_person_prop_name" IS NULL AS "has_name" '
             'FROM (SELECT u.id AS "__cg_with_person_id", '
             'u.name AS "__cg_with_person_prop_name", '
@@ -690,7 +705,7 @@ class CompileTests(unittest.TestCase):
             'FROM cg_node_user AS u) AS with_q '
             'ORDER BY with_q."__cg_with_person_prop_age" >= 18 ASC, '
             'with_q."__cg_with_scalar_name" = \'Alice\' ASC, '
-            'LENGTH(with_q."__cg_with_scalar_name") >= 3 ASC, '
+            'LENGTH(CAST(with_q."__cg_with_scalar_name" AS TEXT)) >= 3 ASC, '
             'NOT with_q."__cg_with_person_prop_name" IS NULL ASC',
         )
         self.assertEqual(
@@ -699,7 +714,7 @@ class CompileTests(unittest.TestCase):
             'LENGTH(with_q."__cg_with_scalar_note") >= LENGTH(\'ce\') AND '
             'SUBSTRING(with_q."__cg_with_scalar_note", LENGTH(with_q."__cg_with_scalar_note") - LENGTH(\'ce\') + 1) = \'ce\' AS "has_suffix", '
             '\'WORKS_AT\' = \'WORKS_AT\' AS "rel_matches", '
-            'LENGTH(with_q."__cg_with_rel_prop_note") >= 3 AS "long_note" '
+            'LENGTH(CAST(with_q."__cg_with_rel_prop_note" AS TEXT)) >= 3 AS "long_note" '
             'FROM (SELECT r.id AS "__cg_with_rel_id", '
             'r.from_id AS "__cg_with_rel_from_id", '
             'r.to_id AS "__cg_with_rel_to_id", '
@@ -712,7 +727,7 @@ class CompileTests(unittest.TestCase):
             'LENGTH(with_q."__cg_with_scalar_note") >= LENGTH(\'ce\') AND '
             'SUBSTRING(with_q."__cg_with_scalar_note", LENGTH(with_q."__cg_with_scalar_note") - LENGTH(\'ce\') + 1) = \'ce\' ASC, '
             '\'WORKS_AT\' = \'WORKS_AT\' ASC, '
-            'LENGTH(with_q."__cg_with_rel_prop_note") >= 3 ASC',
+            'LENGTH(CAST(with_q."__cg_with_rel_prop_note" AS TEXT)) >= 3 ASC',
         )
 
     def test_compile_type_aware_relational_output_mode_rejects_match_with_broader_introspection_returns(self) -> None:
@@ -751,7 +766,8 @@ class CompileTests(unittest.TestCase):
                         ),
                     ),
                 ),
-            )
+            
+            backend="sqlite",)
 
     def test_compile_type_aware_match_node_introspection_returns(self) -> None:
         with self.assertRaisesRegex(
@@ -774,7 +790,8 @@ class CompileTests(unittest.TestCase):
                         edge_types=(),
                     )
                 ),
-            )
+            
+            backend="sqlite",)
 
     def test_compile_type_aware_match_relationship_introspection_returns(self) -> None:
         with self.assertRaisesRegex(
@@ -810,5 +827,6 @@ class CompileTests(unittest.TestCase):
                         ),
                     )
                 ),
-            )
+            
+            backend="sqlite",)
 

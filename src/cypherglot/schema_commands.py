@@ -35,7 +35,7 @@ _INDEX_COMMAND_RE = re.compile(
 )
 _PROPERTY_RE = re.compile(
     r"^(?P<name>[A-Za-z][A-Za-z0-9_]*)\s+"
-    r"(?P<logical_type>STRING|INTEGER|FLOAT|BOOLEAN|JSON)"
+    r"(?P<logical_type>STRING|INTEGER|FLOAT|BOOLEAN)"
     r"(?:\s+(?P<nullability>NOT\s+NULL|NULL))?$",
     re.IGNORECASE,
 )
