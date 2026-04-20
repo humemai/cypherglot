@@ -7,17 +7,16 @@ import os
 from pathlib import Path
 
 
-def parse_sqlite_runtime_args(
+def parse_sql_runtime_args(
     *,
+    description: str,
     default_corpus_path: Path,
     default_output_path: Path,
+    enabled_backends: tuple[str, ...],
+    default_index_mode: str = "both",
+    index_mode_choices: tuple[str, ...] = ("indexed", "unindexed", "both"),
 ) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description=(
-            "Benchmark end-to-end runtime over a generated multi-type type-aware "
-            "graph for OLTP and OLAP Cypher workloads."
-        )
-    )
+    parser = argparse.ArgumentParser(description=description)
     parser.add_argument(
         "--corpus",
         type=Path,
@@ -79,25 +78,27 @@ def parse_sqlite_runtime_args(
         action="store_true",
         help="Print warmup and measured iteration counters for each query.",
     )
-    parser.add_argument(
-        "--skip-duckdb",
-        action="store_true",
-        help="Skip the DuckDB OLAP backend even if the package is installed.",
-    )
-    parser.add_argument(
-        "--postgres-dsn",
-        default=os.environ.get("CYPHERGLOT_TEST_POSTGRES_DSN", ""),
-        help=(
-            "Optional PostgreSQL DSN for running the same compiled runtime "
-            "benchmark against PostgreSQL. Defaults to the "
-            "CYPHERGLOT_TEST_POSTGRES_DSN environment variable when set."
-        ),
-    )
+    if "duckdb" in enabled_backends and len(enabled_backends) > 1:
+        parser.add_argument(
+            "--skip-duckdb",
+            action="store_true",
+            help="Skip the DuckDB backend even if the package is installed.",
+        )
+    if "postgresql" in enabled_backends:
+        parser.add_argument(
+            "--postgres-dsn",
+            default=os.environ.get("CYPHERGLOT_TEST_POSTGRES_DSN", ""),
+            help=(
+                "Optional PostgreSQL DSN for running the same compiled runtime "
+                "benchmark against PostgreSQL. Defaults to the "
+                "CYPHERGLOT_TEST_POSTGRES_DSN environment variable when set."
+            ),
+        )
     parser.add_argument(
         "--index-mode",
-        choices=("indexed", "unindexed", "both"),
-        default="both",
-        help="Benchmark SQLite with query-driven indexes, without indexes, or both.",
+        choices=index_mode_choices,
+        default=default_index_mode,
+        help="Benchmark indexed and/or unindexed SQL-runtime suites.",
     )
     parser.add_argument("--node-type-count", type=int, default=4)
     parser.add_argument("--edge-type-count", type=int, default=4)
@@ -130,6 +131,22 @@ def parse_sqlite_runtime_args(
         ),
     )
     return parser.parse_args()
+
+
+def parse_sqlite_runtime_args(
+    *,
+    default_corpus_path: Path,
+    default_output_path: Path,
+) -> argparse.Namespace:
+    return parse_sql_runtime_args(
+        description=(
+            "Benchmark end-to-end runtime over a generated multi-type type-aware "
+            "graph for OLTP and OLAP Cypher workloads."
+        ),
+        default_corpus_path=default_corpus_path,
+        default_output_path=default_output_path,
+        enabled_backends=("sqlite", "duckdb", "postgresql"),
+    )
 
 
 def parse_sqlite_schema_shapes_args(*, default_output_path: Path) -> argparse.Namespace:

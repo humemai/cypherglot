@@ -14,6 +14,7 @@ import gc
 import json
 import os
 import platform
+import re
 import subprocess
 import sys
 import time
@@ -44,12 +45,12 @@ from _benchmark_common import (
     _progress,
     _progress_iteration,
     _render_corpus_queries,
-    _rss_mib,
     _select_queries,
     _summarize,
     _token_map,
     _write_json_atomic,
 )
+from _benchmark_sql_runtime_shared import _capture_rss_snapshot
 
 try:
     from neo4j import GraphDatabase
@@ -69,14 +70,28 @@ DEFAULT_CORPUS_PATH = (
     / "corpora"
     / "sqlite_runtime_benchmark_corpus.json"
 )
-DEFAULT_OUTPUT_PATH = (
+DEFAULT_RUNTIME_RESULTS_DIR = (
     REPO_ROOT
     / "scripts"
     / "benchmarks"
     / "results"
+    / "runtime"
+)
+DEFAULT_OUTPUT_PATH = (
+    DEFAULT_RUNTIME_RESULTS_DIR
     / "neo4j_runtime_benchmark.json"
 )
 RuntimeProgressCallback = Callable[[dict[str, object], int], None]
+_DOCKER_MEMORY_PATTERN = re.compile(r"^\s*([0-9]+(?:\.[0-9]+)?)\s*([A-Za-z]+)\s*$")
+_BYTE_UNITS = {
+    "b": 1.0 / (1024.0 * 1024.0),
+    "kb": 1000.0 / (1024.0 * 1024.0),
+    "kib": 1.0 / 1024.0,
+    "mb": 1_000_000.0 / (1024.0 * 1024.0),
+    "mib": 1.0,
+    "gb": 1_000_000_000.0 / (1024.0 * 1024.0),
+    "gib": 1024.0,
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -146,6 +161,49 @@ def _docker_logs(config: DockerNeo4jConfig) -> str:
     if result.returncode != 0:
         return result.stderr.strip()
     return result.stdout.strip()
+
+
+def _parse_docker_memory_to_mib(value: str) -> float | None:
+    match = _DOCKER_MEMORY_PATTERN.match(value)
+    if match is None:
+        return None
+
+    amount = float(match.group(1))
+    unit = match.group(2).lower()
+    multiplier = _BYTE_UNITS.get(unit)
+    if multiplier is None:
+        return None
+    return amount * multiplier
+
+
+def _docker_server_rss_mib(config: DockerNeo4jConfig | None) -> float | None:
+    if config is None:
+        return None
+
+    result = _run_command(
+        [
+            "docker",
+            "stats",
+            "--no-stream",
+            "--format",
+            "{{.MemUsage}}",
+            config.container_name,
+        ]
+    )
+    if result.returncode != 0:
+        return None
+
+    usage = result.stdout.strip().split("/", 1)[0].strip()
+    return _parse_docker_memory_to_mib(usage)
+
+
+def _capture_neo4j_rss_snapshot(
+    docker_config: DockerNeo4jConfig | None,
+) -> dict[str, float | None]:
+    return _capture_rss_snapshot(
+        backend="neo4j",
+        server_mib=_docker_server_rss_mib(docker_config),
+    )
 
 
 def _wait_for_docker_server_ready(
@@ -561,10 +619,11 @@ def _setup_mode(
     scale: RuntimeScale,
     graph_schema: cypherglot.GraphSchema,
     edge_plans: list[EdgeTypePlan],
+    docker_config: DockerNeo4jConfig | None,
 ) -> dict[str, object]:
     progress_label = f"neo4j/{index_mode}"
     setup_metrics: dict[str, int] = {}
-    rss_snapshots_mib: dict[str, float] = {}
+    rss_snapshots_mib: dict[str, dict[str, float | None]] = {}
 
     _progress(
         f"{progress_label}: preparing graph "
@@ -572,11 +631,13 @@ def _setup_mode(
     )
     with driver.session(database=database) as session:
         _, setup_metrics["reset_ns"] = _measure_ns(lambda: _reset_graph(session))
-        rss_snapshots_mib["after_reset"] = _rss_mib()
+        rss_snapshots_mib["after_reset"] = _capture_neo4j_rss_snapshot(docker_config)
         _, setup_metrics["seed_constraints_ns"] = _measure_ns(
             lambda: _ensure_seed_constraints(session, graph_schema)
         )
-        rss_snapshots_mib["after_seed_constraints"] = _rss_mib()
+        rss_snapshots_mib["after_seed_constraints"] = _capture_neo4j_rss_snapshot(
+            docker_config
+        )
         row_counts, setup_metrics["ingest_ns"] = _measure_ns(
             lambda: _seed_graph(
                 session,
@@ -586,7 +647,7 @@ def _setup_mode(
                 progress_label=progress_label,
             )
         )
-        rss_snapshots_mib["after_ingest"] = _rss_mib()
+        rss_snapshots_mib["after_ingest"] = _capture_neo4j_rss_snapshot(docker_config)
 
         if index_mode == "indexed":
             _progress(f"{progress_label}: creating query indexes")
@@ -595,7 +656,7 @@ def _setup_mode(
             )
         else:
             setup_metrics["index_ns"] = 0
-        rss_snapshots_mib["after_index"] = _rss_mib()
+        rss_snapshots_mib["after_index"] = _capture_neo4j_rss_snapshot(docker_config)
 
     _progress(
         f"{progress_label}: fixture ready "
@@ -734,9 +795,15 @@ def _run_workload_suite(
     iterations: int,
     warmup: int,
     setup: dict[str, object],
+    docker_config: DockerNeo4jConfig | None,
     iteration_progress: bool,
 ) -> dict[str, object]:
     suite_name = f"{workload}/neo4j_{index_mode}"
+    rss_snapshots_mib = {
+        key: dict(value)
+        for key, value in setup["rss_snapshots_mib"].items()
+    }
+    rss_snapshots_mib["suite_start"] = _capture_neo4j_rss_snapshot(docker_config)
     _progress(
         f"{suite_name}: starting suite with {len(queries)} queries "
         f"({iterations} iterations, {warmup} warmup)"
@@ -759,6 +826,7 @@ def _run_workload_suite(
                 iteration_progress=iteration_progress,
             )
         )
+    rss_snapshots_mib["suite_complete"] = _capture_neo4j_rss_snapshot(docker_config)
     _progress(f"{suite_name}: suite complete")
 
     failures = [result for result in query_results if result["status"] == "failed"]
@@ -779,7 +847,7 @@ def _run_workload_suite(
             "index_ms": setup["setup_metrics"]["index_ns"] / 1_000_000.0,
         },
         "row_counts": setup["row_counts"],
-        "rss_snapshots_mib": setup["rss_snapshots_mib"],
+        "rss_snapshots_mib": rss_snapshots_mib,
         "execute": _pool_summaries(query_results, "execute"),
         "end_to_end": _pool_summaries(query_results, "end_to_end"),
         "reset": _pool_summaries(query_results, "reset"),
@@ -800,6 +868,7 @@ def _benchmark_result(
     olap_warmup: int | None,
     scale: RuntimeScale,
     index_mode: str,
+    docker_config: DockerNeo4jConfig | None,
     iteration_progress: bool,
     progress_callback: RuntimeProgressCallback | None = None,
 ) -> tuple[dict[str, object], int]:
@@ -832,6 +901,7 @@ def _benchmark_result(
             scale=scale,
             graph_schema=graph_schema,
             edge_plans=edge_plans,
+            docker_config=docker_config,
         )
         if oltp_queries:
             workloads.setdefault(
@@ -852,6 +922,7 @@ def _benchmark_result(
                 iterations=oltp_iterations_value,
                 warmup=oltp_warmup_value,
                 setup=setup,
+                docker_config=docker_config,
                 iteration_progress=iteration_progress,
             )
             workloads["oltp"][f"neo4j_{mode}"] = suite
@@ -881,6 +952,7 @@ def _benchmark_result(
                 iterations=olap_iterations_value,
                 warmup=olap_warmup_value,
                 setup=setup,
+                docker_config=docker_config,
                 iteration_progress=iteration_progress,
             )
             workloads["olap"][f"neo4j_{mode}"] = suite
@@ -916,6 +988,7 @@ def _build_payload(
     olap_iterations: int,
     olap_warmup: int,
     connect_ms: float | None,
+    connect_rss_mib: dict[str, float | None] | None,
     result: dict[str, object],
     failure_count: int,
     status: str,
@@ -993,6 +1066,7 @@ def _build_payload(
         },
         "setup": {
             "connect_ms": connect_ms,
+            "connect_rss_mib": connect_rss_mib,
         },
         "results": result,
         "failure_count": failure_count,
@@ -1003,6 +1077,14 @@ def _build_payload(
 
 
 def _print_suite(name: str, suite: dict[str, object]) -> None:
+    def format_rss_snapshot(snapshot: dict[str, float | None]) -> str:
+        parts = [f"client={snapshot['client_mib']:.2f} MiB"]
+        if snapshot["server_mib"] is not None:
+            parts.append(f"server={snapshot['server_mib']:.2f} MiB")
+        if snapshot["combined_mib"] is not None:
+            parts.append(f"combined={snapshot['combined_mib']:.2f} MiB")
+        return ", ".join(parts)
+
     print(name)
     print(
         "  setup: "
@@ -1014,7 +1096,7 @@ def _print_suite(name: str, suite: dict[str, object]) -> None:
     print(
         "  rss: "
         + ", ".join(
-            f"{key}={value:.2f} MiB"
+            f"{key}({format_rss_snapshot(value)})"
             for key, value in suite["rss_snapshots_mib"].items()
         )
     )
@@ -1229,6 +1311,7 @@ def main() -> int:
 
     graph_schema, _ = _build_graph_schema(scale)
     connect_ms: float | None = None
+    connect_rss_mib: dict[str, float | None] | None = None
 
     def write_checkpoint(
         result: dict[str, object],
@@ -1266,6 +1349,7 @@ def main() -> int:
                 args.olap_warmup if args.olap_warmup is not None else args.warmup
             ),
             connect_ms=connect_ms,
+            connect_rss_mib=connect_rss_mib,
             result=result,
             failure_count=failure_count,
             status=status,
@@ -1299,6 +1383,7 @@ def main() -> int:
             )
         )
         connect_ms = connect_ns / 1_000_000.0
+        connect_rss_mib = _capture_neo4j_rss_snapshot(docker_config)
     except Exception:
         if docker_config is not None:
             logs = _docker_logs(docker_config)
@@ -1323,6 +1408,7 @@ def main() -> int:
             oltp_warmup=args.oltp_warmup,
             olap_iterations=args.olap_iterations,
             olap_warmup=args.olap_warmup,
+            docker_config=docker_config,
             scale=scale,
             index_mode=args.index_mode,
             iteration_progress=args.iteration_progress,

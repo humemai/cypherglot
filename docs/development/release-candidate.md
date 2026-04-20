@@ -73,5 +73,5 @@ and backend-native compilation of vector-aware
 - `uv run pytest`
 - `scripts/dev/run_postgresql_runtime_docker.sh`
 - `uv run mkdocs build --strict`
-- `uv run python scripts/benchmarks/benchmark_compiler.py`
+- `python scripts/benchmarks/benchmark_compiler.py`
 - `scripts/dev/regenerate_cypher_frontend_docker.sh --check`

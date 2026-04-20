@@ -1985,25 +1985,57 @@ Recommended implementation order for this phase:
         [scripts/benchmarks/benchmark_neo4j_runtime.py](/mnt/ssd2/repos/cypherglot/scripts/benchmarks/benchmark_neo4j_runtime.py)
         as the completed direct Neo4j runtime/compatibility benchmark and keep
         new SQL-backend runtime work out of that harness.
-  - [ ] Replace
+      - [x] Replace
         [scripts/benchmarks/benchmark_sqlite_runtime.py](/mnt/ssd2/repos/cypherglot/scripts/benchmarks/benchmark_sqlite_runtime.py)
-        with shared SQL-runtime benchmark infrastructure plus explicit SQLite,
-        DuckDB, and PostgreSQL runtime entrypoints, or otherwise split it into
-        three dedicated target-specific runtime scripts, so each backend owns
-        ingest/setup/query-execution measurement instead of DuckDB and
-        PostgreSQL piggybacking on a SQLite-first story.
-  - [ ] Keep OLTP and OLAP as workload families inside the SQL-runtime
+            with three thin backend entrypoint scripts backed by shared
+            SQL-runtime benchmark infrastructure, so each backend owns
+            ingest/setup/query-execution measurement instead of DuckDB and
+            PostgreSQL piggybacking on a SQLite-first story.
+            Decision: do not keep one SQLite-named mega-script, and do not create
+            three mostly duplicated runtime harnesses either. The target shape is
+            explicit SQLite, DuckDB, and PostgreSQL runtime entrypoints over one
+            shared SQL-runtime core.
+      - Keep truly backend-neutral helpers such as workload/corpus selection,
+            synthetic graph generation, timing/RSS measurement, summary shaping,
+            and result writing in shared benchmark modules.
+      - Keep backend-specific fixture/setup/ingest/reset/execution logic in
+            backend-owned modules so DuckDB can move to a DuckDB-native ingest
+            path and PostgreSQL can keep its own runtime contract instead of both
+            paths being framed as SQLite add-ons.
+      - Keep
+            [scripts/benchmarks/_benchmark_common.py](/mnt/ssd2/repos/cypherglot/scripts/benchmarks/_benchmark_common.py)
+            small and genuinely common; if the SQL-runtime refactor needs a larger
+            shared layer, add a dedicated SQL-runtime helper module rather than
+            turning `_benchmark_common.py` into another backend-mixed monolith.
+      Done: the runtime benchmark now enters through explicit SQLite, DuckDB,
+      and PostgreSQL wrapper scripts over a shared SQL-runtime core, with
+      backend-owned setup and execution helpers instead of the old SQLite-named
+      monolith.
+  - [x] Keep OLTP and OLAP as workload families inside the SQL-runtime
         benchmarks, but report them under each backend rather than making a
         SQLite-centric runtime harness the primary benchmark identity.
-  - [ ] For the primary DuckDB runtime benchmark path, use DuckDB-native bulk
-        ingest/loading (for example CSV/COPY-style import or similarly direct
-        table-loading flow) instead of the attached-SQLite convenience path;
-        keep the attached-SQLite path only as an auxiliary/debug benchmark if
-        it remains useful.
-  - [ ] Add RSS measurement to each major benchmark stage in the SQL-runtime
-        harnesses, not just ingest/setup snapshots: connect, schema creation,
-        index creation, ingest, analyze/statistics, compile, execute, and suite
-        boundaries.
+      Done: SQL-runtime results are now emitted under backend-owned suites such
+      as sqlite_indexed, postgresql_unindexed, and duckdb within the OLTP and
+      OLAP workload families rather than treating SQLite as the umbrella
+      runtime identity.
+      - [x] For the primary DuckDB runtime benchmark path, use DuckDB-native bulk
+                        ingest/loading (for example CSV/COPY-style import or similarly direct
+                        table-loading flow) instead of the attached-SQLite convenience path;
+                        keep the attached-SQLite path only as an auxiliary/debug benchmark if
+                        it remains useful.
+                  Done: the DuckDB runtime benchmark now creates native DuckDB tables,
+                  builds benchmark indexes, bulk-loads rows from the shared SQLite fixture,
+                  and runs `ANALYZE` before executing the admitted OLAP suite. The old
+                  attached-SQLite view path is no longer the primary measured runtime path.
+      - [x] Add RSS measurement to each major benchmark stage in the SQL-runtime
+                        harnesses, not just ingest/setup snapshots: connect, schema creation,
+                        index creation, ingest, analyze/statistics, compile, execute, and suite
+                        boundaries.
+                  Done: SQL-runtime benchmark payloads now record stage-by-stage RSS with
+                  explicit `client_mib`, `server_mib`, and `combined_mib` fields. SQLite
+                  and DuckDB report embedded-process totals, while disposable Docker-backed
+                  PostgreSQL runs also record container memory so combined client-plus-
+                  server footprint is visible in the benchmark artifacts.
 
 ## Phase 13
 

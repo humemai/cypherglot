@@ -4,8 +4,8 @@ import sys
 from pathlib import Path
 
 
-# The benchmark scripts (benchmark_neo4j_runtime.py, benchmark_sqlite_runtime.py)
-# are standalone CLI tools that use bare-name sibling imports such as
+# The benchmark scripts and shared benchmark modules are loaded as standalone
+# siblings and use bare-name imports such as
 # `from _benchmark_common import ...`.  Those imports resolve only when the
 # scripts/benchmarks/ directory is on sys.path, so we add it here once for the
 # whole test session rather than patching it inside individual test modules.

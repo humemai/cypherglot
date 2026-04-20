@@ -1,7 +1,8 @@
-"""Shared helpers for the runtime benchmark scripts.
+"""Shared helpers used across the benchmark scripts.
 
-Functions and dataclasses used by both benchmark_sqlite_runtime.py and
-benchmark_neo4j_runtime.py are collected here to avoid duplication.
+Functions and dataclasses shared by the SQL runtime benchmark core, the SQL
+runtime entrypoint wrappers, and benchmark_neo4j_runtime.py are collected here
+to avoid duplication.
 """
 
 from __future__ import annotations
