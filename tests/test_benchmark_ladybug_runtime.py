@@ -10,7 +10,7 @@ from unittest import mock
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SCRIPT_PATH = REPO_ROOT / "scripts" / "benchmarks" / "benchmark_neo4j_runtime.py"
+SCRIPT_PATH = REPO_ROOT / "scripts" / "benchmarks" / "benchmark_ladybug_runtime.py"
 CORPUS_PATH = (
     REPO_ROOT
     / "scripts"
@@ -19,16 +19,16 @@ CORPUS_PATH = (
     / "sqlite_runtime_benchmark_corpus.json"
 )
 MODULE_SPEC = importlib.util.spec_from_file_location(
-    "benchmark_neo4j_runtime",
+    "benchmark_ladybug_runtime",
     SCRIPT_PATH,
 )
 if MODULE_SPEC is None or MODULE_SPEC.loader is None:
     raise RuntimeError(f"Unable to load benchmark script from {SCRIPT_PATH}")
-benchmark_neo4j_runtime = importlib.util.module_from_spec(MODULE_SPEC)
-sys.modules[MODULE_SPEC.name] = benchmark_neo4j_runtime
-MODULE_SPEC.loader.exec_module(benchmark_neo4j_runtime)
+benchmark_ladybug_runtime = importlib.util.module_from_spec(MODULE_SPEC)
+sys.modules[MODULE_SPEC.name] = benchmark_ladybug_runtime
+MODULE_SPEC.loader.exec_module(benchmark_ladybug_runtime)
 
-SMALL_SCALE = benchmark_neo4j_runtime.RuntimeScale(
+SMALL_SCALE = benchmark_ladybug_runtime.RuntimeScale(
     node_type_count=3,
     edge_type_count=3,
     nodes_per_type=20,
@@ -38,9 +38,9 @@ SMALL_SCALE = benchmark_neo4j_runtime.RuntimeScale(
 )
 
 
-class BenchmarkNeo4jRuntimeScriptTests(unittest.TestCase):
+class BenchmarkLadybugRuntimeScriptTests(unittest.TestCase):
     def test_write_json_atomic_replaces_destination(self) -> None:
-        write_json_atomic = getattr(benchmark_neo4j_runtime, "_write_json_atomic")
+        write_json_atomic = getattr(benchmark_ladybug_runtime, "_write_json_atomic")
 
         with tempfile.TemporaryDirectory() as temp_dir:
             output_path = Path(temp_dir) / "runtime.json"
@@ -55,127 +55,97 @@ class BenchmarkNeo4jRuntimeScriptTests(unittest.TestCase):
             self.assertEqual(second_payload, {"status": "completed", "value": 2})
             self.assertEqual(list(Path(temp_dir).glob("runtime.json.*.tmp")), [])
 
+    def test_ladybug_copy_column_names_maps_edge_columns(self) -> None:
+        copy_column_names = getattr(
+            benchmark_ladybug_runtime,
+            "_ladybug_copy_column_names",
+        )
+
+        self.assertEqual(
+            copy_column_names(["from_id", "to_id", "rank", "active"]),
+            ["from", "to", "rank", "active"],
+        )
+
     def test_build_payload_includes_database_versions(self) -> None:
-        build_payload = getattr(benchmark_neo4j_runtime, "_build_payload")
-        graph_schema, _ = getattr(benchmark_neo4j_runtime, "_build_graph_schema")(
+        build_payload = getattr(benchmark_ladybug_runtime, "_build_payload")
+        graph_schema, _ = getattr(benchmark_ladybug_runtime, "_build_graph_schema")(
             SMALL_SCALE
         )
 
         payload = build_payload(
-            started_at=benchmark_neo4j_runtime.datetime.now(
-                benchmark_neo4j_runtime.UTC
+            started_at=benchmark_ladybug_runtime.datetime.now(
+                benchmark_ladybug_runtime.UTC
             ),
-            database_versions={"neo4j": "5.26.0"},
-            neo4j_uri="bolt://127.0.0.1:7687",
-            neo4j_database="neo4j",
-            neo4j_user="neo4j",
-            docker_config=None,
+            database_versions={"ladybug": "0.15.3"},
             corpus_path=CORPUS_PATH,
             queries=[],
             scale=SMALL_SCALE,
             graph_schema=graph_schema,
-            index_mode="indexed",
             default_iterations=1,
             default_warmup=0,
             oltp_iterations=1,
             oltp_warmup=0,
             olap_iterations=1,
             olap_warmup=0,
-            connect_ms=None,
-            connect_rss_mib=None,
+            db_root_dir=None,
             result={"workloads": {}},
             failure_count=0,
             status="running",
         )
 
-        self.assertEqual(payload["database_versions"], {"neo4j": "5.26.0"})
+        self.assertEqual(payload["database_versions"], {"ladybug": "0.15.3"})
+        self.assertEqual(payload["index_mode"], "unindexed")
 
     def test_benchmark_result_reports_incremental_progress(self) -> None:
-        benchmark_result = getattr(benchmark_neo4j_runtime, "_benchmark_result")
-        load_corpus = getattr(benchmark_neo4j_runtime, "_load_corpus")
-        select_queries = getattr(benchmark_neo4j_runtime, "_select_queries")
+        benchmark_result = getattr(benchmark_ladybug_runtime, "_benchmark_result")
+        load_corpus = getattr(benchmark_ladybug_runtime, "_load_corpus")
+        select_queries = getattr(benchmark_ladybug_runtime, "_select_queries")
 
-        setup_calls: list[str] = []
-        suite_calls: list[tuple[str, str]] = []
+        suite_calls: list[str] = []
         snapshots: list[tuple[dict[str, object], int]] = []
-
-        def fake_setup_mode(
-            _driver: object,
-            *,
-            database: str,
-            index_mode: str,
-            scale: object,
-            graph_schema: object,
-            edge_plans: object,
-            docker_config: object,
-        ) -> dict[str, object]:
-            self.assertEqual(database, "neo4j")
-            self.assertIsNotNone(scale)
-            self.assertIsNotNone(graph_schema)
-            self.assertIsNotNone(edge_plans)
-            self.assertIsNone(docker_config)
-            setup_calls.append(index_mode)
-            return {
-                "setup_metrics": {
-                    "reset_ns": 1,
-                    "seed_constraints_ns": 2,
-                    "ingest_ns": 3,
-                    "index_ns": 4,
-                },
-                "row_counts": {
-                    "node_count": 60,
-                    "edge_count": 120,
-                    "node_type_count": 3,
-                    "edge_type_count": 3,
-                },
-                "rss_snapshots_mib": {
-                    "after_reset": {
-                        "client_mib": 10.0,
-                        "server_mib": 20.0,
-                        "combined_mib": 30.0,
-                    },
-                    "after_ingest": {
-                        "client_mib": 11.0,
-                        "server_mib": 21.0,
-                        "combined_mib": 32.0,
-                    },
-                },
-                "index_mode": index_mode,
-            }
+        sqlite_source_mock = mock.Mock()
 
         def fake_run_workload_suite(
-            _driver: object,
             *,
-            database: str,
             workload: str,
-            index_mode: str,
             queries: list[object],
             iterations: int,
             warmup: int,
-            setup: dict[str, object],
-            docker_config: object,
+            graph_schema: object,
+            sqlite_source: object,
+            db_root_dir: Path | None,
             iteration_progress: bool,
         ) -> dict[str, object]:
-            self.assertEqual(database, "neo4j")
-            self.assertIsNone(docker_config)
+            self.assertIsNotNone(graph_schema)
+            self.assertIs(sqlite_source, sqlite_source_mock)
             self.assertFalse(iteration_progress)
-            suite_calls.append((workload, index_mode))
+            self.assertIsNone(db_root_dir)
+            suite_calls.append(workload)
             return {
-                "backend": "neo4j",
-                "index_mode": index_mode,
+                "backend": "ladybug",
+                "index_mode": "unindexed",
                 "iterations": iterations,
                 "warmup": warmup,
                 "query_count": len(queries),
                 "pass_count": len(queries),
                 "fail_count": 0,
                 "setup": {
-                    "reset_ms": 0.001,
-                    "seed_constraints_ms": 0.002,
-                    "ingest_ms": 0.003,
-                    "index_ms": 0.004,
+                    "connect_ms": 1.0,
+                    "schema_ms": 2.0,
+                    "ingest_ms": 3.0,
+                    "index_ms": 0.0,
+                    "checkpoint_ms": 4.0,
                 },
-                "row_counts": setup["row_counts"],
-                "rss_snapshots_mib": setup["rss_snapshots_mib"],
+                "row_counts": {"node_count": 60, "edge_count": 120},
+                "rss_snapshots_mib": {
+                    "after_connect": {
+                        "client_mib": 10.0,
+                        "server_mib": None,
+                        "combined_mib": 10.0,
+                    }
+                },
+                "storage": {"db_size_mib": 5.0, "wal_size_mib": 0.0},
+                "db_path": "/tmp/runtime.lbug",
                 "execute": {
                     "mean_of_mean_ms": 1.0,
                     "mean_of_p50_ms": 1.0,
@@ -199,8 +169,8 @@ class BenchmarkNeo4jRuntimeScriptTests(unittest.TestCase):
                         "name": query.name,
                         "workload": query.workload,
                         "category": query.category,
-                        "backend": "neo4j",
-                        "index_mode": index_mode,
+                        "backend": "ladybug",
+                        "index_mode": "unindexed",
                         "mode": query.mode,
                         "mutation": query.mutation,
                         "status": "passed",
@@ -234,17 +204,15 @@ class BenchmarkNeo4jRuntimeScriptTests(unittest.TestCase):
             }
 
         with mock.patch.object(
-            benchmark_neo4j_runtime,
-            "_setup_mode",
-            side_effect=fake_setup_mode,
+            benchmark_ladybug_runtime,
+            "_prepare_generated_graph_fixture",
+            return_value=sqlite_source_mock,
         ), mock.patch.object(
-            benchmark_neo4j_runtime,
+            benchmark_ladybug_runtime,
             "_run_workload_suite",
             side_effect=fake_run_workload_suite,
         ):
             result, failure_count = benchmark_result(
-                object(),
-                database="neo4j",
                 queries=select_queries(
                     load_corpus(CORPUS_PATH),
                     ["oltp_type1_point_lookup", "olap_type1_age_rollup"],
@@ -256,86 +224,80 @@ class BenchmarkNeo4jRuntimeScriptTests(unittest.TestCase):
                 olap_iterations=None,
                 olap_warmup=None,
                 scale=SMALL_SCALE,
-                index_mode="both",
-                docker_config=None,
+                db_root_dir=None,
                 iteration_progress=False,
                 progress_callback=lambda partial, failures: snapshots.append(
                     (json.loads(json.dumps(partial)), failures)
                 ),
             )
 
-        self.assertEqual(setup_calls, ["indexed", "unindexed"])
-        self.assertEqual(
-            suite_calls,
-            [
-                ("oltp", "indexed"),
-                ("olap", "indexed"),
-                ("oltp", "unindexed"),
-                ("olap", "unindexed"),
-            ],
-        )
+        sqlite_source_mock.close.assert_called_once_with()
+        self.assertEqual(suite_calls, ["oltp", "olap"])
         self.assertEqual(failure_count, 0)
-        self.assertGreaterEqual(len(snapshots), 5)
+        self.assertGreaterEqual(len(snapshots), 3)
         self.assertEqual(snapshots[0][0]["workloads"], {})
         self.assertTrue(snapshots[0][0]["token_map"])
-        self.assertEqual(snapshots[0][1], 0)
-        self.assertIn("oltp", snapshots[1][0]["workloads"])
-        self.assertIn("neo4j_indexed", snapshots[1][0]["workloads"]["oltp"])
-        self.assertIn("olap", snapshots[2][0]["workloads"])
-        self.assertIn("neo4j_indexed", snapshots[2][0]["workloads"]["olap"])
-        self.assertIn("neo4j_unindexed", snapshots[3][0]["workloads"]["oltp"])
-        self.assertIn("neo4j_unindexed", snapshots[4][0]["workloads"]["olap"])
+        self.assertIn("ladybug_unindexed", snapshots[1][0]["workloads"]["oltp"])
+        self.assertIn("ladybug_unindexed", snapshots[2][0]["workloads"]["olap"])
         self.assertEqual(snapshots[-1], (result, 0))
 
     def test_run_workload_suite_records_suite_rss_snapshots(self) -> None:
-        run_workload_suite = getattr(benchmark_neo4j_runtime, "_run_workload_suite")
+        run_workload_suite = getattr(benchmark_ladybug_runtime, "_run_workload_suite")
 
-        query = benchmark_neo4j_runtime.CorpusQuery(
+        query = benchmark_ladybug_runtime.CorpusQuery(
             name="q",
             workload="oltp",
             category="point_lookup",
             query="MATCH (n) RETURN n LIMIT 1",
-            backends=("neo4j",),
+            backends=("ladybug",),
             mode="statement",
             mutation=False,
         )
-        setup = {
-            "setup_metrics": {
-                "reset_ns": 1,
-                "seed_constraints_ns": 2,
-                "ingest_ns": 3,
-                "index_ns": 4,
+        fixture = mock.Mock(
+            setup_metrics={
+                "connect_ns": 1_000_000,
+                "schema_ns": 2_000_000,
+                "ingest_ns": 3_000_000,
+                "index_ns": 0,
+                "checkpoint_ns": 4_000_000,
             },
-            "row_counts": {
+            row_counts={
                 "node_count": 1,
                 "edge_count": 0,
                 "node_type_count": 1,
                 "edge_type_count": 0,
             },
-            "rss_snapshots_mib": {
-                "after_reset": {
+            rss_snapshots_mib={
+                "after_connect": {
                     "client_mib": 10.0,
-                    "server_mib": 20.0,
-                    "combined_mib": 30.0,
+                    "server_mib": None,
+                    "combined_mib": 10.0,
                 }
             },
-        }
+            db_size_mib=12.0,
+            wal_size_mib=0.0,
+            db_path=Path("/tmp/runtime.lbug"),
+        )
         rss_snapshots = iter(
             [
-                {"client_mib": 11.0, "server_mib": 21.0, "combined_mib": 32.0},
-                {"client_mib": 12.0, "server_mib": 22.0, "combined_mib": 34.0},
+                {"client_mib": 11.0, "server_mib": None, "combined_mib": 11.0},
+                {"client_mib": 12.0, "server_mib": None, "combined_mib": 12.0},
             ]
         )
 
         with mock.patch.object(
-            benchmark_neo4j_runtime,
+            benchmark_ladybug_runtime,
+            "_prepare_ladybug_fixture",
+            return_value=fixture,
+        ), mock.patch.object(
+            benchmark_ladybug_runtime,
             "_measure_query",
             return_value={
                 "name": query.name,
                 "workload": query.workload,
                 "category": query.category,
-                "backend": "neo4j",
-                "index_mode": "indexed",
+                "backend": "ladybug",
+                "index_mode": "unindexed",
                 "mode": query.mode,
                 "mutation": query.mutation,
                 "status": "passed",
@@ -365,34 +327,30 @@ class BenchmarkNeo4jRuntimeScriptTests(unittest.TestCase):
                 },
             },
         ), mock.patch.object(
-            benchmark_neo4j_runtime,
-            "_capture_neo4j_rss_snapshot",
-            side_effect=lambda _docker_config: next(rss_snapshots),
+            benchmark_ladybug_runtime,
+            "_capture_rss_snapshot",
+            side_effect=lambda **_kwargs: next(rss_snapshots),
         ):
             result = run_workload_suite(
-                object(),
-                database="neo4j",
                 workload="oltp",
-                index_mode="indexed",
                 queries=[query],
                 iterations=3,
                 warmup=1,
-                setup=setup,
-                docker_config=None,
+                graph_schema=mock.sentinel.graph_schema,
+                sqlite_source=mock.sentinel.sqlite_source,
+                db_root_dir=None,
                 iteration_progress=False,
             )
 
-        self.assertNotIn("suite_start", setup["rss_snapshots_mib"])
-        self.assertNotIn("suite_complete", setup["rss_snapshots_mib"])
-        self.assertEqual(
-            result["rss_snapshots_mib"]["suite_start"],
-            {"client_mib": 11.0, "server_mib": 21.0, "combined_mib": 32.0},
-        )
-        self.assertEqual(
-            result["rss_snapshots_mib"]["suite_complete"],
-            {"client_mib": 12.0, "server_mib": 22.0, "combined_mib": 34.0},
-        )
+        fixture.close.assert_called_once_with()
+        self.assertEqual(result["pass_count"], 1)
+        self.assertEqual(result["fail_count"], 0)
+        self.assertIn("suite_start", result["rss_snapshots_mib"])
+        self.assertIn("suite_complete", result["rss_snapshots_mib"])
+        self.assertEqual(result["setup"]["connect_ms"], 1.0)
+        self.assertEqual(result["setup"]["checkpoint_ms"], 4.0)
+        self.assertEqual(result["storage"]["db_size_mib"], 12.0)
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     unittest.main()

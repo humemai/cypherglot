@@ -38,12 +38,12 @@ from _postgres_runtime_support import (
 from _benchmark_sql_runtime_duckdb_backend import (
     _analyze_duckdb,
     _create_duckdb_connection,
-    _create_duckdb_query_indexes,
     _create_duckdb_schema,
     _duckdb_file_size_mib,
     _duckdb_available,
+    _duckdb_version,
     _execute_duckdb_program,
-    _seed_duckdb_from_sqlite,
+    _seed_duckdb_from_fixture,
 )
 from _benchmark_sql_runtime_postgresql_backend import (
     _analyze_postgresql,
@@ -53,24 +53,30 @@ from _benchmark_sql_runtime_postgresql_backend import (
     _execute_bound_postgresql_sql,
     _execute_postgresql_program,
     _postgresql_available,
+    _postgresql_server_version,
     _reset_postgresql_schema,
-    _seed_postgresql_from_sqlite,
+    _seed_postgresql_from_fixture,
 )
 from _benchmark_sql_runtime_shared import (
     DuckDBConnection,
+    GeneratedGraphFixture,
     ManagedDirectory,
     PostgreSQLConnection,
     PreparedArtifact,
-    SharedSQLiteFixture,
     _capture_rss_snapshot,
     _create_managed_directory,
+    _prepare_generated_graph_fixture,
     _summarize_rss_samples,
 )
 from _benchmark_sql_runtime_sqlite_backend import (
+    _analyze_sqlite,
+    _configure_sqlite_indexes,
     _create_sqlite_connection,
+    _create_sqlite_schema,
     _execute_sqlite_program,
-    _prepare_shared_sqlite_fixture,
     _rollback_sqlite_iteration,
+    _seed_sqlite_from_generated_fixture,
+    _sqlite_file_size_mib,
 )
 
 
@@ -132,8 +138,8 @@ DUCKDB_ENTRYPOINT = SQLRuntimeBenchmarkEntrypoint(
     ),
     default_output_path=DEFAULT_DUCKDB_OUTPUT_PATH,
     enabled_backends=("duckdb",),
-    default_index_mode="indexed",
-    index_mode_choices=("indexed",),
+    default_index_mode="unindexed",
+    index_mode_choices=("unindexed",),
 )
 
 POSTGRESQL_ENTRYPOINT = SQLRuntimeBenchmarkEntrypoint(
@@ -158,7 +164,7 @@ class _BackendRunner:
         *,
         graph_schema: cypherglot.GraphSchema,
         schema_context: cypherglot.CompilerSchemaContext,
-        sqlite_source: SharedSQLiteFixture,
+        sqlite_source: GeneratedGraphFixture,
         postgres_dsn: str | None = None,
     ) -> None:
         self.backend = backend
@@ -170,8 +176,8 @@ class _BackendRunner:
         self.setup_metrics: dict[str, int] = {}
         self.row_counts: dict[str, int] = {}
         self.rss_snapshots_mib: dict[str, dict[str, float | None]] = {}
-        self.db_size_mib = sqlite_source.db_size_mib
-        self.wal_size_mib = sqlite_source.wal_size_mib
+        self.db_size_mib = 0.0
+        self.wal_size_mib = 0.0
         self.index_mode = sqlite_source.index_mode
         self.artifact_path: Path | None = None
         self.connection: sqlite3.Connection | DuckDBConnection | PostgreSQLConnection
@@ -179,23 +185,45 @@ class _BackendRunner:
 
     def _initialize(self) -> None:
         if self.backend == "sqlite":
+            db_path = self.work_dir.path / "runtime.sqlite3"
             self.connection, connect_ns = _measure_ns(
-                lambda: _create_sqlite_connection(self.sqlite_source.db_path)
+                lambda: _create_sqlite_connection(db_path)
             )
-            self.setup_metrics = {
-                "connect_ns": connect_ns,
-                "schema_ns": self.sqlite_source.setup_metrics["schema_ns"],
-                "index_ns": self.sqlite_source.setup_metrics["index_ns"],
-                "ingest_ns": self.sqlite_source.setup_metrics["ingest_ns"],
-                "analyze_ns": self.sqlite_source.setup_metrics["analyze_ns"],
-            }
-            self.row_counts = dict(self.sqlite_source.row_counts)
-            self.rss_snapshots_mib = {
-                stage_name: dict(snapshot)
-                for stage_name, snapshot in self.sqlite_source.rss_snapshots_mib.items()
-            }
+            self.setup_metrics["connect_ns"] = connect_ns
+            self.rss_snapshots_mib["after_connect"] = self.capture_rss_snapshot()
+            _, self.setup_metrics["schema_ns"] = _measure_ns(
+                lambda: _create_sqlite_schema(self.sqlite, self.graph_schema)
+            )
+            self.rss_snapshots_mib["after_schema"] = self.capture_rss_snapshot()
+            _progress(
+                f"sqlite/{self.index_mode}: ingesting from generated fixture "
+                f"({self.sqlite_source.csv_dir})"
+            )
+            self.row_counts, self.setup_metrics["ingest_ns"] = _measure_ns(
+                lambda: _seed_sqlite_from_generated_fixture(
+                    self.sqlite,
+                    graph_schema=self.graph_schema,
+                    generated_fixture=self.sqlite_source,
+                    ingest_batch_size=5_000,
+                    progress_label=f"sqlite/{self.index_mode}",
+                )
+            )
+            self.rss_snapshots_mib["after_ingest"] = self.capture_rss_snapshot()
+            _, self.setup_metrics["index_ns"] = _measure_ns(
+                lambda: _configure_sqlite_indexes(
+                    self.sqlite,
+                    self.graph_schema,
+                    index_mode=self.index_mode,
+                )
+            )
+            self.rss_snapshots_mib["after_index"] = self.capture_rss_snapshot()
+            _, self.setup_metrics["analyze_ns"] = _measure_ns(
+                lambda: _analyze_sqlite(self.sqlite)
+            )
+            self.rss_snapshots_mib["after_analyze"] = self.capture_rss_snapshot()
+            self.db_size_mib, self.wal_size_mib = _sqlite_file_size_mib(db_path)
             self.rss_snapshots_mib["suite_start"] = self.capture_rss_snapshot()
-            self.artifact_path = self.sqlite_source.db_path
+            self.artifact_path = db_path
             return
 
         if self.backend == "duckdb":
@@ -209,20 +237,18 @@ class _BackendRunner:
             )
             self.rss_snapshots_mib["after_schema"] = self.capture_rss_snapshot()
             _progress(
-                f"duckdb/{self.index_mode}: ingesting from shared fixture "
-                f"({self.sqlite_source.db_path})"
+                f"duckdb/{self.index_mode}: ingesting from generated fixture "
+                f"({self.sqlite_source.csv_dir})"
             )
             self.row_counts, self.setup_metrics["ingest_ns"] = _measure_ns(
-                lambda: _seed_duckdb_from_sqlite(
+                lambda: _seed_duckdb_from_fixture(
                     self.duck,
-                    sqlite_source=self.sqlite_source,
+                    generated_fixture=self.sqlite_source,
                     graph_schema=self.graph_schema,
                 )
             )
             self.rss_snapshots_mib["after_ingest"] = self.capture_rss_snapshot()
-            _, self.setup_metrics["index_ns"] = _measure_ns(
-                lambda: _create_duckdb_query_indexes(self.duck, self.graph_schema)
-            )
+            self.setup_metrics["index_ns"] = 0
             self.rss_snapshots_mib["after_index"] = self.capture_rss_snapshot()
             _, self.setup_metrics["analyze_ns"] = _measure_ns(
                 lambda: _analyze_duckdb(self.duck)
@@ -252,13 +278,13 @@ class _BackendRunner:
             self.setup_metrics["schema_ns"] += schema_create_ns
             self.rss_snapshots_mib["after_schema"] = self.capture_rss_snapshot()
             _progress(
-                f"postgresql/{self.index_mode}: ingesting from shared fixture "
-                f"({self.sqlite_source.db_path})"
+                f"postgresql/{self.index_mode}: ingesting from generated fixture "
+                f"({self.sqlite_source.csv_dir})"
             )
             self.row_counts, self.setup_metrics["ingest_ns"] = _measure_ns(
-                lambda: _seed_postgresql_from_sqlite(
+                lambda: _seed_postgresql_from_fixture(
                     self.postgresql,
-                    sqlite_source=self.sqlite_source,
+                    generated_fixture=self.sqlite_source,
                     graph_schema=self.graph_schema,
                 )
             )
@@ -530,7 +556,7 @@ def _measure_query(
         "workload": query.workload,
         "category": query.category,
         "backend": runner.backend,
-        "index_mode": runner.index_mode if runner.backend != "duckdb" else "n/a",
+        "index_mode": runner.index_mode,
         "mode": query.mode,
         "mutation": query.mutation,
         "compile": _summarize(compile_latencies),
@@ -576,22 +602,14 @@ def _run_backend_suite(
     warmup: int,
     graph_schema: cypherglot.GraphSchema,
     schema_context: cypherglot.CompilerSchemaContext,
-    sqlite_source: SharedSQLiteFixture,
+    sqlite_source: GeneratedGraphFixture,
     postgres_dsn: str | None = None,
     db_root_dir: Path | None = None,
     iteration_progress: bool = False,
 ) -> dict[str, object]:
-    backend_index_mode = sqlite_source.index_mode if backend != "duckdb" else None
-    suite_progress_name = (
-        f"{workload}/{backend}_{backend_index_mode}"
-        if backend_index_mode is not None
-        else f"{workload}/{backend}"
-    )
-    suite_name = (
-        f"{workload}-{backend}-{backend_index_mode}-suite"
-        if backend_index_mode is not None
-        else f"{workload}-{backend}-suite"
-    )
+    backend_index_mode = sqlite_source.index_mode
+    suite_progress_name = f"{workload}/{backend}_{backend_index_mode}"
+    suite_name = f"{workload}-{backend}-{backend_index_mode}-suite"
     work_dir = _create_managed_directory(
         root_dir=db_root_dir,
         prefix=f"cypherglot-runtime-{backend}-suite-",
@@ -631,7 +649,7 @@ def _run_backend_suite(
         _progress(f"{suite_progress_name}: suite complete")
         return {
             "backend": backend,
-            "index_mode": runner.index_mode if backend != "duckdb" else "n/a",
+            "index_mode": runner.index_mode,
             "iterations": iterations,
             "warmup": warmup,
             "query_count": len(queries),
@@ -662,6 +680,7 @@ def _build_payload(
     *,
     entrypoint: SQLRuntimeBenchmarkEntrypoint,
     started_at: datetime,
+    database_versions: dict[str, str],
     corpus_path: Path,
     queries: list[CorpusQuery],
     scale: RuntimeScale,
@@ -687,6 +706,7 @@ def _build_payload(
         "python_version": platform.python_version(),
         "platform": platform.platform(),
         "cypherglot_version": cypherglot.__version__,
+        "database_versions": database_versions,
         "corpus_path": str(corpus_path),
         "workload_counts": {
             "oltp": len([query for query in queries if query.workload == "oltp"]),
@@ -728,7 +748,7 @@ def _build_payload(
             ],
         },
         "index_mode": (
-            "n/a" if entrypoint.name == DUCKDB_ENTRYPOINT.name else index_mode
+            index_mode
         ),
         "workload_controls": {
             "default_iterations": default_iterations,
@@ -744,6 +764,32 @@ def _build_payload(
     if completed_at is not None:
         payload["completed_at"] = completed_at.isoformat()
     return payload
+
+
+def _detect_database_versions(
+    entrypoint: SQLRuntimeBenchmarkEntrypoint,
+    postgres_dsn: str | None,
+) -> dict[str, str]:
+    versions: dict[str, str] = {}
+    for backend in entrypoint.enabled_backends:
+        if backend == "sqlite":
+            versions[backend] = sqlite3.sqlite_version
+            continue
+        if backend == "duckdb":
+            version = _duckdb_version()
+            if version is None:
+                raise ValueError("duckdb is not installed.")
+            versions[backend] = version
+            continue
+        if backend == "postgresql":
+            if not postgres_dsn:
+                raise ValueError(
+                    "PostgreSQL DSN is required to determine the server version."
+                )
+            versions[backend] = _postgresql_server_version(postgres_dsn)
+            continue
+        raise ValueError(f"Unsupported backend {backend!r}.")
+    return versions
 
 
 def _load_corpus(path: Path) -> list[CorpusQuery]:
@@ -859,8 +905,8 @@ def _benchmark_result(
     workloads: dict[str, object] = {}
     if progress_callback is not None:
         progress_callback({"workloads": workloads, "token_map": token_map})
-    sqlite_fixtures = {
-        mode: _prepare_shared_sqlite_fixture(
+    generated_fixtures = {
+        mode: _prepare_generated_graph_fixture(
             scale=scale,
             graph_schema=graph_schema,
             edge_plans=edge_plans,
@@ -882,7 +928,7 @@ def _benchmark_result(
             ]
             duckdb_oltp_queries = _filter_duckdb_queries(oltp_queries)
             postgresql_oltp_queries = _filter_postgresql_queries(oltp_queries)
-            for mode, fixture in sqlite_fixtures.items():
+            for mode, fixture in generated_fixtures.items():
                 if "sqlite" in enabled_backends:
                     workloads["oltp"][f"sqlite_{mode}"] = _run_backend_suite(
                         "sqlite",
@@ -919,9 +965,9 @@ def _benchmark_result(
                             {"workloads": workloads, "token_map": token_map}
                         )
             if "duckdb" in enabled_backends and duckdb_oltp_queries:
-                duckdb_source = sqlite_fixtures.get("indexed")
+                duckdb_source = generated_fixtures.get("unindexed")
                 if duckdb_source is None:
-                    duckdb_source = next(iter(sqlite_fixtures.values()))
+                    duckdb_source = next(iter(generated_fixtures.values()))
                 workloads["oltp"]["duckdb"] = _run_backend_suite(
                     "duckdb",
                     duckdb_oltp_queries,
@@ -951,7 +997,7 @@ def _benchmark_result(
             ]
             postgresql_olap_queries = _filter_postgresql_queries(olap_queries)
             duckdb_olap_queries = _filter_duckdb_queries(olap_queries)
-            for mode, fixture in sqlite_fixtures.items():
+            for mode, fixture in generated_fixtures.items():
                 if "sqlite" in enabled_backends:
                     workloads["olap"][f"sqlite_{mode}"] = _run_backend_suite(
                         "sqlite",
@@ -988,9 +1034,9 @@ def _benchmark_result(
                             {"workloads": workloads, "token_map": token_map}
                         )
             if "duckdb" in enabled_backends and duckdb_olap_queries:
-                duckdb_source = sqlite_fixtures.get("indexed")
+                duckdb_source = generated_fixtures.get("unindexed")
                 if duckdb_source is None:
-                    duckdb_source = next(iter(sqlite_fixtures.values()))
+                    duckdb_source = next(iter(generated_fixtures.values()))
                 workloads["olap"]["duckdb"] = _run_backend_suite(
                     "duckdb",
                     duckdb_olap_queries,
@@ -1006,7 +1052,7 @@ def _benchmark_result(
                 if progress_callback is not None:
                     progress_callback({"workloads": workloads, "token_map": token_map})
     finally:
-        for fixture in sqlite_fixtures.values():
+        for fixture in generated_fixtures.values():
             fixture.close()
 
     return {
@@ -1147,6 +1193,7 @@ def main(entrypoint: SQLRuntimeBenchmarkEntrypoint = SQLITE_ENTRYPOINT) -> int:
         raise ValueError(
             "psycopg2 is not installed. Install it or omit --postgres-dsn."
         )
+    database_versions = _detect_database_versions(entrypoint, postgres_dsn or None)
 
     db_root_dir = None
     if args.db_root_dir is not None:
@@ -1180,6 +1227,7 @@ def main(entrypoint: SQLRuntimeBenchmarkEntrypoint = SQLITE_ENTRYPOINT) -> int:
         payload = _build_payload(
             entrypoint=entrypoint,
             started_at=started_at,
+            database_versions=database_versions,
             corpus_path=args.corpus,
             queries=queries,
             scale=scale,

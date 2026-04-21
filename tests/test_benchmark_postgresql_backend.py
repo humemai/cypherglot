@@ -84,19 +84,19 @@ class _FakeConnection:
 
 
 class BenchmarkPostgreSQLBackendTests(unittest.TestCase):
-    def test_seed_postgresql_from_sqlite_uses_copy_and_resets_sequences(self) -> None:
+    def test_seed_postgresql_from_fixture_uses_copy_and_resets_sequences(self) -> None:
         build_graph_schema = getattr(benchmark_sql_runtime_core, "_build_graph_schema")
         prepare_fixture = getattr(
             benchmark_sql_runtime_core,
-            "_prepare_shared_sqlite_fixture",
+            "_prepare_generated_graph_fixture",
         )
         postgresql_copy_value = getattr(
             benchmark_postgresql_backend,
             "_postgresql_copy_value",
         )
-        seed_postgresql_from_sqlite = getattr(
+        seed_postgresql_from_fixture = getattr(
             benchmark_postgresql_backend,
-            "_seed_postgresql_from_sqlite",
+            "_seed_postgresql_from_fixture",
         )
 
         graph_schema, edge_plans = build_graph_schema(SMALL_SCALE)
@@ -108,9 +108,9 @@ class BenchmarkPostgreSQLBackendTests(unittest.TestCase):
         )
         fake_conn = _FakeConnection()
         try:
-            row_counts = seed_postgresql_from_sqlite(
+            row_counts = seed_postgresql_from_fixture(
                 fake_conn,
-                sqlite_source=fixture,
+                generated_fixture=fixture,
                 graph_schema=graph_schema,
             )
         finally:

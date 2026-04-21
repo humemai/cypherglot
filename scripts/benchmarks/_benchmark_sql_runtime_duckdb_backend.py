@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-import csv
 from pathlib import Path
-import sqlite3
 
 import cypherglot
 
 from _benchmark_sql_runtime_shared import (
     DuckDBConnection,
-    SharedSQLiteFixture,
+    GeneratedGraphFixture,
     _query_index_statements,
 )
 
@@ -22,6 +20,12 @@ except ImportError:  # pragma: no cover - optional dependency
 
 def _duckdb_available() -> bool:
     return duckdb is not None
+
+
+def _duckdb_version() -> str | None:
+    if duckdb is None:
+        return None
+    return str(duckdb.__version__)
 
 
 def _create_duckdb_connection(db_path: Path) -> DuckDBConnection:
@@ -63,6 +67,7 @@ def _duckdb_table_column_types(
 
     for node_type in graph_schema.node_types:
         types[node_type.table_name] = [
+            "BIGINT",
             *(
                 _duckdb_csv_type_name(property_schema.logical_type)
                 for property_schema in node_type.properties
@@ -71,6 +76,7 @@ def _duckdb_table_column_types(
 
     for edge_type in graph_schema.edge_types:
         types[edge_type.table_name] = [
+            "BIGINT",
             "BIGINT",
             "BIGINT",
             *(
@@ -82,73 +88,62 @@ def _duckdb_table_column_types(
     return types
 
 
-def _write_sqlite_table_csv(
-    source: sqlite3.Connection,
-    *,
-    table_name: str,
-    column_names: list[str],
-    csv_path: Path,
-) -> None:
-    projection = ", ".join(column_names)
-    cursor = source.execute(f"SELECT {projection} FROM {table_name} ORDER BY id")
-    with csv_path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.writer(handle)
-        description = cursor.description
-        if description is None:
-            return
-        writer.writerow([column[0] for column in description])
-        while True:
-            rows = cursor.fetchmany(5_000)
-            if not rows:
-                break
-            writer.writerows(rows)
-
-
-def _seed_duckdb_from_sqlite(
+def _seed_duckdb_from_fixture(
     conn: DuckDBConnection,
     *,
-    sqlite_source: SharedSQLiteFixture,
+    generated_fixture: GeneratedGraphFixture,
     graph_schema: cypherglot.GraphSchema,
 ) -> dict[str, int]:
-    source = sqlite3.connect(sqlite_source.db_path)
-    try:
-        table_names = [
-            *(node_type.table_name for node_type in graph_schema.node_types),
-            *(edge_type.table_name for edge_type in graph_schema.edge_types),
-        ]
-        column_types = _duckdb_table_column_types(graph_schema)
-        for table_name in table_names:
-            column_names = [
-                column[1]
-                for column in source.execute(f"PRAGMA table_info({table_name})")
-                if column[1] != "id"
-            ]
-            csv_path = sqlite_source.work_dir.path / f"{table_name}.csv"
-            _write_sqlite_table_csv(
-                source,
-                table_name=table_name,
-                column_names=column_names,
-                csv_path=csv_path,
+    table_names = [
+        *(node_type.table_name for node_type in graph_schema.node_types),
+        *(edge_type.table_name for edge_type in graph_schema.edge_types),
+    ]
+    column_types = _duckdb_table_column_types(graph_schema)
+    for table_name in table_names:
+        column_names = generated_fixture.table_columns[table_name]
+        csv_path = generated_fixture.table_csv_paths[table_name]
+        columns_spec = ", ".join(
+            f"'{column_name}': '{column_type}'"
+            for column_name, column_type in zip(
+                column_names,
+                column_types[table_name],
+                strict=True,
             )
-            columns_spec = ", ".join(
-                f"'{column_name}': '{column_type}'"
-                for column_name, column_type in zip(
-                    column_names,
-                    column_types[table_name],
-                    strict=True,
-                )
-            )
-            conn.execute(
-                f"INSERT INTO {table_name} ({', '.join(column_names)}) "
-                "SELECT * FROM read_csv(?, header=true, columns={"
-                + columns_spec
-                + "})",
-                [str(csv_path)],
-            )
-    finally:
-        source.close()
+        )
+        conn.execute(
+            f"INSERT INTO {table_name} ({', '.join(column_names)}) "
+            "SELECT * FROM read_csv(?, header=true, columns={"
+            + columns_spec
+            + "})",
+            [str(csv_path)],
+        )
+        _advance_duckdb_sequence(conn, table_name)
 
-    return dict(sqlite_source.row_counts)
+    return dict(generated_fixture.row_counts)
+
+
+def _advance_duckdb_sequence(
+    conn: DuckDBConnection,
+    table_name: str,
+) -> None:
+    max_id_row = conn.execute(
+        f"SELECT COALESCE(MAX(id), 0) FROM {table_name}"
+    ).fetchone()
+    if max_id_row is None:
+        return
+
+    max_id = int(max_id_row[0])
+    if max_id <= 0:
+        return
+
+    sequence_name = f"{table_name}_id_seq"
+    # DuckDB does not reliably advance the sequence here unless the query result
+    # is fully consumed. Using an aggregate forces evaluation without materializing
+    # every nextval row in Python.
+    conn.execute(
+        f"SELECT MAX(nextval('{sequence_name}')) FROM range(?)",
+        [max_id],
+    ).fetchone()
 
 
 def _analyze_duckdb(conn: DuckDBConnection) -> None:
