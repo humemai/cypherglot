@@ -2,27 +2,18 @@
 
 from __future__ import annotations
 
+import csv
 import json
 import sqlite3
 from pathlib import Path
-from typing import Any
 
 import cypherglot
 
 from _benchmark_common import (
-    EdgeTypePlan,
-    RuntimeScale,
-    _edge_out_degree,
-    _measure_ns,
-    _node_id,
-    _node_name,
-    _node_type_name,
     _progress,
 )
 from _benchmark_sql_runtime_shared import (
-    SharedSQLiteFixture,
-    _capture_rss_snapshot,
-    _create_managed_directory,
+    GeneratedGraphFixture,
     _query_index_statements,
 )
 
@@ -91,167 +82,78 @@ def _configure_sqlite_indexes(
     raise ValueError(f"Unsupported index mode {index_mode!r}.")
 
 
-def _node_row(
-    scale: RuntimeScale,
-    type_index: int,
-    local_index: int,
-) -> tuple[Any, ...]:
-    row: list[Any] = [
-        _node_id(scale, type_index, local_index),
-        _node_name(type_index, local_index),
-        18 + ((type_index * 5 + local_index) % 47),
-        round(1.0 + ((type_index * 17 + local_index * 7) % 500) / 100.0, 2),
-        int((type_index + local_index) % 3 != 0),
-    ]
-    row.extend(
-        (
-            f"{_node_type_name(type_index).lower()}-"
-            f"text-{property_index:02d}-{local_index:06d}"
-        )
-        for property_index in range(1, scale.node_extra_text_property_count + 1)
-    )
-    row.extend(
-        round(
-            property_index
-            + ((type_index * 31 + local_index * (property_index + 9)) % 10_000)
-            / 100.0,
-            2,
-        )
-        for property_index in range(1, scale.node_extra_numeric_property_count + 1)
-    )
-    row.extend(
-        int((type_index + local_index + property_index) % 2 == 0)
-        for property_index in range(1, scale.node_extra_boolean_property_count + 1)
-    )
-    return tuple(row)
+def _sqlite_literal(
+    value: str,
+    logical_type: str,
+) -> object:
+    if value == "":
+        return None
+    if logical_type == "integer":
+        return int(value)
+    if logical_type == "float":
+        return float(value)
+    if logical_type == "boolean":
+        return int(value)
+    return value
 
 
-def _edge_row(
-    scale: RuntimeScale,
-    plan: EdgeTypePlan,
-    source_local_index: int,
-    edge_ordinal: int,
-    edge_id: int,
-) -> tuple[Any, ...]:
-    from_node_id = _node_id(scale, plan.source_type_index, source_local_index)
-    target_local_index = (
-        (source_local_index - 1 + plan.type_index + edge_ordinal)
-        % scale.nodes_per_type
-    ) + 1
-    to_node_id = _node_id(scale, plan.target_type_index, target_local_index)
-    row: list[Any] = [
-        edge_id,
-        from_node_id,
-        to_node_id,
-        f"{plan.name.lower()}-note-{edge_ordinal:02d}-{source_local_index:06d}",
-        round(
-            0.5 + ((plan.type_index + source_local_index + edge_ordinal) % 11) * 0.35,
-            2,
-        ),
-        round(
-            (
-                1.0
-                + ((plan.type_index * 7 + source_local_index + edge_ordinal) % 17)
-                * 0.4
-            ),
-            2,
-        ),
-        int((plan.type_index + source_local_index + edge_ordinal) % 2 == 0),
-        1 + ((plan.type_index + source_local_index + edge_ordinal) % 100),
-    ]
-    row.extend(
-        f"{plan.name.lower()}-text-{property_index:02d}-{source_local_index:06d}"
-        for property_index in range(1, scale.edge_extra_text_property_count + 1)
-    )
-    row.extend(
-        round(
-            property_index
-            + (
-                (
-                    plan.type_index * 19
-                    + source_local_index * (property_index + 5)
-                    + edge_ordinal
-                )
-                % 5_000
-            )
-            / 100.0,
-            2,
-        )
-        for property_index in range(1, scale.edge_extra_numeric_property_count + 1)
-    )
-    row.extend(
-        int(
-            (
-                plan.type_index
-                + source_local_index
-                + edge_ordinal
-                + property_index
-            )
-            % 2
-            == 0
-        )
-        for property_index in range(1, scale.edge_extra_boolean_property_count + 1)
-    )
-    return tuple(row)
+def _sqlite_table_logical_types(
+    graph_schema: cypherglot.GraphSchema,
+) -> dict[str, list[str]]:
+    logical_types: dict[str, list[str]] = {}
+    for node_type in graph_schema.node_types:
+        logical_types[node_type.table_name] = [
+            "integer",
+            *(property_schema.logical_type for property_schema in node_type.properties),
+        ]
+    for edge_type in graph_schema.edge_types:
+        logical_types[edge_type.table_name] = [
+            "integer",
+            "integer",
+            "integer",
+            *(property_schema.logical_type for property_schema in edge_type.properties),
+        ]
+    return logical_types
 
 
-def _seed_sqlite(
+def _seed_sqlite_from_generated_fixture(
     conn: sqlite3.Connection,
     *,
-    scale: RuntimeScale,
     graph_schema: cypherglot.GraphSchema,
-    edge_plans: list[EdgeTypePlan],
+    generated_fixture: GeneratedGraphFixture,
+    ingest_batch_size: int,
     progress_label: str | None = None,
 ) -> dict[str, int]:
-    node_row_count = 0
-    edge_row_count = 0
-
-    for type_index, node_type in enumerate(graph_schema.node_types, start=1):
+    logical_types = _sqlite_table_logical_types(graph_schema)
+    table_names = [
+        *(node_type.table_name for node_type in graph_schema.node_types),
+        *(edge_type.table_name for edge_type in graph_schema.edge_types),
+    ]
+    for table_index, table_name in enumerate(table_names, start=1):
         if progress_label is not None:
             _progress(
-                f"{progress_label}: node type {type_index}/{scale.node_type_count} "
-                f"({node_type.name})"
+                f"{progress_label}: table {table_index}/{len(table_names)} "
+                f"({table_name})"
             )
-        sample_row = _node_row(scale, type_index, 1)
-        placeholders = ", ".join("?" for _ in sample_row)
-        batch: list[tuple[Any, ...]] = []
-        for local_index in range(1, scale.nodes_per_type + 1):
-            batch.append(_node_row(scale, type_index, local_index))
-            if len(batch) < scale.ingest_batch_size:
-                continue
-            conn.executemany(
-                f"INSERT INTO {node_type.table_name} VALUES ({placeholders})",
-                batch,
-            )
-            batch.clear()
-        if batch:
-            conn.executemany(
-                f"INSERT INTO {node_type.table_name} VALUES ({placeholders})",
-                batch,
-            )
-        node_row_count += scale.nodes_per_type
-
-    edge_id = 1
-    for edge_type_index, plan in enumerate(edge_plans, start=1):
-        if progress_label is not None:
-            _progress(
-                f"{progress_label}: edge type "
-                f"{edge_type_index}/{scale.edge_type_count} "
-                f"({plan.name})"
-            )
-        table_name = graph_schema.edge_types[plan.type_index - 1].table_name
-        sample_row = _edge_row(scale, plan, 1, 1, edge_id)
-        placeholders = ", ".join("?" for _ in sample_row)
-        batch: list[tuple[Any, ...]] = []
-        for source_local_index in range(1, scale.nodes_per_type + 1):
-            edge_count_for_source = _edge_out_degree(scale, source_local_index)
-            for edge_ordinal in range(1, edge_count_for_source + 1):
+        column_names = generated_fixture.table_columns[table_name]
+        placeholders = ", ".join("?" for _ in column_names)
+        typed_columns = logical_types[table_name]
+        batch: list[tuple[object, ...]] = []
+        with generated_fixture.table_csv_paths[table_name].open(
+            "r",
+            encoding="utf-8",
+            newline="",
+        ) as handle:
+            reader = csv.reader(handle)
+            next(reader, None)
+            for row in reader:
                 batch.append(
-                    _edge_row(scale, plan, source_local_index, edge_ordinal, edge_id)
+                    tuple(
+                        _sqlite_literal(value, logical_type)
+                        for value, logical_type in zip(row, typed_columns, strict=True)
+                    )
                 )
-                edge_id += 1
-                edge_row_count += 1
-                if len(batch) < scale.ingest_batch_size:
+                if len(batch) < ingest_batch_size:
                     continue
                 conn.executemany(
                     f"INSERT INTO {table_name} VALUES ({placeholders})",
@@ -263,99 +165,12 @@ def _seed_sqlite(
                 f"INSERT INTO {table_name} VALUES ({placeholders})",
                 batch,
             )
-
     conn.commit()
-    if progress_label is not None:
-        _progress(
-            f"{progress_label}: ingest committed "
-            f"({node_row_count} nodes, {edge_row_count} edges)"
-        )
-    return {
-        "node_count": node_row_count,
-        "edge_count": edge_row_count,
-        "node_type_count": scale.node_type_count,
-        "edge_type_count": scale.edge_type_count,
-    }
+    return dict(generated_fixture.row_counts)
 
 
 def _analyze_sqlite(conn: sqlite3.Connection) -> None:
     conn.execute("ANALYZE")
-
-
-def _prepare_shared_sqlite_fixture(
-    *,
-    scale: RuntimeScale,
-    graph_schema: cypherglot.GraphSchema,
-    edge_plans: list[EdgeTypePlan],
-    index_mode: str,
-    db_root_dir: Path | None = None,
-) -> SharedSQLiteFixture:
-    progress_label = f"shared-fixture/{index_mode}"
-    work_dir = _create_managed_directory(
-        root_dir=db_root_dir,
-        prefix=f"cypherglot-runtime-{index_mode}-",
-        name=f"sqlite-{index_mode}",
-    )
-    db_path = work_dir.path / "runtime.sqlite3"
-    rss_snapshots_mib: dict[str, dict[str, float | None]] = {}
-
-    _progress(
-        f"{progress_label}: creating fixture "
-        f"({scale.total_nodes} nodes, {scale.total_edges} edges)"
-    )
-    conn, connect_ns = _measure_ns(lambda: _create_sqlite_connection(db_path))
-    rss_snapshots_mib["after_connect"] = _capture_rss_snapshot(backend="sqlite")
-    try:
-        _progress(f"{progress_label}: creating schema")
-        _, schema_ns = _measure_ns(lambda: _create_sqlite_schema(conn, graph_schema))
-        rss_snapshots_mib["after_schema"] = _capture_rss_snapshot(backend="sqlite")
-        _progress(f"{progress_label}: ingesting synthetic graph")
-        row_counts, ingest_ns = _measure_ns(
-            lambda: _seed_sqlite(
-                conn,
-                scale=scale,
-                graph_schema=graph_schema,
-                edge_plans=edge_plans,
-                progress_label=progress_label,
-            )
-        )
-        rss_snapshots_mib["after_ingest"] = _capture_rss_snapshot(backend="sqlite")
-        _progress(f"{progress_label}: configuring indexes")
-        _, index_ns = _measure_ns(
-            lambda: _configure_sqlite_indexes(
-                conn,
-                graph_schema,
-                index_mode=index_mode,
-            )
-        )
-        rss_snapshots_mib["after_index"] = _capture_rss_snapshot(backend="sqlite")
-        _progress(f"{progress_label}: analyzing source-fixture statistics")
-        _, analyze_ns = _measure_ns(lambda: _analyze_sqlite(conn))
-        rss_snapshots_mib["after_analyze"] = _capture_rss_snapshot(backend="sqlite")
-    finally:
-        conn.close()
-
-    db_size_mib, wal_size_mib = _sqlite_file_size_mib(db_path)
-    _progress(
-        f"{progress_label}: fixture ready "
-        f"(ingest={ingest_ns / 1_000_000_000.0:.2f}s, db={db_size_mib:.2f} MiB)"
-    )
-    return SharedSQLiteFixture(
-        work_dir=work_dir,
-        db_path=db_path,
-        setup_metrics={
-            "connect_ns": connect_ns,
-            "schema_ns": schema_ns,
-            "index_ns": index_ns,
-            "ingest_ns": ingest_ns,
-            "analyze_ns": analyze_ns,
-        },
-        row_counts=row_counts,
-        rss_snapshots_mib=rss_snapshots_mib,
-        db_size_mib=db_size_mib,
-        wal_size_mib=wal_size_mib,
-        index_mode=index_mode,
-    )
 
 
 def _execute_sqlite_program(

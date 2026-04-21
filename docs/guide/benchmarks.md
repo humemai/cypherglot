@@ -14,6 +14,8 @@ questions:
   OLTP and OLAP runtime over the same synthetic graph contract.
 - `scripts/benchmarks/benchmark_postgresql_runtime.py` measures PostgreSQL-
   backed compile-plus-execute runtime cost over the same contract.
+- `scripts/benchmarks/benchmark_ladybug_runtime.py` measures LadybugDB-backed
+  direct Cypher runtime over the same synthetic graph contract.
 
 This page documents them separately so each benchmark path has its own scope, inputs,
 commands, and output model.
@@ -322,7 +324,7 @@ Backend pipeline summary from the same run:
 | Backend | IR build p50 | Bind p50 | Lower p50 | Render p50 | End-to-end p50 | End-to-end p95 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | SQLite | `2.96 us` | `0.38 us` | `69.84 us` | `68.41 us` | `1.02 ms` | `1.48 ms` |
-| DuckDB | `2.99 us` | `0.38 us` | `67.07 us` | `1.47 ms` | `2.57 ms` | `5.17 ms` |
+| DuckDB unindexed | `2.99 us` | `0.38 us` | `67.07 us` | `1.47 ms` | `2.57 ms` | `5.17 ms` |
 | PostgreSQL | `2.98 us` | `0.38 us` | `66.54 us` | `67.53 us` | `1.01 ms` | `1.45 ms` |
 
 The key current result is the same, but the evidence is cleaner now that the
@@ -378,209 +380,124 @@ render cost rather than as leftover CypherGlot lowering debt.
 | medium | `6` node types, `8` edge types, `100000` nodes per type, `4` edges per source, `skewed` degree | node: `4 text`, `10 numeric`, `4 boolean`; edge: `2 text`, `6 numeric`, `2 boolean` | `--variable-hop-max 5` | `5000` |
 | large | `10` node types, `10` edge types, `1000000` nodes per type, `8` edges per source, `skewed` degree | node: `8 text`, `18 numeric`, `8 boolean`; edge: `4 text`, `10 numeric`, `4 boolean` | `--variable-hop-max 8` | `10000` |
 
+### Runtime matrix runner
+
+Script:
+
+- `scripts/benchmarks/run_runtime_matrix.py`
+
+This runner schedules the current `10` runtime variants through a shuffled job
+queue instead of launching a fixed set of terminals by hand. You choose:
+
+- `--scale` as one of `small`, `medium`, or `large`
+- `--workers` as the number of concurrent worker threads
+- `--repeats` as the number of times to run each selected variant
+- optional per-workload overrides via `--oltp-iterations`, `--oltp-warmup`,
+  `--olap-iterations`, and `--olap-warmup`
+
+Each queued job writes:
+
+- its benchmark JSON into `scripts/benchmarks/results/runtime/`
+- a per-job log file plus a manifest into
+  `scripts/benchmarks/results/runtime-matrix/<run-stamp>/`
+- any persisted database artifacts under
+  `my_test_databases/runtime-<scale>-<run-stamp>/`
+
+The queue is shuffled by default. Use `--shuffle-seed` for a deterministic
+order or `--no-shuffle` to preserve the declared variant order.
+
+ArcadeDB heap defaults now follow the scale preset automatically:
+
+- `small`: `ARCADEDB_JVM_ARGS='-Xmx4g'`
+- `medium`: `ARCADEDB_JVM_ARGS='-Xmx8g'`
+- `large`: `ARCADEDB_JVM_ARGS='-Xmx32g'`
+
+Override that default for a given run with `--arcadedb-jvm-args`.
+
+Example full-matrix run:
+
+```bash
+python scripts/benchmarks/run_runtime_matrix.py \
+  --scale small \
+  --workers 3 \
+  --repeats 3 \
+  --oltp-iterations 50000 \
+  --oltp-warmup 500 \
+  --olap-iterations 2000 \
+  --olap-warmup 50 \
+  --neo4j-password cypherglot1
+```
+
+```bash
+python scripts/benchmarks/run_runtime_matrix.py \
+  --scale medium \
+  --workers 3 \
+  --repeats 3 \
+  --oltp-iterations 20000 \
+  --oltp-warmup 200 \
+  --olap-iterations 500 \
+  --olap-warmup 20 \
+  --neo4j-password cypherglot1
+```
+
+```bash
+python scripts/benchmarks/run_runtime_matrix.py \
+  --scale large \
+  --workers 3 \
+  --repeats 3 \
+  --oltp-iterations 5000 \
+  --oltp-warmup 100 \
+  --olap-iterations 20 \
+  --olap-warmup 3 \
+  --neo4j-password cypherglot1
+```
+
+Useful overrides:
+
+```bash
+python scripts/benchmarks/run_runtime_matrix.py --scale small --workers 10 --repeats 1 --dry-run --neo4j-password cypherglot1
+python scripts/benchmarks/run_runtime_matrix.py --scale medium --workers 3 --repeats 5 --shuffle-seed 7 --neo4j-password cypherglot1
+python scripts/benchmarks/run_runtime_matrix.py --scale large --workers 2 --repeats 2 --arcadedb-jvm-args '-Xmx48g' --neo4j-password cypherglot1
+python scripts/benchmarks/run_runtime_matrix.py --scale small --variant sqlite-indexed --variant sqlite-unindexed --workers 2 --repeats 10
+```
+
+### Runtime result summarizer
+
+Script:
+
+- `scripts/benchmarks/summarize_runtime_results.py`
+
+When you run repeated runtime jobs, the per-run JSON files keep each run's own
+suite percentiles and setup timings. This summarizer scans those JSON files,
+groups runs that share the same benchmark configuration, skips non-completed
+checkpoint payloads, and emits Markdown tables with repeat-level means and
+sample standard deviations.
+
+The suite tables aggregate the already-recorded suite percentiles, so values
+such as `p50`, `p95`, and `p99` are reported as:
+
+- mean across repeated runs
+- sample standard deviation across repeated runs
+
+It also aggregates suite setup timings such as `connect_ms`, `schema_ms`,
+`ingest_ms`, `index_ms`, `analyze_ms`, `gav_ms`, or `checkpoint_ms` whenever
+those fields exist for the grouped backend. Add `--include-queries` to emit the
+same style of Markdown table for per-query end-to-end percentiles.
+
+Examples:
+
+```bash
+python scripts/benchmarks/summarize_runtime_results.py
+python scripts/benchmarks/summarize_runtime_results.py --include-queries
+python scripts/benchmarks/summarize_runtime_results.py scripts/benchmarks/results/runtime --output scripts/benchmarks/results/runtime-summary.md
+python scripts/benchmarks/summarize_runtime_results.py scripts/benchmarks/results/runtime/sqlite-indexed-medium-r01-*.json
+```
+
 ### Small runtime dataset
 
-The current small runtime matrix used the `small` preset with `1000` measured
-iterations and `10` warmup iterations for both OLTP and OLAP.
+### Medium runtime dataset
 
-That corresponds to roughly:
-
-- `4,000` total nodes
-- `12,000` total edges
-- `7` backend/index combinations across SQLite, DuckDB, PostgreSQL, and Neo4j
-
-Runtime result artifacts for this run now live under
-`scripts/benchmarks/results/runtime/`.
-
-For the SQL backends in this refreshed run, setup now follows the more standard
-bulk-load sequence: `schema -> ingest -> index -> analyze`. That means the
-reported `ingest` step no longer includes index-maintenance cost during row
-insertion, and the `index` step now captures post-load index construction.
-
-OLTP summary:
-
-| Combo | Connect / Reset | Schema / Constraints | Ingest | Index | Analyze | End-to-end p50 | End-to-end p95 | End-to-end p99 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| SQLite indexed | `0.51 ms` | `10.58 ms` | `104.25 ms` | `13.64 ms` | `6.66 ms` | `0.98 ms` | `1.18 ms` | `1.43 ms` |
-| SQLite unindexed | `0.34 ms` | `20.18 ms` | `108.22 ms` | `1.23 ms` | `0.43 ms` | `1.24 ms` | `1.56 ms` | `2.08 ms` |
-| DuckDB | `15.08 ms` | `316.56 ms` | `279.07 ms` | `223.52 ms` | `0.28 ms` | `4.11 ms` | `5.29 ms` | `7.12 ms` |
-| PostgreSQL indexed | `4.32 ms` | `504.14 ms` | `295.72 ms` | `423.12 ms` | `86.39 ms` | `1.39 ms` | `2.12 ms` | `2.75 ms` |
-| PostgreSQL unindexed | `4.38 ms` | `678.56 ms` | `270.31 ms` | `15.91 ms` | `84.21 ms` | `1.60 ms` | `2.36 ms` | `2.95 ms` |
-| Neo4j indexed | `874.79 ms` | `387.98 ms` | `1814.98 ms` | `896.75 ms` | `0.00 ms` | `0.34 ms` | `0.54 ms` | `0.95 ms` |
-| Neo4j unindexed | `874.24 ms` | `423.65 ms` | `2081.02 ms` | `0.00 ms` | `0.00 ms` | `0.48 ms` | `0.82 ms` | `1.33 ms` |
-
-OLAP summary:
-
-| Combo | Connect / Reset | Schema / Constraints | Ingest | Index | Analyze | End-to-end p50 | End-to-end p95 | End-to-end p99 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| SQLite indexed | `0.46 ms` | `10.58 ms` | `104.25 ms` | `13.64 ms` | `6.66 ms` | `3.63 ms` | `4.49 ms` | `5.25 ms` |
-| SQLite unindexed | `0.43 ms` | `20.18 ms` | `108.22 ms` | `1.23 ms` | `0.43 ms` | `3.74 ms` | `4.69 ms` | `5.37 ms` |
-| DuckDB | `15.03 ms` | `295.76 ms` | `827.75 ms` | `207.86 ms` | `0.30 ms` | `3.95 ms` | `4.48 ms` | `4.95 ms` |
-| PostgreSQL indexed | `6.23 ms` | `328.51 ms` | `222.09 ms` | `239.57 ms` | `78.42 ms` | `2.94 ms` | `3.68 ms` | `4.21 ms` |
-| PostgreSQL unindexed | `5.18 ms` | `334.05 ms` | `216.55 ms` | `8.87 ms` | `90.77 ms` | `2.77 ms` | `3.42 ms` | `3.84 ms` |
-| Neo4j indexed | `874.79 ms` | `387.98 ms` | `1814.98 ms` | `896.75 ms` | `0.00 ms` | `2.53 ms` | `3.34 ms` | `3.96 ms` |
-| Neo4j unindexed | `874.24 ms` | `423.65 ms` | `2081.02 ms` | `0.00 ms` | `0.00 ms` | `2.60 ms` | `3.56 ms` | `4.20 ms` |
-
-The tables below sum all process memory involved in the benchmark at each checkpoint:
-embedded backends contribute only the benchmark process, while PostgreSQL and Neo4j add
-the server-side RSS snapshot to the client process snapshot.
-
-Total RSS checkpoints, OLTP:
-
-| Combo | Connect / Reset | Schema / Constraints | Ingest | Index | Analyze | Suite complete |
-| --- | --- | --- | --- | --- | --- | --- |
-| SQLite indexed | `90.64 MiB` | `90.75 MiB` | `93.57 MiB` | `93.66 MiB` | `93.66 MiB` | `219.20 MiB` |
-| SQLite unindexed | `90.62 MiB` | `90.72 MiB` | `93.55 MiB` | `93.62 MiB` | `93.62 MiB` | `220.32 MiB` |
-| DuckDB | `94.48 MiB` | `98.72 MiB` | `153.82 MiB` | `177.64 MiB` | `177.64 MiB` | `2538.07 MiB` |
-| PostgreSQL indexed | `121.06 MiB` | `122.92 MiB` | `132.30 MiB` | `132.43 MiB` | `135.20 MiB` | `261.51 MiB` |
-| PostgreSQL unindexed | `120.83 MiB` | `123.02 MiB` | `132.14 MiB` | `132.52 MiB` | `134.18 MiB` | `259.63 MiB` |
-| Neo4j indexed | `717.80 MiB` | `701.22 MiB` | `1828.05 MiB` | `963.13 MiB` | `963.13 MiB` | `1084.84 MiB` |
-| Neo4j unindexed | `693.73 MiB` | `695.05 MiB` | `1757.54 MiB` | `1752.42 MiB` | `1752.42 MiB` | `1023.06 MiB` |
-
-Total RSS checkpoints, OLAP:
-
-| Combo | Connect / Reset | Schema / Constraints | Ingest | Index | Analyze | Suite complete |
-| --- | --- | --- | --- | --- | --- | --- |
-| SQLite indexed | `90.64 MiB` | `90.75 MiB` | `93.57 MiB` | `93.66 MiB` | `93.66 MiB` | `259.54 MiB` |
-| SQLite unindexed | `90.62 MiB` | `90.72 MiB` | `93.55 MiB` | `93.62 MiB` | `93.62 MiB` | `248.84 MiB` |
-| DuckDB | `2477.86 MiB` | `2478.96 MiB` | `2518.54 MiB` | `2539.07 MiB` | `2539.07 MiB` | `4395.84 MiB` |
-| PostgreSQL indexed | `258.69 MiB` | `259.62 MiB` | `260.46 MiB` | `260.80 MiB` | `262.37 MiB` | `350.64 MiB` |
-| PostgreSQL unindexed | `256.47 MiB` | `257.21 MiB` | `259.18 MiB` | `259.21 MiB` | `260.75 MiB` | `348.58 MiB` |
-| Neo4j indexed | `717.80 MiB` | `701.22 MiB` | `1828.05 MiB` | `963.13 MiB` | `963.13 MiB` | `1961.34 MiB` |
-| Neo4j unindexed | `693.73 MiB` | `695.05 MiB` | `1757.54 MiB` | `1752.42 MiB` | `1752.42 MiB` | `1021.27 MiB` |
-
-Read these tables with a couple of caveats:
-
-- SQLite, DuckDB, and PostgreSQL numbers are compile-plus-execute runtime
-  timings through CypherGlot.
-- Neo4j numbers are direct Cypher execution timings, so they are not strictly
-  comparable to the compile-plus-execute SQL paths.
-- DuckDB is a single-path run here. The harness does execute the same
-  query-index DDL used by the other SQL backends, but this is not presented as
-  a meaningful DuckDB indexed-versus-unindexed comparison, so the matrix keeps
-  only one DuckDB row.
-- RSS values in these tables are point-in-time resident-memory snapshots taken
-  at each named checkpoint, not deltas from the previous step and not
-  peak-memory readings.
-- Total RSS is the sum of benchmark-process RSS plus database-server RSS when
-  the backend is external.
-
-#### Small runtime suite comparison
-
-This rolls the small-runtime matrix up to suite-level end-to-end percentiles for
-each workload/backend combination.
-
-| Suite | p50 | p95 | p99 |
-| --- | --- | --- | --- |
-| `oltp/sqlite_indexed` | `0.98 ms` | `1.18 ms` | `1.43 ms` |
-| `oltp/sqlite_unindexed` | `1.24 ms` | `1.56 ms` | `2.08 ms` |
-| `oltp/duckdb` | `4.11 ms` | `5.29 ms` | `7.12 ms` |
-| `oltp/postgresql_indexed` | `1.39 ms` | `2.12 ms` | `2.75 ms` |
-| `oltp/postgresql_unindexed` | `1.60 ms` | `2.36 ms` | `2.95 ms` |
-| `oltp/neo4j_indexed` | `0.34 ms` | `0.54 ms` | `0.95 ms` |
-| `oltp/neo4j_unindexed` | `0.48 ms` | `0.82 ms` | `1.33 ms` |
-| `olap/sqlite_indexed` | `3.63 ms` | `4.49 ms` | `5.25 ms` |
-| `olap/sqlite_unindexed` | `3.74 ms` | `4.69 ms` | `5.37 ms` |
-| `olap/duckdb` | `3.95 ms` | `4.48 ms` | `4.95 ms` |
-| `olap/postgresql_indexed` | `2.94 ms` | `3.68 ms` | `4.21 ms` |
-| `olap/postgresql_unindexed` | `2.77 ms` | `3.42 ms` | `3.84 ms` |
-| `olap/neo4j_indexed` | `2.53 ms` | `3.34 ms` | `3.96 ms` |
-| `olap/neo4j_unindexed` | `2.60 ms` | `3.56 ms` | `4.20 ms` |
-
-#### Small runtime query breakdowns
-
-These tables show per-query end-to-end percentiles for the same 7-way small
-runtime matrix.
-
-##### OLTP query breakdown, end-to-end `p50`
-
-| Query | SQLite Indexed | SQLite Unindexed | DuckDB | PostgreSQL Indexed | PostgreSQL Unindexed | Neo4j Indexed | Neo4j Unindexed |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| `oltp_type1_point_lookup` | `0.93 ms` | `1.01 ms` | `2.95 ms` | `1.17 ms` | `1.22 ms` | `0.44 ms` | `0.79 ms` |
-| `oltp_type1_neighbors` | `0.97 ms` | `1.23 ms` | `3.70 ms` | `1.40 ms` | `1.54 ms` | `0.40 ms` | `0.62 ms` |
-| `oltp_cross_type_lookup` | `1.16 ms` | `1.42 ms` | `3.94 ms` | `1.61 ms` | `1.82 ms` | `0.34 ms` | `0.50 ms` |
-| `oltp_update_type1_score` | `0.70 ms` | `0.75 ms` | `3.39 ms` | `0.88 ms` | `1.15 ms` | `0.32 ms` | `0.46 ms` |
-| `oltp_create_type1_node` | `0.70 ms` | `0.68 ms` | `3.67 ms` | `0.93 ms` | `0.87 ms` | `0.33 ms` | `0.29 ms` |
-| `oltp_create_cross_type_edge` | `1.36 ms` | `1.47 ms` | `5.60 ms` | `1.83 ms` | `2.01 ms` | `0.40 ms` | `0.63 ms` |
-| `oltp_delete_type1_edge` | `0.73 ms` | `0.95 ms` | `4.29 ms` | `1.26 ms` | `1.50 ms` | `0.32 ms` | `0.40 ms` |
-| `oltp_delete_type1_node` | `0.59 ms` | `1.88 ms` | `2.58 ms` | `0.69 ms` | `1.79 ms` | `0.28 ms` | `0.39 ms` |
-| `oltp_program_create_and_link` | `1.74 ms` | `1.82 ms` | `7.99 ms` | `2.38 ms` | `2.56 ms` | `0.28 ms` | `0.39 ms` |
-| `oltp_update_cross_type_edge_rank` | `0.92 ms` | `1.17 ms` | `2.96 ms` | `1.73 ms` | `1.56 ms` | `0.26 ms` | `0.37 ms` |
-
-##### OLTP query breakdown, end-to-end `p95`
-
-| Query | SQLite Indexed | SQLite Unindexed | DuckDB | PostgreSQL Indexed | PostgreSQL Unindexed | Neo4j Indexed | Neo4j Unindexed |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| `oltp_type1_point_lookup` | `1.07 ms` | `1.19 ms` | `3.61 ms` | `1.73 ms` | `1.75 ms` | `0.97 ms` | `1.96 ms` |
-| `oltp_type1_neighbors` | `1.06 ms` | `1.47 ms` | `4.50 ms` | `2.12 ms` | `2.21 ms` | `0.60 ms` | `1.00 ms` |
-| `oltp_cross_type_lookup` | `1.30 ms` | `1.69 ms` | `5.33 ms` | `2.29 ms` | `2.75 ms` | `0.53 ms` | `0.77 ms` |
-| `oltp_update_type1_score` | `0.86 ms` | `0.90 ms` | `4.27 ms` | `1.18 ms` | `2.03 ms` | `0.50 ms` | `0.75 ms` |
-| `oltp_create_type1_node` | `0.87 ms` | `0.91 ms` | `5.75 ms` | `1.42 ms` | `1.22 ms` | `0.49 ms` | `0.44 ms` |
-| `oltp_create_cross_type_edge` | `1.71 ms` | `1.82 ms` | `7.44 ms` | `3.29 ms` | `3.07 ms` | `0.67 ms` | `0.98 ms` |
-| `oltp_delete_type1_edge` | `0.94 ms` | `1.10 ms` | `5.49 ms` | `1.91 ms` | `2.22 ms` | `0.46 ms` | `0.59 ms` |
-| `oltp_delete_type1_node` | `0.77 ms` | `2.17 ms` | `3.29 ms` | `1.07 ms` | `2.63 ms` | `0.44 ms` | `0.58 ms` |
-| `oltp_program_create_and_link` | `2.13 ms` | `2.65 ms` | `9.62 ms` | `3.48 ms` | `3.56 ms` | `0.40 ms` | `0.63 ms` |
-| `oltp_update_cross_type_edge_rank` | `1.05 ms` | `1.74 ms` | `3.56 ms` | `2.68 ms` | `2.14 ms` | `0.38 ms` | `0.53 ms` |
-
-##### OLTP query breakdown, end-to-end `p99`
-
-| Query | SQLite Indexed | SQLite Unindexed | DuckDB | PostgreSQL Indexed | PostgreSQL Unindexed | Neo4j Indexed | Neo4j Unindexed |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| `oltp_type1_point_lookup` | `1.28 ms` | `1.41 ms` | `4.00 ms` | `2.81 ms` | `2.15 ms` | `1.58 ms` | `3.94 ms` |
-| `oltp_type1_neighbors` | `1.29 ms` | `1.87 ms` | `4.97 ms` | `2.56 ms` | `2.66 ms` | `0.87 ms` | `1.58 ms` |
-| `oltp_cross_type_lookup` | `1.47 ms` | `2.17 ms` | `17.09 ms` | `2.65 ms` | `3.28 ms` | `0.96 ms` | `1.12 ms` |
-| `oltp_update_type1_score` | `1.04 ms` | `1.19 ms` | `4.98 ms` | `1.29 ms` | `3.64 ms` | `0.76 ms` | `1.70 ms` |
-| `oltp_create_type1_node` | `1.18 ms` | `1.20 ms` | `7.22 ms` | `2.15 ms` | `1.51 ms` | `0.80 ms` | `0.62 ms` |
-| `oltp_create_cross_type_edge` | `2.04 ms` | `2.20 ms` | `8.16 ms` | `5.11 ms` | `3.50 ms` | `1.04 ms` | `1.21 ms` |
-| `oltp_delete_type1_edge` | `1.22 ms` | `1.36 ms` | `6.23 ms` | `2.34 ms` | `2.80 ms` | `0.89 ms` | `0.82 ms` |
-| `oltp_delete_type1_node` | `1.07 ms` | `2.54 ms` | `3.80 ms` | `1.39 ms` | `3.09 ms` | `1.08 ms` | `0.73 ms` |
-| `oltp_program_create_and_link` | `2.41 ms` | `4.57 ms` | `10.71 ms` | `4.19 ms` | `4.43 ms` | `0.78 ms` | `0.93 ms` |
-| `oltp_update_cross_type_edge_rank` | `1.28 ms` | `2.27 ms` | `4.05 ms` | `3.03 ms` | `2.41 ms` | `0.73 ms` | `0.62 ms` |
-
-##### OLAP query breakdown, end-to-end `p50`
-
-| Query | SQLite Indexed | SQLite Unindexed | DuckDB | PostgreSQL Indexed | PostgreSQL Unindexed | Neo4j Indexed | Neo4j Unindexed |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| `olap_type1_active_leaderboard` | `1.18 ms` | `1.33 ms` | `3.93 ms` | `1.50 ms` | `1.40 ms` | `1.35 ms` | `1.32 ms` |
-| `olap_type1_age_rollup` | `1.73 ms` | `1.60 ms` | `3.72 ms` | `1.59 ms` | `1.49 ms` | `0.81 ms` | `0.88 ms` |
-| `olap_cross_type_edge_rollup` | `3.35 ms` | `2.58 ms` | `3.37 ms` | `2.58 ms` | `2.39 ms` | `2.28 ms` | `2.51 ms` |
-| `olap_variable_length_reachability` | `1.71 ms` | `3.60 ms` | `5.34 ms` | `2.54 ms` | `2.67 ms` | `0.36 ms` | `0.47 ms` |
-| `olap_three_type_path_count` | `4.94 ms` | `5.13 ms` | `3.07 ms` | `3.25 ms` | `2.74 ms` | `1.96 ms` | `1.87 ms` |
-| `olap_type2_score_distribution` | `1.62 ms` | `1.99 ms` | `3.68 ms` | `1.58 ms` | `1.61 ms` | `0.75 ms` | `0.74 ms` |
-| `olap_fixed_length_path_projection` | `6.88 ms` | `6.74 ms` | `3.79 ms` | `5.18 ms` | `4.64 ms` | `4.93 ms` | `4.83 ms` |
-| `olap_graph_introspection_rollup` | `1.68 ms` | `2.32 ms` | `3.37 ms` | `2.78 ms` | `2.71 ms` | `2.86 ms` | `2.78 ms` |
-| `olap_with_scalar_rebinding` | `2.25 ms` | `2.03 ms` | `3.76 ms` | `2.05 ms` | `2.13 ms` | `0.86 ms` | `0.83 ms` |
-| `olap_variable_length_grouped_rollup` | `10.94 ms` | `10.13 ms` | `5.47 ms` | `6.35 ms` | `5.90 ms` | `9.13 ms` | `9.76 ms` |
-
-##### OLAP query breakdown, end-to-end `p95`
-
-| Query | SQLite Indexed | SQLite Unindexed | DuckDB | PostgreSQL Indexed | PostgreSQL Unindexed | Neo4j Indexed | Neo4j Unindexed |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| `olap_type1_active_leaderboard` | `1.57 ms` | `1.86 ms` | `4.77 ms` | `2.10 ms` | `1.85 ms` | `1.93 ms` | `1.84 ms` |
-| `olap_type1_age_rollup` | `2.43 ms` | `2.03 ms` | `4.42 ms` | `2.20 ms` | `1.97 ms` | `1.28 ms` | `1.48 ms` |
-| `olap_cross_type_edge_rollup` | `4.00 ms` | `3.10 ms` | `3.77 ms` | `3.34 ms` | `3.14 ms` | `3.00 ms` | `3.92 ms` |
-| `olap_variable_length_reachability` | `2.21 ms` | `5.45 ms` | `6.14 ms` | `3.21 ms` | `3.35 ms` | `0.49 ms` | `0.69 ms` |
-| `olap_three_type_path_count` | `6.49 ms` | `6.42 ms` | `3.81 ms` | `4.31 ms` | `3.35 ms` | `3.20 ms` | `3.01 ms` |
-| `olap_type2_score_distribution` | `2.33 ms` | `2.64 ms` | `4.06 ms` | `1.97 ms` | `2.03 ms` | `1.23 ms` | `1.19 ms` |
-| `olap_fixed_length_path_projection` | `8.25 ms` | `8.04 ms` | `4.13 ms` | `6.23 ms` | `5.54 ms` | `6.33 ms` | `6.81 ms` |
-| `olap_graph_introspection_rollup` | `2.34 ms` | `2.87 ms` | `3.67 ms` | `3.43 ms` | `3.28 ms` | `4.00 ms` | `3.62 ms` |
-| `olap_with_scalar_rebinding` | `2.88 ms` | `2.67 ms` | `4.05 ms` | `2.45 ms` | `2.80 ms` | `1.35 ms` | `1.30 ms` |
-| `olap_variable_length_grouped_rollup` | `12.40 ms` | `11.81 ms` | `5.96 ms` | `7.52 ms` | `6.86 ms` | `10.61 ms` | `11.70 ms` |
-
-##### OLAP query breakdown, end-to-end `p99`
-
-| Query | SQLite Indexed | SQLite Unindexed | DuckDB | PostgreSQL Indexed | PostgreSQL Unindexed | Neo4j Indexed | Neo4j Unindexed |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| `olap_type1_active_leaderboard` | `1.81 ms` | `2.70 ms` | `5.40 ms` | `2.78 ms` | `2.14 ms` | `2.25 ms` | `2.18 ms` |
-| `olap_type1_age_rollup` | `3.93 ms` | `2.37 ms` | `5.05 ms` | `2.53 ms` | `2.20 ms` | `1.40 ms` | `1.79 ms` |
-| `olap_cross_type_edge_rollup` | `4.86 ms` | `3.51 ms` | `4.24 ms` | `3.73 ms` | `3.53 ms` | `3.94 ms` | `4.35 ms` |
-| `olap_variable_length_reachability` | `2.60 ms` | `6.86 ms` | `6.67 ms` | `3.59 ms` | `3.73 ms` | `0.62 ms` | `1.02 ms` |
-| `olap_three_type_path_count` | `8.10 ms` | `7.20 ms` | `4.69 ms` | `5.11 ms` | `3.73 ms` | `3.92 ms` | `3.50 ms` |
-| `olap_type2_score_distribution` | `2.52 ms` | `2.87 ms` | `4.40 ms` | `2.24 ms` | `2.37 ms` | `1.42 ms` | `1.32 ms` |
-| `olap_fixed_length_path_projection` | `9.09 ms` | `8.93 ms` | `4.48 ms` | `7.03 ms` | `6.31 ms` | `7.81 ms` | `7.96 ms` |
-| `olap_graph_introspection_rollup` | `2.70 ms` | `3.39 ms` | `3.85 ms` | `3.69 ms` | `3.72 ms` | `4.62 ms` | `4.42 ms` |
-| `olap_with_scalar_rebinding` | `3.23 ms` | `3.05 ms` | `4.35 ms` | `2.84 ms` | `3.12 ms` | `1.50 ms` | `1.47 ms` |
-| `olap_variable_length_grouped_rollup` | `13.64 ms` | `12.82 ms` | `6.38 ms` | `8.53 ms` | `7.54 ms` | `12.13 ms` | `13.97 ms` |
+### Large runtime dataset
 
 ## Notes
 

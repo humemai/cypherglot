@@ -249,6 +249,21 @@ def _wait_for_driver_ready(
     )
 
 
+def _neo4j_server_version(driver: Any, *, database: str) -> str:
+    with driver.session(database=database) as session:
+        result = session.run(
+            "CALL dbms.components() YIELD versions "
+            "RETURN versions[0] AS version LIMIT 1"
+        )
+        row = result.single()
+    if row is None:
+        raise ValueError("Unable to determine Neo4j server version.")
+    version = row.get("version")
+    if not isinstance(version, str) or not version:
+        raise ValueError("Unable to determine Neo4j server version.")
+    return version
+
+
 def _pool_summaries(
     query_results: list[dict[str, object]],
     key: str,
@@ -972,6 +987,7 @@ def _benchmark_result(
 def _build_payload(
     *,
     started_at: datetime,
+    database_versions: dict[str, str],
     neo4j_uri: str,
     neo4j_database: str,
     neo4j_user: str,
@@ -1001,6 +1017,7 @@ def _build_payload(
         "python_version": platform.python_version(),
         "platform": platform.platform(),
         "cypherglot_version": cypherglot.__version__,
+        "database_versions": database_versions,
         "neo4j": {
             "uri": neo4j_uri,
             "database": neo4j_database,
@@ -1312,6 +1329,7 @@ def main() -> int:
     graph_schema, _ = _build_graph_schema(scale)
     connect_ms: float | None = None
     connect_rss_mib: dict[str, float | None] | None = None
+    database_versions: dict[str, str] = {}
 
     def write_checkpoint(
         result: dict[str, object],
@@ -1321,6 +1339,7 @@ def main() -> int:
     ) -> None:
         payload = _build_payload(
             started_at=started_at,
+            database_versions=database_versions,
             neo4j_uri=neo4j_uri,
             neo4j_database=args.neo4j_database,
             neo4j_user=args.neo4j_user,
@@ -1384,6 +1403,9 @@ def main() -> int:
         )
         connect_ms = connect_ns / 1_000_000.0
         connect_rss_mib = _capture_neo4j_rss_snapshot(docker_config)
+        database_versions = {
+            "neo4j": _neo4j_server_version(driver, database=args.neo4j_database)
+        }
     except Exception:
         if docker_config is not None:
             logs = _docker_logs(docker_config)

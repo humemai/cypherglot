@@ -54,6 +54,42 @@ SKEWED_SCALE = benchmark_sql_runtime_core.RuntimeScale(
 )
 
 
+def _open_sqlite_runner(
+    scale: object,
+    *,
+    index_mode: str,
+    db_root_dir: Path | None = None,
+):
+    build_graph_schema = getattr(benchmark_sql_runtime_core, "_build_graph_schema")
+    prepare_fixture = getattr(
+        benchmark_sql_runtime_core,
+        "_prepare_generated_graph_fixture",
+    )
+    backend_runner = getattr(benchmark_sql_runtime_core, "_BackendRunner")
+    managed_directory = getattr(benchmark_sql_runtime_core, "ManagedDirectory")
+
+    graph_schema, edge_plans = build_graph_schema(scale)
+    schema_context = cypherglot.CompilerSchemaContext.type_aware(graph_schema)
+    fixture = prepare_fixture(
+        scale=scale,
+        graph_schema=graph_schema,
+        edge_plans=edge_plans,
+        index_mode=index_mode,
+        db_root_dir=db_root_dir,
+    )
+    temp_dir: tempfile.TemporaryDirectory[str] = tempfile.TemporaryDirectory(
+        prefix=f"sqlite-{index_mode}-bench-test-"
+    )
+    runner = backend_runner(
+        "sqlite",
+        managed_directory(path=Path(temp_dir.name), temp_dir=temp_dir),
+        graph_schema=graph_schema,
+        schema_context=schema_context,
+        sqlite_source=fixture,
+    )
+    return graph_schema, fixture, runner
+
+
 class BenchmarkSQLRuntimeCoreTests(unittest.TestCase):
     @unittest.skipIf(
         not DUCKDB_AVAILABLE,
@@ -63,7 +99,7 @@ class BenchmarkSQLRuntimeCoreTests(unittest.TestCase):
         build_graph_schema = getattr(benchmark_sql_runtime_core, "_build_graph_schema")
         prepare_fixture = getattr(
             benchmark_sql_runtime_core,
-            "_prepare_shared_sqlite_fixture",
+            "_prepare_generated_graph_fixture",
         )
         backend_runner = getattr(benchmark_sql_runtime_core, "_BackendRunner")
         managed_directory = getattr(benchmark_sql_runtime_core, "ManagedDirectory")
@@ -88,7 +124,7 @@ class BenchmarkSQLRuntimeCoreTests(unittest.TestCase):
         )
         try:
             self.assertGreater(runner.setup_metrics["schema_ns"], 0)
-            self.assertGreater(runner.setup_metrics["index_ns"], 0)
+            self.assertEqual(runner.setup_metrics["index_ns"], 0)
             self.assertGreater(runner.setup_metrics["ingest_ns"], 0)
             self.assertGreater(runner.setup_metrics["analyze_ns"], 0)
             self.assertEqual(runner.row_counts, fixture.row_counts)
@@ -112,6 +148,56 @@ class BenchmarkSQLRuntimeCoreTests(unittest.TestCase):
         self.assertIsNotNone(edge_count)
         self.assertGreater(user_count[0], 0)
         self.assertGreater(edge_count[0], 0)
+
+    @unittest.skipIf(
+        not DUCKDB_AVAILABLE,
+        "duckdb is not installed",
+    )
+    def test_duckdb_backend_runner_advances_id_sequences_after_ingest(self) -> None:
+        build_graph_schema = getattr(benchmark_sql_runtime_core, "_build_graph_schema")
+        prepare_fixture = getattr(
+            benchmark_sql_runtime_core,
+            "_prepare_generated_graph_fixture",
+        )
+        backend_runner = getattr(benchmark_sql_runtime_core, "_BackendRunner")
+        managed_directory = getattr(benchmark_sql_runtime_core, "ManagedDirectory")
+
+        graph_schema, edge_plans = build_graph_schema(SMALL_SCALE)
+        schema_context = cypherglot.CompilerSchemaContext.type_aware(graph_schema)
+        fixture = prepare_fixture(
+            scale=SMALL_SCALE,
+            graph_schema=graph_schema,
+            edge_plans=edge_plans,
+            index_mode="indexed",
+        )
+        temp_dir: tempfile.TemporaryDirectory[str] = tempfile.TemporaryDirectory(
+            prefix="duckdb-seq-test-"
+        )
+        runner = backend_runner(
+            "duckdb",
+            managed_directory(path=Path(temp_dir.name), temp_dir=temp_dir),
+            graph_schema=graph_schema,
+            schema_context=schema_context,
+            sqlite_source=fixture,
+        )
+        first_node_table = graph_schema.node_types[0].table_name
+        try:
+            max_id_row = runner.duck.execute(
+                f"SELECT MAX(id) FROM {first_node_table}"
+            ).fetchone()
+            self.assertIsNotNone(max_id_row)
+            self.assertIsNotNone(max_id_row[0])
+
+            inserted_row = runner.duck.execute(
+                f"INSERT INTO {first_node_table} (name, age, score, active) "
+                "VALUES ('post-ingest-node', 44, 99.5, TRUE) RETURNING id"
+            ).fetchone()
+        finally:
+            runner.close()
+            fixture.close()
+
+        self.assertIsNotNone(inserted_row)
+        self.assertEqual(inserted_row[0], max_id_row[0] + 1)
 
     def test_filter_postgresql_queries_requires_explicit_postgresql_backend(
         self,
@@ -208,53 +294,34 @@ class BenchmarkSQLRuntimeCoreTests(unittest.TestCase):
         self.assertEqual(synchronous, (1,))
         self.assertEqual(foreign_keys, (1,))
 
-    def test_prepare_shared_fixture_supports_index_modes(self) -> None:
-        build_graph_schema = getattr(benchmark_sql_runtime_core, "_build_graph_schema")
-        prepare_fixture = getattr(
-            benchmark_sql_runtime_core,
-            "_prepare_shared_sqlite_fixture",
-        )
-        create_connection = getattr(
-            benchmark_sql_runtime_core,
-            "_create_sqlite_connection",
-        )
-
-        graph_schema, edge_plans = build_graph_schema(SMALL_SCALE)
-        indexed = prepare_fixture(
-            scale=SMALL_SCALE,
-            graph_schema=graph_schema,
-            edge_plans=edge_plans,
+    def test_sqlite_backend_runner_supports_index_modes(self) -> None:
+        _, indexed_fixture, indexed_runner = _open_sqlite_runner(
+            SMALL_SCALE,
             index_mode="indexed",
         )
-        unindexed = prepare_fixture(
-            scale=SMALL_SCALE,
-            graph_schema=graph_schema,
-            edge_plans=edge_plans,
+        _, unindexed_fixture, unindexed_runner = _open_sqlite_runner(
+            SMALL_SCALE,
             index_mode="unindexed",
         )
         try:
-            self.assertEqual(indexed.row_counts["node_count"], 60)
-            self.assertEqual(indexed.row_counts["edge_count"], 120)
-            self.assertIn("after_analyze", indexed.rss_snapshots_mib)
-            self.assertGreater(indexed.db_size_mib, 0.0)
+            self.assertEqual(indexed_runner.row_counts["node_count"], 60)
+            self.assertEqual(indexed_runner.row_counts["edge_count"], 120)
+            self.assertIn("after_analyze", indexed_runner.rss_snapshots_mib)
+            self.assertGreater(indexed_runner.db_size_mib, 0.0)
 
-            indexed_conn = create_connection(indexed.db_path)
-            unindexed_conn = create_connection(unindexed.db_path)
-            try:
-                indexed_custom_indexes = indexed_conn.execute(
-                    "SELECT COUNT(*) FROM sqlite_master "
-                    "WHERE type = 'index' AND name LIKE 'idx_%'"
-                ).fetchone()
-                unindexed_custom_indexes = unindexed_conn.execute(
-                    "SELECT COUNT(*) FROM sqlite_master "
-                    "WHERE type = 'index' AND name LIKE 'idx_%'"
-                ).fetchone()
-            finally:
-                indexed_conn.close()
-                unindexed_conn.close()
+            indexed_custom_indexes = indexed_runner.sqlite.execute(
+                "SELECT COUNT(*) FROM sqlite_master "
+                "WHERE type = 'index' AND name LIKE 'idx_%'"
+            ).fetchone()
+            unindexed_custom_indexes = unindexed_runner.sqlite.execute(
+                "SELECT COUNT(*) FROM sqlite_master "
+                "WHERE type = 'index' AND name LIKE 'idx_%'"
+            ).fetchone()
         finally:
-            indexed.close()
-            unindexed.close()
+            indexed_runner.close()
+            unindexed_runner.close()
+            indexed_fixture.close()
+            unindexed_fixture.close()
 
         self.assertGreater(indexed_custom_indexes[0], 0)
         self.assertEqual(unindexed_custom_indexes[0], 0)
@@ -278,11 +345,11 @@ class BenchmarkSQLRuntimeCoreTests(unittest.TestCase):
         self.assertGreater(sum(degrees) / len(degrees), 7.5)
         self.assertLess(sum(degrees) / len(degrees), 8.5)
 
-    def test_prepare_shared_fixture_supports_skewed_degree_profile(self) -> None:
+    def test_prepare_generated_fixture_supports_skewed_degree_profile(self) -> None:
         build_graph_schema = getattr(benchmark_sql_runtime_core, "_build_graph_schema")
         prepare_fixture = getattr(
             benchmark_sql_runtime_core,
-            "_prepare_shared_sqlite_fixture",
+            "_prepare_generated_graph_fixture",
         )
 
         graph_schema, edge_plans = build_graph_schema(SKEWED_SCALE)
@@ -299,11 +366,11 @@ class BenchmarkSQLRuntimeCoreTests(unittest.TestCase):
         finally:
             indexed.close()
 
-    def test_prepare_shared_fixture_can_persist_under_root_dir(self) -> None:
+    def test_prepare_generated_fixture_can_persist_under_root_dir(self) -> None:
         build_graph_schema = getattr(benchmark_sql_runtime_core, "_build_graph_schema")
         prepare_fixture = getattr(
             benchmark_sql_runtime_core,
-            "_prepare_shared_sqlite_fixture",
+            "_prepare_generated_graph_fixture",
         )
 
         graph_schema, edge_plans = build_graph_schema(SMALL_SCALE)
@@ -318,18 +385,23 @@ class BenchmarkSQLRuntimeCoreTests(unittest.TestCase):
                 db_root_dir=root_dir,
             )
             try:
-                self.assertTrue(fixture.db_path.exists())
-                self.assertEqual(fixture.db_path.parent, root_dir / "sqlite-indexed")
+                self.assertTrue(fixture.csv_dir.exists())
+                self.assertEqual(
+                    fixture.csv_dir.parent,
+                    root_dir / "generated-indexed",
+                )
             finally:
                 fixture.close()
 
-            self.assertTrue((root_dir / "sqlite-indexed" / "runtime.sqlite3").exists())
+            self.assertTrue(
+                (root_dir / "generated-indexed" / "manifest.json").exists()
+            )
 
     def test_measure_query_compiles_each_iteration(self) -> None:
         build_graph_schema = getattr(benchmark_sql_runtime_core, "_build_graph_schema")
         prepare_fixture = getattr(
             benchmark_sql_runtime_core,
-            "_prepare_shared_sqlite_fixture",
+            "_prepare_generated_graph_fixture",
         )
         backend_runner = getattr(benchmark_sql_runtime_core, "_BackendRunner")
         measure_query = getattr(benchmark_sql_runtime_core, "_measure_query")
@@ -385,7 +457,7 @@ class BenchmarkSQLRuntimeCoreTests(unittest.TestCase):
         build_graph_schema = getattr(benchmark_sql_runtime_core, "_build_graph_schema")
         prepare_fixture = getattr(
             benchmark_sql_runtime_core,
-            "_prepare_shared_sqlite_fixture",
+            "_prepare_generated_graph_fixture",
         )
         backend_runner = getattr(benchmark_sql_runtime_core, "_BackendRunner")
         run_iteration = getattr(benchmark_sql_runtime_core, "_run_iteration")
@@ -530,7 +602,7 @@ class BenchmarkSQLRuntimeCoreTests(unittest.TestCase):
         build_graph_schema = getattr(benchmark_sql_runtime_core, "_build_graph_schema")
         prepare_fixture = getattr(
             benchmark_sql_runtime_core,
-            "_prepare_shared_sqlite_fixture",
+            "_prepare_generated_graph_fixture",
         )
         run_backend_suite = getattr(benchmark_sql_runtime_core, "_run_backend_suite")
         load_corpus = getattr(benchmark_sql_runtime_core, "_load_corpus")
@@ -693,11 +765,11 @@ class BenchmarkSQLRuntimeCoreTests(unittest.TestCase):
             workloads = result["workloads"]
             self.assertEqual(
                 Path(workloads["oltp"]["sqlite_indexed"]["db_path"]).parent,
-                root_dir / "sqlite-indexed",
+                root_dir / "oltp-sqlite-indexed-suite",
             )
             self.assertEqual(
                 Path(workloads["oltp"]["sqlite_unindexed"]["db_path"]).parent,
-                root_dir / "sqlite-unindexed",
+                root_dir / "oltp-sqlite-unindexed-suite",
             )
             self.assertTrue((root_dir / "oltp-sqlite-indexed-suite").exists())
             self.assertTrue((root_dir / "oltp-sqlite-unindexed-suite").exists())
@@ -889,7 +961,7 @@ class BenchmarkSQLRuntimeCoreTests(unittest.TestCase):
 
         with mock.patch.object(
             benchmark_sql_runtime_core,
-            "_prepare_shared_sqlite_fixture",
+            "_prepare_generated_graph_fixture",
             side_effect=fake_prepare_fixture,
         ), mock.patch.object(
             benchmark_sql_runtime_core,
@@ -967,6 +1039,72 @@ class BenchmarkSQLRuntimeCoreTests(unittest.TestCase):
         self.assertTrue(acquired)
         acquire_postgresql_benchmark_dsn.assert_called_once_with()
 
+    def test_detect_database_versions_reports_entrypoint_backends(self) -> None:
+        detect_database_versions = getattr(
+            benchmark_sql_runtime_core,
+            "_detect_database_versions",
+        )
+
+        with mock.patch.object(
+            benchmark_sql_runtime_core.sqlite3,
+            "sqlite_version",
+            "3.45.3",
+        ), mock.patch.object(
+            benchmark_sql_runtime_core,
+            "_duckdb_version",
+            return_value="1.4.0",
+        ), mock.patch.object(
+            benchmark_sql_runtime_core,
+            "_postgresql_server_version",
+            return_value="17.2",
+        ):
+            sqlite_versions = detect_database_versions(
+                benchmark_sql_runtime_core.SQLITE_ENTRYPOINT,
+                None,
+            )
+            duckdb_versions = detect_database_versions(
+                benchmark_sql_runtime_core.DUCKDB_ENTRYPOINT,
+                None,
+            )
+            postgresql_versions = detect_database_versions(
+                benchmark_sql_runtime_core.POSTGRESQL_ENTRYPOINT,
+                "postgresql://bench",
+            )
+
+        self.assertEqual(sqlite_versions, {"sqlite": "3.45.3"})
+        self.assertEqual(duckdb_versions, {"duckdb": "1.4.0"})
+        self.assertEqual(postgresql_versions, {"postgresql": "17.2"})
+
+    def test_build_payload_includes_database_versions(self) -> None:
+        build_payload = getattr(benchmark_sql_runtime_core, "_build_payload")
+        graph_schema, _ = getattr(
+            benchmark_sql_runtime_core,
+            "_build_graph_schema",
+        )(SMALL_SCALE)
+        payload = build_payload(
+            entrypoint=benchmark_sql_runtime_core.SQLITE_ENTRYPOINT,
+            started_at=benchmark_sql_runtime_core.datetime.now(
+                benchmark_sql_runtime_core.UTC
+            ),
+            database_versions={"sqlite": "3.45.3"},
+            corpus_path=CORPUS_PATH,
+            queries=[],
+            scale=SMALL_SCALE,
+            graph_schema=graph_schema,
+            index_mode="indexed",
+            default_iterations=1,
+            default_warmup=0,
+            oltp_iterations=1,
+            oltp_warmup=0,
+            olap_iterations=1,
+            olap_warmup=0,
+            db_root_dir=None,
+            result={"workloads": {}},
+            status="running",
+        )
+
+        self.assertEqual(payload["database_versions"], {"sqlite": "3.45.3"})
+
     def test_main_releases_acquired_postgresql_runtime(self) -> None:
         main = getattr(benchmark_sql_runtime_core, "main")
 
@@ -1023,6 +1161,10 @@ class BenchmarkSQLRuntimeCoreTests(unittest.TestCase):
             benchmark_sql_runtime_core,
             "_benchmark_result",
             return_value={"workloads": {}},
+        ), mock.patch.object(
+            benchmark_sql_runtime_core,
+            "_detect_database_versions",
+            return_value={"postgresql": "17.2"},
         ), mock.patch.object(
             benchmark_sql_runtime_core,
             "_build_payload",

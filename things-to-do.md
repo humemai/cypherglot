@@ -1261,7 +1261,7 @@ Status: planned.
 
 Refactor CypherGlot for equal multi-dialect SQL support.
 
-Status: in progress.
+Status: complete.
 
 Goal for this phase:
 
@@ -1963,25 +1963,25 @@ Recommended implementation order for this phase:
       Neo4j runtime benchmark from the still-open SQL-backend runtime
       restructuring work, and the benchmark guide no longer presents the repo
       as a SQLite-only pipeline story.
-- [ ] Update the public backend support policy and docs so CypherGlot stops
+- [x] Update the public backend support policy and docs so CypherGlot stops
       presenting DuckDB as read-only if that parity work lands, and instead
       documents equal supported-backend expectations across SQLite,
       PostgreSQL, and DuckDB.
-- [ ] Revisit benchmark coverage after the IR/lowering split lands so compile
+- [x] Revisit benchmark coverage after the IR/lowering split lands so compile
       latency, backend-lowering cost, and backend-specific runtime parity are
       all measured against the new architecture instead of the older
       SQLite-shaped pipeline.
-  - [ ] Keep
+  - [x] Keep
         [scripts/benchmarks/benchmark_sqlite_schema_shapes.py](/mnt/ssd2/repos/cypherglot/scripts/benchmarks/benchmark_sqlite_schema_shapes.py)
         as the closed historical schema-decision benchmark: it answered which
         relational graph schema shape to keep, and it should not expand back
         into the main runtime-performance story.
-  - [ ] Keep
+  - [x] Keep
         [scripts/benchmarks/benchmark_compiler.py](/mnt/ssd2/repos/cypherglot/scripts/benchmarks/benchmark_compiler.py)
         as the compiler-path benchmark: it should own `p50`, `p95`, and `p99`
         for parse/validate/normalize/IR/lowering/render steps plus end-to-end
         Cypher-to-target-SQL latency for SQLite, DuckDB, and PostgreSQL.
-  - [ ] Treat
+  - [x] Treat
         [scripts/benchmarks/benchmark_neo4j_runtime.py](/mnt/ssd2/repos/cypherglot/scripts/benchmarks/benchmark_neo4j_runtime.py)
         as the completed direct Neo4j runtime/compatibility benchmark and keep
         new SQL-backend runtime work out of that harness.
@@ -2043,6 +2043,7 @@ Release v0.1.0.
 
 Status: planned.
 
+- [ ] Update the docs
 - [ ] Tag and publish v0.1.0 only after the release-candidate checklist looks clean,
       and then create the matching GitHub release with a brief summary of scope and
       highlights.
