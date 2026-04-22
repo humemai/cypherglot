@@ -14,7 +14,7 @@ SCRIPT_PATH = (
     REPO_ROOT
     / "scripts"
     / "benchmarks"
-    / "benchmark_arcadedb_embedded_runtime.py"
+    / "runtime/arcadedb_embedded.py"
 )
 CORPUS_PATH = (
     REPO_ROOT

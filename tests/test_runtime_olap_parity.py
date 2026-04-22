@@ -38,31 +38,31 @@ if str(BENCHMARKS_DIR) not in sys.path:
 
 _benchmark_common = _load_module(
     "_benchmark_common",
-    "scripts/benchmarks/_benchmark_common.py",
+    "scripts/benchmarks/common/shared.py",
 )
 _benchmark_sql_runtime_core = _load_module(
     "_benchmark_sql_runtime_core",
-    "scripts/benchmarks/_benchmark_sql_runtime_core.py",
+    "scripts/benchmarks/common/runtime_core.py",
 )
 _benchmark_sql_runtime_postgresql_backend = _load_module(
     "_benchmark_sql_runtime_postgresql_backend",
-    "scripts/benchmarks/_benchmark_sql_runtime_postgresql_backend.py",
+    "scripts/benchmarks/common/runtime_postgresql_backend.py",
 )
 _benchmark_sql_runtime_shared = _load_module(
     "_benchmark_sql_runtime_shared",
-    "scripts/benchmarks/_benchmark_sql_runtime_shared.py",
+    "scripts/benchmarks/common/runtime_shared.py",
 )
 benchmark_arcadedb_embedded_runtime = _load_module(
     "benchmark_arcadedb_embedded_runtime",
-    "scripts/benchmarks/benchmark_arcadedb_embedded_runtime.py",
+    "scripts/benchmarks/runtime/arcadedb_embedded.py",
 )
 benchmark_ladybug_runtime = _load_module(
     "benchmark_ladybug_runtime",
-    "scripts/benchmarks/benchmark_ladybug_runtime.py",
+    "scripts/benchmarks/runtime/ladybug.py",
 )
 benchmark_neo4j_runtime = _load_module(
     "benchmark_neo4j_runtime",
-    "scripts/benchmarks/benchmark_neo4j_runtime.py",
+    "scripts/benchmarks/runtime/neo4j.py",
 )
 
 RuntimeScale = _benchmark_common.RuntimeScale

@@ -15,7 +15,7 @@ import cypherglot
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SCRIPT_PATH = REPO_ROOT / "scripts" / "benchmarks" / "_benchmark_sql_runtime_core.py"
+SCRIPT_PATH = REPO_ROOT / "scripts" / "benchmarks" / "common/runtime_core.py"
 CORPUS_PATH = (
     REPO_ROOT
     / "scripts"

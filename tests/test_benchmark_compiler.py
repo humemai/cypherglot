@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
+import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SCRIPT_PATH = REPO_ROOT / "scripts" / "benchmarks" / "benchmark_compiler.py"
+SCRIPT_PATH = REPO_ROOT / "scripts" / "benchmarks" / "compiler/benchmark.py"
 MODULE_SPEC = importlib.util.spec_from_file_location("benchmark_compiler", SCRIPT_PATH)
 if MODULE_SPEC is None or MODULE_SPEC.loader is None:
     raise RuntimeError(f"Unable to load benchmark script from {SCRIPT_PATH}")
@@ -98,6 +101,40 @@ class BenchmarkCompilerScriptTests(unittest.TestCase):
                 "end_to_end",
             },
         )
+
+    def test_sqlglot_subprocess_uses_module_execution(self) -> None:
+        run_sqlglot_subprocess = getattr(
+            benchmark_compiler,
+            "_run_sqlglot_subprocess",
+        )
+
+        def _fake_run(command: list[str], *, check: bool, cwd: Path) -> None:
+            self.assertTrue(check)
+            self.assertEqual(cwd, REPO_ROOT)
+            self.assertEqual(command[:3], [
+                sys.executable,
+                "-m",
+                "scripts.benchmarks.compiler.benchmark",
+            ])
+            output_index = command.index("--_sqlglot-subprocess-output") + 1
+            Path(command[output_index]).write_text(
+                json.dumps({"implementation": "python", "results": []}),
+                encoding="utf-8",
+            )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            sql_corpus = Path(temp_dir) / "sql-corpus.json"
+            sql_corpus.write_text("[]", encoding="utf-8")
+            with patch.object(benchmark_compiler.subprocess, "run", side_effect=_fake_run):
+                result = run_sqlglot_subprocess(
+                    sql_corpus=sql_corpus,
+                    iterations=1,
+                    warmup=0,
+                    mode="python",
+                )
+
+        self.assertEqual(result["implementation"], "python")
+        self.assertEqual(result["results"], [])
 
 
 if __name__ == "__main__":

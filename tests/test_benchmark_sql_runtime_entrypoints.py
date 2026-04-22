@@ -25,7 +25,7 @@ class BenchmarkSQLRuntimeEntrypointTests(unittest.TestCase):
     def test_sqlite_wrapper_delegates_to_core(self) -> None:
         module = _load_entrypoint_module(
             "benchmark_sqlite_runtime",
-            "benchmark_sqlite_runtime.py",
+            "runtime/sqlite.py",
         )
 
         with mock.patch.object(module, "_shared_main", return_value=7) as shared_main:
@@ -37,7 +37,7 @@ class BenchmarkSQLRuntimeEntrypointTests(unittest.TestCase):
     def test_duckdb_wrapper_delegates_to_core(self) -> None:
         module = _load_entrypoint_module(
             "benchmark_duckdb_runtime",
-            "benchmark_duckdb_runtime.py",
+            "runtime/duckdb.py",
         )
 
         with mock.patch.object(module, "_shared_main", return_value=11) as shared_main:
@@ -49,7 +49,7 @@ class BenchmarkSQLRuntimeEntrypointTests(unittest.TestCase):
     def test_postgresql_wrapper_delegates_to_core(self) -> None:
         module = _load_entrypoint_module(
             "benchmark_postgresql_runtime",
-            "benchmark_postgresql_runtime.py",
+            "runtime/postgresql.py",
         )
 
         with mock.patch.object(module, "_shared_main", return_value=13) as shared_main:
