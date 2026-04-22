@@ -10,7 +10,7 @@ from unittest import mock
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SCRIPT_PATH = REPO_ROOT / "scripts" / "benchmarks" / "benchmark_ladybug_runtime.py"
+SCRIPT_PATH = REPO_ROOT / "scripts" / "benchmarks" / "runtime/ladybug.py"
 CORPUS_PATH = (
     REPO_ROOT
     / "scripts"

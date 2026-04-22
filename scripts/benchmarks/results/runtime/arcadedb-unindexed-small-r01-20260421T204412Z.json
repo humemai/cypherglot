@@ -1,0 +1,966 @@
+{
+  "benchmark_entrypoint": "arcadedb-embedded",
+  "enabled_backends": [
+    "arcadedb-embedded"
+  ],
+  "generated_at": "2026-04-21T21:06:33.991107+00:00",
+  "updated_at": "2026-04-21T21:08:19.690303+00:00",
+  "run_status": "completed",
+  "python_version": "3.12.11",
+  "platform": "Linux-6.17.9-76061709-generic-x86_64-with-glibc2.35",
+  "cypherglot_version": "0.0.1.dev7",
+  "database_versions": {
+    "arcadedb-embedded": "26.4.1.dev3"
+  },
+  "corpus_path": "/mnt/ssd2/repos/cypherglot/scripts/benchmarks/corpora/sqlite_runtime_benchmark_corpus.json",
+  "workload_counts": {
+    "oltp": 10,
+    "olap": 10
+  },
+  "graph_scale": {
+    "node_type_count": 4,
+    "edge_type_count": 4,
+    "nodes_per_type": 1000,
+    "edges_per_source": 3,
+    "edge_degree_profile": "uniform",
+    "average_edges_per_source": 3.0,
+    "total_nodes": 4000,
+    "total_edges": 12000,
+    "node_extra_text_property_count": 2,
+    "node_extra_numeric_property_count": 6,
+    "node_extra_boolean_property_count": 2,
+    "edge_extra_text_property_count": 1,
+    "edge_extra_numeric_property_count": 3,
+    "edge_extra_boolean_property_count": 1,
+    "ingest_batch_size": 1000,
+    "variable_hop_max": 2
+  },
+  "schema_contract": {
+    "layout": "property-graph",
+    "node_labels": [
+      "NodeType01",
+      "NodeType02",
+      "NodeType03",
+      "NodeType04"
+    ],
+    "relationship_types": [
+      "EdgeType01",
+      "EdgeType02",
+      "EdgeType03",
+      "EdgeType04"
+    ]
+  },
+  "index_mode": "unindexed",
+  "workload_controls": {
+    "default_iterations": 1000,
+    "default_warmup": 10,
+    "oltp_iterations": 20000,
+    "oltp_warmup": 200,
+    "olap_iterations": 500,
+    "olap_warmup": 20
+  },
+  "db_root_dir": "/mnt/ssd2/repos/cypherglot/my_test_databases/runtime-small-20260421T204412Z/arcadedb-unindexed/r01",
+  "results": {
+    "workloads": {
+      "oltp": {
+        "description": "Transactional-style ArcadeDB Embedded execution over the generated graph using the runtime corpus directly as OpenCypher.",
+        "arcadedb_embedded_unindexed": {
+          "backend": "arcadedb-embedded",
+          "index_mode": "unindexed",
+          "iterations": 20000,
+          "warmup": 200,
+          "query_count": 10,
+          "pass_count": 10,
+          "fail_count": 0,
+          "setup": {
+            "connect_ms": 284.777235,
+            "schema_ms": 289.915732,
+            "ingest_ms": 556.831291,
+            "index_ms": 0.0,
+            "gav_ms": 0.0,
+            "checkpoint_ms": 0.00018
+          },
+          "row_counts": {
+            "node_count": 4000,
+            "edge_count": 12000,
+            "node_type_count": 4,
+            "edge_type_count": 4
+          },
+          "rss_snapshots_mib": {
+            "after_connect": {
+              "client_mib": 150.09765625,
+              "server_mib": null,
+              "combined_mib": 150.09765625
+            },
+            "after_schema": {
+              "client_mib": 216.6953125,
+              "server_mib": null,
+              "combined_mib": 216.6953125
+            },
+            "after_ingest": {
+              "client_mib": 280.56640625,
+              "server_mib": null,
+              "combined_mib": 280.56640625
+            },
+            "after_index": {
+              "client_mib": 280.56640625,
+              "server_mib": null,
+              "combined_mib": 280.56640625
+            },
+            "after_gav": {
+              "client_mib": 280.56640625,
+              "server_mib": null,
+              "combined_mib": 280.56640625
+            },
+            "after_checkpoint": {
+              "client_mib": 280.56640625,
+              "server_mib": null,
+              "combined_mib": 280.56640625
+            },
+            "suite_start": {
+              "client_mib": 280.5703125,
+              "server_mib": null,
+              "combined_mib": 280.5703125
+            },
+            "suite_complete": {
+              "client_mib": 1058.734375,
+              "server_mib": null,
+              "combined_mib": 1058.734375
+            }
+          },
+          "storage": {
+            "db_size_mib": 4.135903358459473,
+            "wal_size_mib": 0.31369781494140625
+          },
+          "db_path": "/mnt/ssd2/repos/cypherglot/my_test_databases/runtime-small-20260421T204412Z/arcadedb-unindexed/r01/arcadedb-embedded-oltp-unindexed-suite/runtime.arcadedb",
+          "execute": {
+            "mean_of_mean_ms": 0.41507291759500003,
+            "mean_of_p50_ms": 0.40976065000000006,
+            "mean_of_p95_ms": 0.44286654,
+            "mean_of_p99_ms": 0.4942658679999992
+          },
+          "end_to_end": {
+            "mean_of_mean_ms": 0.41507291759500003,
+            "mean_of_p50_ms": 0.40976065000000006,
+            "mean_of_p95_ms": 0.44286654,
+            "mean_of_p99_ms": 0.4942658679999992
+          },
+          "reset": {
+            "mean_of_mean_ms": 0.00221222734,
+            "mean_of_p50_ms": 0.002058,
+            "mean_of_p95_ms": 0.0027620499999999994,
+            "mean_of_p99_ms": 0.004121039999999993
+          },
+          "queries": [
+            {
+              "name": "oltp_type1_point_lookup",
+              "workload": "oltp",
+              "category": "read-point",
+              "backend": "arcadedb-embedded",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.379241,
+                "mean_ms": 0.4070722335,
+                "p50_ms": 0.392811,
+                "p95_ms": 0.524832,
+                "p99_ms": 0.6397636999999979,
+                "max_ms": 3.035565
+              },
+              "end_to_end": {
+                "min_ms": 0.379241,
+                "mean_ms": 0.4070722335,
+                "p50_ms": 0.392811,
+                "p95_ms": 0.524832,
+                "p99_ms": 0.6397636999999979,
+                "max_ms": 3.035565
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "oltp_type1_neighbors",
+              "workload": "oltp",
+              "category": "read-adjacency",
+              "backend": "arcadedb-embedded",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.38477,
+                "mean_ms": 0.405382047,
+                "p50_ms": 0.39947,
+                "p95_ms": 0.42916145,
+                "p99_ms": 0.5049275999999989,
+                "max_ms": 1.764563
+              },
+              "end_to_end": {
+                "min_ms": 0.38477,
+                "mean_ms": 0.405382047,
+                "p50_ms": 0.39947,
+                "p95_ms": 0.42916145,
+                "p99_ms": 0.5049275999999989,
+                "max_ms": 1.764563
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "oltp_cross_type_lookup",
+              "workload": "oltp",
+              "category": "read-join",
+              "backend": "arcadedb-embedded",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.384131,
+                "mean_ms": 0.40214572265000004,
+                "p50_ms": 0.398121,
+                "p95_ms": 0.418952,
+                "p99_ms": 0.4577051999999993,
+                "max_ms": 2.042063
+              },
+              "end_to_end": {
+                "min_ms": 0.384131,
+                "mean_ms": 0.40214572265000004,
+                "p50_ms": 0.398121,
+                "p95_ms": 0.418952,
+                "p99_ms": 0.4577051999999993,
+                "max_ms": 2.042063
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "oltp_update_type1_score",
+              "workload": "oltp",
+              "category": "update-node",
+              "backend": "arcadedb-embedded",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": true,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.386121,
+                "mean_ms": 0.40292236255,
+                "p50_ms": 0.39985,
+                "p95_ms": 0.419321,
+                "p99_ms": 0.4387601,
+                "max_ms": 1.249441
+              },
+              "end_to_end": {
+                "min_ms": 0.386121,
+                "mean_ms": 0.40292236255,
+                "p50_ms": 0.39985,
+                "p95_ms": 0.419321,
+                "p99_ms": 0.4387601,
+                "max_ms": 1.249441
+              },
+              "reset": {
+                "min_ms": 0.00171,
+                "mean_ms": 0.00213406945,
+                "p50_ms": 0.00184,
+                "p95_ms": 0.0028,
+                "p99_ms": 0.004880099999999984,
+                "max_ms": 0.04776
+              }
+            },
+            {
+              "name": "oltp_create_type1_node",
+              "workload": "oltp",
+              "category": "create-node",
+              "backend": "arcadedb-embedded",
+              "index_mode": "unindexed",
+              "mode": "program",
+              "mutation": true,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.00769,
+                "mean_ms": 0.0105669759,
+                "p50_ms": 0.00998,
+                "p95_ms": 0.014200499999999993,
+                "p99_ms": 0.02185029999999995,
+                "max_ms": 0.686961
+              },
+              "end_to_end": {
+                "min_ms": 0.00769,
+                "mean_ms": 0.0105669759,
+                "p50_ms": 0.00998,
+                "p95_ms": 0.014200499999999993,
+                "p99_ms": 0.02185029999999995,
+                "max_ms": 0.686961
+              },
+              "reset": {
+                "min_ms": 0.0022,
+                "mean_ms": 0.0029296511999999998,
+                "p50_ms": 0.00258,
+                "p95_ms": 0.004110499999999993,
+                "p99_ms": 0.00606,
+                "max_ms": 0.03329
+              }
+            },
+            {
+              "name": "oltp_create_cross_type_edge",
+              "workload": "oltp",
+              "category": "create-edge",
+              "backend": "arcadedb-embedded",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": true,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.788671,
+                "mean_ms": 0.82238709005,
+                "p50_ms": 0.815342,
+                "p95_ms": 0.84643295,
+                "p99_ms": 0.934356899999999,
+                "max_ms": 1.857892
+              },
+              "end_to_end": {
+                "min_ms": 0.788671,
+                "mean_ms": 0.82238709005,
+                "p50_ms": 0.815342,
+                "p95_ms": 0.84643295,
+                "p99_ms": 0.934356899999999,
+                "max_ms": 1.857892
+              },
+              "reset": {
+                "min_ms": 0.00484,
+                "mean_ms": 0.0057546118,
+                "p50_ms": 0.00544,
+                "p95_ms": 0.00721,
+                "p99_ms": 0.010350099999999984,
+                "max_ms": 0.04351
+              }
+            },
+            {
+              "name": "oltp_delete_type1_edge",
+              "workload": "oltp",
+              "category": "delete-edge",
+              "backend": "arcadedb-embedded",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": true,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.39527,
+                "mean_ms": 0.41968775285,
+                "p50_ms": 0.4149605,
+                "p95_ms": 0.4421815,
+                "p99_ms": 0.4817840899999995,
+                "max_ms": 2.452723
+              },
+              "end_to_end": {
+                "min_ms": 0.39527,
+                "mean_ms": 0.41968775285,
+                "p50_ms": 0.4149605,
+                "p95_ms": 0.4421815,
+                "p99_ms": 0.4817840899999995,
+                "max_ms": 2.452723
+              },
+              "reset": {
+                "min_ms": 0.00171,
+                "mean_ms": 0.0019540825,
+                "p50_ms": 0.00185,
+                "p95_ms": 0.00229,
+                "p99_ms": 0.00332,
+                "max_ms": 0.01132
+              }
+            },
+            {
+              "name": "oltp_delete_type1_node",
+              "workload": "oltp",
+              "category": "delete-node",
+              "backend": "arcadedb-embedded",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": true,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.419591,
+                "mean_ms": 0.43647346885,
+                "p50_ms": 0.432801,
+                "p95_ms": 0.45039005,
+                "p99_ms": 0.47259419999999946,
+                "max_ms": 1.418092
+              },
+              "end_to_end": {
+                "min_ms": 0.419591,
+                "mean_ms": 0.43647346885,
+                "p50_ms": 0.432801,
+                "p95_ms": 0.45039005,
+                "p99_ms": 0.47259419999999946,
+                "max_ms": 1.418092
+              },
+              "reset": {
+                "min_ms": 0.00084,
+                "mean_ms": 0.00100112125,
+                "p50_ms": 0.00096,
+                "p95_ms": 0.00117,
+                "p99_ms": 0.00172,
+                "max_ms": 0.01057
+              }
+            },
+            {
+              "name": "oltp_program_create_and_link",
+              "workload": "oltp",
+              "category": "create-program",
+              "backend": "arcadedb-embedded",
+              "index_mode": "unindexed",
+              "mode": "program",
+              "mutation": true,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.410871,
+                "mean_ms": 0.4325610653,
+                "p50_ms": 0.42671,
+                "p95_ms": 0.45523195,
+                "p99_ms": 0.5210500999999985,
+                "max_ms": 1.437742
+              },
+              "end_to_end": {
+                "min_ms": 0.410871,
+                "mean_ms": 0.4325610653,
+                "p50_ms": 0.42671,
+                "p95_ms": 0.45523195,
+                "p99_ms": 0.5210500999999985,
+                "max_ms": 1.437742
+              },
+              "reset": {
+                "min_ms": 0.00517,
+                "mean_ms": 0.006034861,
+                "p50_ms": 0.00568,
+                "p95_ms": 0.00742,
+                "p99_ms": 0.010820099999999984,
+                "max_ms": 0.04191
+              }
+            },
+            {
+              "name": "oltp_update_cross_type_edge_rank",
+              "workload": "oltp",
+              "category": "update-edge",
+              "backend": "arcadedb-embedded",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": true,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.393131,
+                "mean_ms": 0.4115304573,
+                "p50_ms": 0.407561,
+                "p95_ms": 0.427962,
+                "p99_ms": 0.46986648999999914,
+                "max_ms": 1.725453
+              },
+              "end_to_end": {
+                "min_ms": 0.393131,
+                "mean_ms": 0.4115304573,
+                "p50_ms": 0.407561,
+                "p95_ms": 0.427962,
+                "p99_ms": 0.46986648999999914,
+                "max_ms": 1.725453
+              },
+              "reset": {
+                "min_ms": 0.0021,
+                "mean_ms": 0.0023138762000000004,
+                "p50_ms": 0.00223,
+                "p95_ms": 0.00262,
+                "p99_ms": 0.004060099999999984,
+                "max_ms": 0.02535
+              }
+            }
+          ]
+        }
+      },
+      "olap": {
+        "description": "Analytical-style ArcadeDB Embedded execution over the generated graph using the runtime corpus directly as OpenCypher, with a Graph Analytical View prepared before the OLAP suite.",
+        "arcadedb_embedded_unindexed": {
+          "backend": "arcadedb-embedded",
+          "index_mode": "unindexed",
+          "iterations": 500,
+          "warmup": 20,
+          "query_count": 10,
+          "pass_count": 10,
+          "fail_count": 0,
+          "setup": {
+            "connect_ms": 1.626032,
+            "schema_ms": 26.380528,
+            "ingest_ms": 284.877375,
+            "index_ms": 0.0,
+            "gav_ms": 278.355275,
+            "checkpoint_ms": 0.00015
+          },
+          "row_counts": {
+            "node_count": 4000,
+            "edge_count": 12000,
+            "node_type_count": 4,
+            "edge_type_count": 4
+          },
+          "rss_snapshots_mib": {
+            "after_connect": {
+              "client_mib": 1059.16796875,
+              "server_mib": null,
+              "combined_mib": 1059.16796875
+            },
+            "after_schema": {
+              "client_mib": 1059.58203125,
+              "server_mib": null,
+              "combined_mib": 1059.58203125
+            },
+            "after_ingest": {
+              "client_mib": 1059.8984375,
+              "server_mib": null,
+              "combined_mib": 1059.8984375
+            },
+            "after_index": {
+              "client_mib": 1059.8984375,
+              "server_mib": null,
+              "combined_mib": 1059.8984375
+            },
+            "after_gav": {
+              "client_mib": 1076.4609375,
+              "server_mib": null,
+              "combined_mib": 1076.4609375
+            },
+            "after_checkpoint": {
+              "client_mib": 1076.4609375,
+              "server_mib": null,
+              "combined_mib": 1076.4609375
+            },
+            "suite_start": {
+              "client_mib": 1076.4609375,
+              "server_mib": null,
+              "combined_mib": 1076.4609375
+            },
+            "suite_complete": {
+              "client_mib": 1093.40625,
+              "server_mib": null,
+              "combined_mib": 1093.40625
+            }
+          },
+          "storage": {
+            "db_size_mib": 4.136265754699707,
+            "wal_size_mib": 0.31369781494140625
+          },
+          "db_path": "/mnt/ssd2/repos/cypherglot/my_test_databases/runtime-small-20260421T204412Z/arcadedb-unindexed/r01/arcadedb-embedded-olap-unindexed-suite/runtime.arcadedb",
+          "execute": {
+            "mean_of_mean_ms": 3.4041617958000003,
+            "mean_of_p50_ms": 3.3375937999999996,
+            "mean_of_p95_ms": 3.849079004999999,
+            "mean_of_p99_ms": 4.254972692999999
+          },
+          "end_to_end": {
+            "mean_of_mean_ms": 3.4041617958000003,
+            "mean_of_p50_ms": 3.3375937999999996,
+            "mean_of_p95_ms": 3.849079004999999,
+            "mean_of_p99_ms": 4.254972692999999
+          },
+          "reset": {
+            "mean_of_mean_ms": 0.0,
+            "mean_of_p50_ms": 0.0,
+            "mean_of_p95_ms": 0.0,
+            "mean_of_p99_ms": 0.0
+          },
+          "queries": [
+            {
+              "name": "olap_type1_active_leaderboard",
+              "workload": "olap",
+              "category": "scan-order",
+              "backend": "arcadedb-embedded",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 1.009231,
+                "mean_ms": 1.099970978,
+                "p50_ms": 1.0437165,
+                "p95_ms": 1.3782925,
+                "p99_ms": 1.4705997999999998,
+                "max_ms": 3.071675
+              },
+              "end_to_end": {
+                "min_ms": 1.009231,
+                "mean_ms": 1.099970978,
+                "p50_ms": 1.0437165,
+                "p95_ms": 1.3782925,
+                "p99_ms": 1.4705997999999998,
+                "max_ms": 3.071675
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_type1_age_rollup",
+              "workload": "olap",
+              "category": "aggregation",
+              "backend": "arcadedb-embedded",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.53455,
+                "mean_ms": 0.58919634,
+                "p50_ms": 0.554056,
+                "p95_ms": 0.676362,
+                "p99_ms": 0.7645455999999999,
+                "max_ms": 1.936233
+              },
+              "end_to_end": {
+                "min_ms": 0.53455,
+                "mean_ms": 0.58919634,
+                "p50_ms": 0.554056,
+                "p95_ms": 0.676362,
+                "p99_ms": 0.7645455999999999,
+                "max_ms": 1.936233
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_cross_type_edge_rollup",
+              "workload": "olap",
+              "category": "join-aggregation",
+              "backend": "arcadedb-embedded",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 3.390715,
+                "mean_ms": 3.6335798440000002,
+                "p50_ms": 3.502065,
+                "p95_ms": 4.2163059999999986,
+                "p99_ms": 5.239017499999995,
+                "max_ms": 5.994488
+              },
+              "end_to_end": {
+                "min_ms": 3.390715,
+                "mean_ms": 3.6335798440000002,
+                "p50_ms": 3.502065,
+                "p95_ms": 4.2163059999999986,
+                "p99_ms": 5.239017499999995,
+                "max_ms": 5.994488
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_variable_length_reachability",
+              "workload": "olap",
+              "category": "variable-length",
+              "backend": "arcadedb-embedded",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.42526,
+                "mean_ms": 0.45453298999999997,
+                "p50_ms": 0.4490655,
+                "p95_ms": 0.495217,
+                "p99_ms": 0.5947360099999999,
+                "max_ms": 0.676711
+              },
+              "end_to_end": {
+                "min_ms": 0.42526,
+                "mean_ms": 0.45453298999999997,
+                "p50_ms": 0.4490655,
+                "p95_ms": 0.495217,
+                "p99_ms": 0.5947360099999999,
+                "max_ms": 0.676711
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_three_type_path_count",
+              "workload": "olap",
+              "category": "multi-hop",
+              "backend": "arcadedb-embedded",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.062621,
+                "mean_ms": 0.078331398,
+                "p50_ms": 0.066515,
+                "p95_ms": 0.13295895,
+                "p99_ms": 0.1481092,
+                "max_ms": 0.277341
+              },
+              "end_to_end": {
+                "min_ms": 0.062621,
+                "mean_ms": 0.078331398,
+                "p50_ms": 0.066515,
+                "p95_ms": 0.13295895,
+                "p99_ms": 0.1481092,
+                "max_ms": 0.277341
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_type2_score_distribution",
+              "workload": "olap",
+              "category": "group-order",
+              "backend": "arcadedb-embedded",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.543121,
+                "mean_ms": 0.5764347780000001,
+                "p50_ms": 0.5661955,
+                "p95_ms": 0.61796555,
+                "p99_ms": 0.7375689099999998,
+                "max_ms": 1.830963
+              },
+              "end_to_end": {
+                "min_ms": 0.543121,
+                "mean_ms": 0.5764347780000001,
+                "p50_ms": 0.5661955,
+                "p95_ms": 0.61796555,
+                "p99_ms": 0.7375689099999998,
+                "max_ms": 1.830963
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_fixed_length_path_projection",
+              "workload": "olap",
+              "category": "multi-hop-projection",
+              "backend": "arcadedb-embedded",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 4.648007,
+                "mean_ms": 4.8574112000000005,
+                "p50_ms": 4.797042,
+                "p95_ms": 5.364238049999999,
+                "p99_ms": 6.1905355,
+                "max_ms": 7.18686
+              },
+              "end_to_end": {
+                "min_ms": 4.648007,
+                "mean_ms": 4.8574112000000005,
+                "p50_ms": 4.797042,
+                "p95_ms": 5.364238049999999,
+                "p99_ms": 6.1905355,
+                "max_ms": 7.18686
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_graph_introspection_rollup",
+              "workload": "olap",
+              "category": "introspection",
+              "backend": "arcadedb-embedded",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 6.135339,
+                "mean_ms": 6.503771906000001,
+                "p50_ms": 6.3878245,
+                "p95_ms": 7.303633999999997,
+                "p99_ms": 8.021990809999998,
+                "max_ms": 9.712603
+              },
+              "end_to_end": {
+                "min_ms": 6.135339,
+                "mean_ms": 6.503771906000001,
+                "p50_ms": 6.3878245,
+                "p95_ms": 7.303633999999997,
+                "p99_ms": 8.021990809999998,
+                "max_ms": 9.712603
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_with_scalar_rebinding",
+              "workload": "olap",
+              "category": "with-aggregation",
+              "backend": "arcadedb-embedded",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.628931,
+                "mean_ms": 0.682072284,
+                "p50_ms": 0.639531,
+                "p95_ms": 0.905784,
+                "p99_ms": 1.1397950999999984,
+                "max_ms": 1.725513
+              },
+              "end_to_end": {
+                "min_ms": 0.628931,
+                "mean_ms": 0.682072284,
+                "p50_ms": 0.639531,
+                "p95_ms": 0.905784,
+                "p99_ms": 1.1397950999999984,
+                "max_ms": 1.725513
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_variable_length_grouped_rollup",
+              "workload": "olap",
+              "category": "variable-length-grouped",
+              "backend": "arcadedb-embedded",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 14.49716,
+                "mean_ms": 15.56631624,
+                "p50_ms": 15.369927,
+                "p95_ms": 17.400032,
+                "p99_ms": 18.2428285,
+                "max_ms": 19.590008
+              },
+              "end_to_end": {
+                "min_ms": 14.49716,
+                "mean_ms": 15.56631624,
+                "p50_ms": 15.369927,
+                "p95_ms": 17.400032,
+                "p99_ms": 18.2428285,
+                "max_ms": 19.590008
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            }
+          ]
+        }
+      }
+    },
+    "token_map": {
+      "variable_hop_max": "2",
+      "grouped_rollup_variable_hop_max": "2",
+      "created_type_1_name": "nodetype01-created-node",
+      "created_type_1_peer_name": "nodetype01-created-peer",
+      "created_type_2_name": "nodetype02-created-node",
+      "node_type_1": "NodeType01",
+      "node_type_1_name_1": "nodetype01-000001",
+      "node_type_1_name_2": "nodetype01-000002",
+      "node_type_1_name_3": "nodetype01-000003",
+      "node_type_1_name_4": "nodetype01-000004",
+      "node_type_2": "NodeType02",
+      "node_type_2_name_1": "nodetype02-000001",
+      "node_type_2_name_2": "nodetype02-000002",
+      "node_type_2_name_3": "nodetype02-000003",
+      "node_type_2_name_4": "nodetype02-000004",
+      "node_type_3": "NodeType03",
+      "node_type_3_name_1": "nodetype03-000001",
+      "node_type_3_name_2": "nodetype03-000002",
+      "node_type_3_name_3": "nodetype03-000003",
+      "node_type_3_name_4": "nodetype03-000004",
+      "node_type_4": "NodeType04",
+      "node_type_4_name_1": "nodetype04-000001",
+      "node_type_4_name_2": "nodetype04-000002",
+      "node_type_4_name_3": "nodetype04-000003",
+      "node_type_4_name_4": "nodetype04-000004",
+      "edge_type_1": "EdgeType01",
+      "edge_type_2": "EdgeType02",
+      "edge_type_3": "EdgeType03",
+      "edge_type_4": "EdgeType04"
+    }
+  },
+  "failure_count": 0,
+  "completed_at": "2026-04-21T21:08:19.690299+00:00"
+}

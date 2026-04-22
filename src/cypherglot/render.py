@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from threading import local
+from typing import Any, Callable
 
 from sqlglot import exp
+from sqlglot.dialects.dialect import Dialect
 
 from ._logging import get_logger
 from ._compiled_program import CompiledCypherLoop
@@ -20,16 +23,21 @@ from .schema import CompilerSchemaContext
 
 logger = get_logger(__name__)
 _BACKEND_BY_NAME = {backend.value: backend for backend in SQLBackend}
+_RENDER_GENERATORS = local()
 
 
 @dataclass(frozen=True, slots=True)
 class RenderedCypherStatement:
+    """One rendered SQL statement plus any columns it binds for later steps."""
+
     sql: str
     bind_columns: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
 class RenderedCypherLoop:
+    """A rendered loop step with a source query and per-row statement body."""
+
     source: str
     row_bindings: tuple[str, ...]
     body: tuple[RenderedCypherStatement, ...]
@@ -40,6 +48,8 @@ RenderedCypherProgramStep = RenderedCypherStatement | RenderedCypherLoop
 
 @dataclass(frozen=True, slots=True)
 class RenderedCypherProgram:
+    """A rendered multi-step Cypher program ready for runtime execution."""
+
     steps: tuple[RenderedCypherProgramStep, ...]
 
 
@@ -228,9 +238,12 @@ def _build_expression_renderer(
     *,
     dialect: str | None,
     pretty: bool,
-):
+) -> Callable[[exp.Expression], str]:
     sql_kwargs = _build_render_sql_kwargs(dialect=dialect, pretty=pretty)
-    return lambda expression: expression.sql(**sql_kwargs)
+    return lambda expression: _render_expression_sql(
+        expression,
+        sql_kwargs=sql_kwargs,
+    )
 
 
 def _build_render_sql_kwargs(
@@ -249,7 +262,27 @@ def _render_expression_sql(
     *,
     sql_kwargs: dict[str, str | bool],
 ) -> str:
-    return expression.sql(**sql_kwargs)
+    dialect = sql_kwargs.get("dialect")
+    pretty = bool(sql_kwargs.get("pretty", False))
+    if not isinstance(dialect, str):
+        return expression.sql(**sql_kwargs)
+
+    generator = _get_cached_generator(dialect=dialect, pretty=pretty)
+    return generator.generate(expression)
+
+
+def _get_cached_generator(*, dialect: str, pretty: bool) -> Any:
+    cache = getattr(_RENDER_GENERATORS, "cache", None)
+    if cache is None:
+        cache = {}
+        _RENDER_GENERATORS.cache = cache
+
+    key = (dialect, pretty)
+    generator = cache.get(key)
+    if generator is None:
+        generator = Dialect.get_or_raise(dialect).generator(pretty=pretty)
+        cache[key] = generator
+    return generator
 
 
 def _resolve_render_dialect(

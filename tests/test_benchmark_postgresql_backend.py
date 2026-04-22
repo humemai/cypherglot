@@ -9,13 +9,13 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BENCHMARK_SCRIPTS_DIR = REPO_ROOT / "scripts" / "benchmarks"
 BENCHMARK_CORE_PATH = (
-    REPO_ROOT / "scripts" / "benchmarks" / "_benchmark_sql_runtime_core.py"
+    REPO_ROOT / "scripts" / "benchmarks" / "common/runtime_core.py"
 )
 POSTGRES_BACKEND_PATH = (
     REPO_ROOT
     / "scripts"
     / "benchmarks"
-    / "_benchmark_sql_runtime_postgresql_backend.py"
+    / "common/runtime_postgresql_backend.py"
 )
 
 if str(BENCHMARK_SCRIPTS_DIR) not in sys.path:

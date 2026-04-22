@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SCRIPT_PATH = REPO_ROOT / "scripts" / "benchmarks" / "summarize_runtime_results.py"
+SCRIPT_PATH = REPO_ROOT / "scripts" / "benchmarks" / "runtime/summarize_results.py"
 MODULE_SPEC = importlib.util.spec_from_file_location(
     "summarize_runtime_results",
     SCRIPT_PATH,
@@ -228,8 +228,18 @@ def _payload(
 
 
 class SummarizeRuntimeResultsTests(unittest.TestCase):
+    def test_parse_args_defaults_to_benchmark_results_runtime_dir(self) -> None:
+        with patch.object(sys, "argv", ["runtime/summarize_results.py"]):
+            args = parse_args()
+
+        self.assertEqual(
+            args.inputs,
+            [REPO_ROOT / "scripts" / "benchmarks" / "results" / "runtime"],
+        )
+        self.assertTrue(args.include_queries)
+
     def test_parse_args_includes_queries_by_default(self) -> None:
-        with patch.object(sys, "argv", ["summarize_runtime_results.py"]):
+        with patch.object(sys, "argv", ["runtime/summarize_results.py"]):
             args = parse_args()
 
         self.assertTrue(args.include_queries)
@@ -238,7 +248,7 @@ class SummarizeRuntimeResultsTests(unittest.TestCase):
         with patch.object(
             sys,
             "argv",
-            ["summarize_runtime_results.py", "--no-queries"],
+            ["runtime/summarize_results.py", "--no-queries"],
         ):
             args = parse_args()
 

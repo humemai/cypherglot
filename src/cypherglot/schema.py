@@ -55,7 +55,7 @@ _SCHEMA_BACKEND_CAPABILITIES: dict[SchemaBackend, SchemaBackendCapabilities] = {
 
 
 class SchemaContractError(ValueError):
-    pass
+    """Raised when a declared graph schema or schema context is invalid."""
 
 
 def _validated_backend(backend: SchemaBackend) -> SchemaBackend:
@@ -79,14 +79,20 @@ def _identifier_suffix(name: str) -> str:
 
 
 def node_table_name(node_type_name: str) -> str:
+    """Return the normalized relational table name for a node type."""
+
     return f"cg_node_{_identifier_suffix(node_type_name)}"
 
 
 def edge_table_name(edge_type_name: str) -> str:
+    """Return the normalized relational table name for an edge type."""
+
     return f"cg_edge_{_identifier_suffix(edge_type_name)}"
 
 
 def property_column_name(property_name: str) -> str:
+    """Return the normalized relational column name for a property."""
+
     return _identifier_suffix(property_name)
 
 
@@ -96,6 +102,8 @@ def _id_sequence_name(table_name: str) -> str:
 
 @dataclass(frozen=True)
 class PropertyField:
+    """A logical property definition shared by node and edge type specs."""
+
     name: str
     logical_type: str
     nullable: bool = True
@@ -126,6 +134,8 @@ class PropertyField:
 
 @dataclass(frozen=True)
 class NodeTypeSpec:
+    """A declared node type and its typed property columns."""
+
     name: str
     properties: tuple[PropertyField, ...] = field(default_factory=tuple)
 
@@ -136,6 +146,8 @@ class NodeTypeSpec:
 
 @dataclass(frozen=True)
 class EdgeTypeSpec:
+    """A declared edge type between source and target node types."""
+
     name: str
     source_type: str
     target_type: str
@@ -148,6 +160,8 @@ class EdgeTypeSpec:
 
 @dataclass(frozen=True)
 class PropertyIndexSpec:
+    """A secondary index declaration over node or edge property columns."""
+
     name: str
     target_kind: Literal["node", "edge"]
     target_type: str
@@ -160,23 +174,31 @@ class PropertyIndexSpec:
 
 @dataclass(frozen=True)
 class GraphSchema:
+    """A type-aware graph schema that can validate itself and emit backend DDL."""
+
     node_types: tuple[NodeTypeSpec, ...]
     edge_types: tuple[EdgeTypeSpec, ...]
     property_indexes: tuple[PropertyIndexSpec, ...] = field(default_factory=tuple)
 
     def node_type(self, name: str) -> NodeTypeSpec:
+        """Return the declared node type with the given product-level name."""
+
         for node_type in self.node_types:
             if node_type.name == name:
                 return node_type
         raise SchemaContractError(f"Unknown node type {name!r}.")
 
     def edge_type(self, name: str) -> EdgeTypeSpec:
+        """Return the declared edge type with the given product-level name."""
+
         for edge_type in self.edge_types:
             if edge_type.name == name:
                 return edge_type
         raise SchemaContractError(f"Unknown edge type {name!r}.")
 
     def validate(self) -> None:
+        """Validate schema identity, references, and declared property indexes."""
+
         node_names = [node_type.name for node_type in self.node_types]
         if len(set(node_names)) != len(node_names):
             raise SchemaContractError("Node type names must be unique.")
@@ -253,6 +275,8 @@ class GraphSchema:
                     )
 
     def ddl(self, backend: SchemaBackend) -> list[str]:
+        """Render backend-specific DDL for the validated graph schema."""
+
         self.validate()
         backend = _validated_backend(backend)
         capabilities = _schema_backend_capabilities(backend)
@@ -410,10 +434,14 @@ class GraphSchema:
 
 @dataclass(frozen=True)
 class CompilerSchemaContext:
+    """Schema information needed by the compiler for backend-aware lowering."""
+
     layout: Literal["type-aware"] = "type-aware"
     graph_schema: GraphSchema | None = None
 
     def validate(self) -> None:
+        """Validate that the context contains the schema required by its layout."""
+
         if self.graph_schema is None:
             raise SchemaContractError(
                 "Type-aware schema context requires an explicit GraphSchema."
@@ -425,6 +453,8 @@ class CompilerSchemaContext:
         cls,
         graph_schema: GraphSchema,
     ) -> CompilerSchemaContext:
+        """Build and validate the standard type-aware compiler schema context."""
+
         context = cls(
             layout="type-aware",
             graph_schema=graph_schema,
