@@ -39,10 +39,13 @@ class RunSchemaMatrixTests(unittest.TestCase):
         )
         self.assertEqual(scale_presets["medium"].node_type_count, 6)
         self.assertEqual(scale_presets["medium"].edge_type_count, 8)
-        self.assertEqual(scale_presets["medium"].nodes_per_type, 5_000)
+        self.assertEqual(scale_presets["medium"].nodes_per_type, 100_000)
         self.assertEqual(scale_presets["large"].node_type_count, 10)
         self.assertEqual(scale_presets["large"].edge_type_count, 10)
-        self.assertEqual(scale_presets["large"].nodes_per_type, 100_000)
+        self.assertEqual(scale_presets["large"].nodes_per_type, 1_000_000)
+        self.assertEqual(scale_presets["large"].edges_per_source, 8)
+        self.assertEqual(scale_presets["large"].multi_hop_length, 8)
+        self.assertEqual(scale_presets["large"].batch_size, 10_000)
 
 
 if __name__ == "__main__":

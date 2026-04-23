@@ -45,6 +45,21 @@ def _progress(message: str) -> None:
     print(f"[progress {timestamp}] {message}", flush=True)
 
 
+def _progress_checkpoints(total: int, *, segments: int = 10) -> set[int]:
+    if total <= 0:
+        return set()
+    bucket_count = min(total, segments)
+    return {
+        max(1, round(total * bucket / bucket_count))
+        for bucket in range(1, bucket_count + 1)
+    }
+
+
+def _report_progress(label: str, current: int, total: int) -> None:
+    percent = (current / total) * 100 if total else 100.0
+    _progress(f"{label} {current}/{total} ({percent:.0f}%)")
+
+
 @dataclass(frozen=True, slots=True)
 class SchemaShapeScale:
     node_type_count: int = 10
@@ -213,19 +228,38 @@ def _benchmark_query(
     *,
     warmup: int,
     iterations: int,
+    progress_label: str | None = None,
 ) -> dict[str, float]:
-    for _ in range(warmup):
+    warmup_checkpoints = _progress_checkpoints(warmup)
+    if progress_label and warmup > 0:
+        _progress(f"{progress_label} warmup start ({warmup} iterations)")
+    for warmup_iteration in range(1, warmup + 1):
         conn.execute(sql).fetchall()
+        if progress_label and warmup_iteration in warmup_checkpoints:
+            _report_progress(
+                f"{progress_label} warmup",
+                warmup_iteration,
+                warmup,
+            )
 
     samples_ns: list[int] = []
     gc_was_enabled = gc.isenabled()
     gc.disable()
     try:
-        for _ in range(iterations):
+        iteration_checkpoints = _progress_checkpoints(iterations)
+        if progress_label:
+            _progress(f"{progress_label} timed start ({iterations} iterations)")
+        for iteration in range(1, iterations + 1):
             start = time.perf_counter_ns()
             conn.execute(sql).fetchall()
             end = time.perf_counter_ns()
             samples_ns.append(end - start)
+            if progress_label and iteration in iteration_checkpoints:
+                _report_progress(
+                    f"{progress_label} timed",
+                    iteration,
+                    iterations,
+                )
     finally:
         if gc_was_enabled:
             gc.enable()
@@ -257,22 +291,22 @@ def _create_json_schema(conn: sqlite3.Connection) -> None:
 
 
 def _create_json_indexes(conn: sqlite3.Connection) -> None:
-        conn.executescript(
-                """
-                CREATE INDEX idx_nodes_type_name
-                    ON nodes(node_type, json_extract(properties, '$.name'));
-                CREATE INDEX idx_nodes_type_flag_num
-                    ON nodes(
-                        node_type,
-                        json_extract(properties, '$.flag_01'),
-                        CAST(json_extract(properties, '$.num_01') AS REAL) DESC
-                    );
-                CREATE INDEX idx_edges_type_from_to
-                    ON edges(edge_type, from_node_id, to_node_id);
-                CREATE INDEX idx_edges_type_to_from
-                    ON edges(edge_type, to_node_id, from_node_id);
-                """
-        )
+    conn.executescript(
+        """
+        CREATE INDEX idx_nodes_type_name
+            ON nodes(node_type, json_extract(properties, '$.name'));
+        CREATE INDEX idx_nodes_type_flag_num
+            ON nodes(
+                node_type,
+                json_extract(properties, '$.flag_01'),
+                CAST(json_extract(properties, '$.num_01') AS REAL) DESC
+            );
+        CREATE INDEX idx_edges_type_from_to
+            ON edges(edge_type, from_node_id, to_node_id);
+        CREATE INDEX idx_edges_type_to_from
+            ON edges(edge_type, to_node_id, from_node_id);
+        """
+    )
 
 
 def _seed_json_schema(
@@ -280,12 +314,19 @@ def _seed_json_schema(
     *,
     scale: SchemaShapeScale,
     batch_size: int,
+    progress_label: str | None = None,
 ) -> dict[str, int]:
     node_rows: list[tuple[object, ...]] = []
     edge_rows: list[tuple[object, ...]] = []
     node_count = 0
     edge_count = 0
     edge_id = 1
+    total_nodes = scale.node_type_count * scale.nodes_per_type
+    total_edges = (
+        scale.edge_type_count * scale.nodes_per_type * scale.edges_per_source
+    )
+    node_checkpoints = _progress_checkpoints(total_nodes)
+    edge_checkpoints = _progress_checkpoints(total_edges)
 
     for type_index in range(1, scale.node_type_count + 1):
         for local_index in range(1, scale.nodes_per_type + 1):
@@ -297,6 +338,8 @@ def _seed_json_schema(
                 )
             )
             node_count += 1
+            if progress_label and node_count in node_checkpoints:
+                _report_progress(f"{progress_label} nodes", node_count, total_nodes)
             if len(node_rows) >= batch_size:
                 conn.executemany(
                     (
@@ -336,6 +379,12 @@ def _seed_json_schema(
                 )
                 edge_id += 1
                 edge_count += 1
+                if progress_label and edge_count in edge_checkpoints:
+                    _report_progress(
+                        f"{progress_label} edges",
+                        edge_count,
+                        total_edges,
+                    )
                 if len(edge_rows) >= batch_size:
                     conn.executemany(
                         (
@@ -452,6 +501,7 @@ def _seed_typed_property_schema(
     *,
     scale: SchemaShapeScale,
     batch_size: int,
+    progress_label: str | None = None,
 ) -> dict[str, int]:
     node_rows: list[tuple[object, ...]] = []
     node_text_rows: list[tuple[object, ...]] = []
@@ -464,6 +514,12 @@ def _seed_typed_property_schema(
     node_count = 0
     edge_count = 0
     edge_id = 1
+    total_nodes = scale.node_type_count * scale.nodes_per_type
+    total_edges = (
+        scale.edge_type_count * scale.nodes_per_type * scale.edges_per_source
+    )
+    node_checkpoints = _progress_checkpoints(total_nodes)
+    edge_checkpoints = _progress_checkpoints(total_edges)
 
     def flush_node_batches() -> None:
         if node_rows:
@@ -544,6 +600,8 @@ def _seed_typed_property_schema(
             node_id = _node_id(scale, type_index, local_index)
             node_rows.append((node_id, type_name))
             node_count += 1
+            if progress_label and node_count in node_checkpoints:
+                _report_progress(f"{progress_label} nodes", node_count, total_nodes)
             node_text_rows.append(
                 (node_id, "name", _node_name(type_index, local_index))
             )
@@ -678,6 +736,12 @@ def _seed_typed_property_schema(
                     )
                 edge_id += 1
                 edge_count += 1
+                if progress_label and edge_count in edge_checkpoints:
+                    _report_progress(
+                        f"{progress_label} edges",
+                        edge_count,
+                        total_edges,
+                    )
                 if len(edge_rows) >= batch_size:
                     flush_edge_batches()
 
@@ -810,8 +874,15 @@ def _seed_type_aware_schema(
     *,
     scale: SchemaShapeScale,
     batch_size: int,
+    progress_label: str | None = None,
 ) -> dict[str, int]:
     node_count = 0
+    total_nodes = scale.node_type_count * scale.nodes_per_type
+    total_edges = (
+        scale.edge_type_count * scale.nodes_per_type * scale.edges_per_source
+    )
+    node_checkpoints = _progress_checkpoints(total_nodes)
+    edge_checkpoints = _progress_checkpoints(total_edges)
     for type_index in range(1, scale.node_type_count + 1):
         table_name = _node_table_name(type_index)
         column_names = ["node_id", "name"]
@@ -835,6 +906,8 @@ def _seed_type_aware_schema(
                 _node_name(type_index, local_index),
             ]
             node_count += 1
+            if progress_label and node_count in node_checkpoints:
+                _report_progress(f"{progress_label} nodes", node_count, total_nodes)
             for property_index in range(1, scale.node_text_property_count + 1):
                 row.append(
                     (
@@ -917,6 +990,12 @@ def _seed_type_aware_schema(
                     % scale.nodes_per_type
                 ) + 1
                 edge_count += 1
+                if progress_label and edge_count in edge_checkpoints:
+                    _report_progress(
+                        f"{progress_label} edges",
+                        edge_count,
+                        total_edges,
+                    )
                 row: list[object] = [
                     edge_count,
                     from_node_id,
@@ -1331,7 +1410,12 @@ def _run_schema_suite(
             rss_by_step_mib["schema"] = _rss_mib()
             _progress(f"schema benchmark: {schema_name} ingest")
             row_counts, ingest_ms = _measure_ms(
-                lambda: _seed_json_schema(conn, scale=scale, batch_size=batch_size)
+                lambda: _seed_json_schema(
+                    conn,
+                    scale=scale,
+                    batch_size=batch_size,
+                    progress_label=f"schema benchmark: {schema_name} ingest",
+                )
             )
             rss_by_step_mib["ingest"] = _rss_mib()
             _progress(f"schema benchmark: {schema_name} index")
@@ -1346,6 +1430,7 @@ def _run_schema_suite(
                     conn,
                     scale=scale,
                     batch_size=batch_size,
+                    progress_label=f"schema benchmark: {schema_name} ingest",
                 )
             )
             rss_by_step_mib["ingest"] = _rss_mib()
@@ -1361,6 +1446,7 @@ def _run_schema_suite(
                     conn,
                     scale=scale,
                     batch_size=batch_size,
+                    progress_label=f"schema benchmark: {schema_name} ingest",
                 )
             )
             rss_by_step_mib["ingest"] = _rss_mib()
@@ -1390,6 +1476,11 @@ def _run_schema_suite(
                         query.sql_by_schema[schema_name],
                         warmup=warmup,
                         iterations=iterations,
+                        progress_label=(
+                            "schema benchmark: "
+                            f"{schema_name} query {index}/{len(queries)} "
+                            f"{query.name}"
+                        ),
                     ),
                 }
             )

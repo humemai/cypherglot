@@ -225,6 +225,19 @@ class SummarizeSchemaResultsTests(unittest.TestCase):
         self.assertIn("Pooled p95", markdown)
         self.assertIn("Pooled p99", markdown)
         self.assertIn("RSS Index", markdown)
+        self.assertIn("Dataset:", markdown)
+        self.assertIn("- node types: `4`", markdown)
+        self.assertIn("- edge types: `4`", markdown)
+        self.assertIn("- total nodes: `4,000`", markdown)
+        self.assertIn("- total edges: `12,000`", markdown)
+        self.assertIn(
+            "- node properties per node: `text=2`, `numeric=10`, `boolean=2`",
+            markdown,
+        )
+        self.assertIn(
+            "- edge properties per edge: `text=2`, `numeric=6`, `boolean=1`",
+            markdown,
+        )
         self.assertIn("### Query mean summary", markdown)
         self.assertIn("### Query p50 summary", markdown)
         self.assertIn("### Query p95 summary", markdown)

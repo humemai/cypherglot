@@ -51,7 +51,7 @@ SCALE_SIGNATURES = {
     "medium": {
         "node_type_count": 6,
         "edge_type_count": 8,
-        "nodes_per_type": 5_000,
+        "nodes_per_type": 100_000,
         "edges_per_source": 4,
         "multi_hop_length": 5,
         "node_numeric_property_count": 10,
@@ -64,9 +64,9 @@ SCALE_SIGNATURES = {
     "large": {
         "node_type_count": 10,
         "edge_type_count": 10,
-        "nodes_per_type": 100_000,
-        "edges_per_source": 4,
-        "multi_hop_length": 5,
+        "nodes_per_type": 1_000_000,
+        "edges_per_source": 8,
+        "multi_hop_length": 8,
         "node_numeric_property_count": 10,
         "node_text_property_count": 2,
         "node_boolean_property_count": 2,
@@ -255,6 +255,60 @@ def _query_records(group: list[RunRecord]) -> list[dict[str, str]]:
     )
 
 
+def _dataset_detail_lines(group: list[RunRecord]) -> list[str]:
+    payload = group[0].payload
+    scale = payload.get("scale", {})
+    first_schema_name = _sorted_schema_names(group)[0]
+    row_counts = payload["schemas"][first_schema_name].get("row_counts", {})
+
+    def _value(name: str) -> str:
+        value = scale.get(name, "unknown")
+        if isinstance(value, int | float):
+            return f"{value:,}"
+        return str(value)
+
+    lines = [
+        "Dataset:",
+        f"- node types: `{_value('node_type_count')}`",
+        f"- edge types: `{_value('edge_type_count')}`",
+        f"- nodes per type: `{_value('nodes_per_type')}`",
+        f"- edges per source: `{_value('edges_per_source')}`",
+        f"- multi-hop length: `{_value('multi_hop_length')}`",
+        (
+            f"- total nodes: `{int(row_counts.get('node_count', 0)):,}`"
+            if row_counts.get("node_count") is not None
+            else "- total nodes: `unknown`"
+        ),
+        (
+            f"- total edges: `{int(row_counts.get('edge_count', 0)):,}`"
+            if row_counts.get("edge_count") is not None
+            else "- total edges: `unknown`"
+        ),
+        (
+            "- node properties per node: "
+            f"`text={_value('node_text_property_count')}`, "
+            f"`numeric={_value('node_numeric_property_count')}`, "
+            f"`boolean={_value('node_boolean_property_count')}`"
+        ),
+        (
+            "- edge properties per edge: "
+            f"`text={_value('edge_text_property_count')}`, "
+            f"`numeric={_value('edge_numeric_property_count')}`, "
+            f"`boolean={_value('edge_boolean_property_count')}`"
+        ),
+    ]
+
+    if "node_property_rows" in row_counts:
+        lines.append(
+            f"- typed node property rows: `{int(row_counts['node_property_rows']):,}`"
+        )
+    if "edge_property_rows" in row_counts:
+        lines.append(
+            f"- typed edge property rows: `{int(row_counts['edge_property_rows']):,}`"
+        )
+    return lines
+
+
 def _setup_table(group: list[RunRecord]) -> list[str]:
     header_cells = [
         "Schema",
@@ -369,6 +423,8 @@ def _render_group(group: list[RunRecord], *, include_queries: bool) -> list[str]
         f"- warmup: `{controls.get('warmup', 'unknown')}`",
         f"- batch size: `{controls.get('batch_size', 'unknown')}`",
         f"- schemas: `{'`, `'.join(selected_schemas)}`",
+        "",
+        *_dataset_detail_lines(group),
         "",
         "Files:",
     ]
