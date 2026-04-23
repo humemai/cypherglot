@@ -1,0 +1,372 @@
+{
+  "benchmark_entrypoint": "scripts.benchmarks.schema.sqlite_shapes",
+  "generated_at": "2026-04-22T21:23:15.273149+00:00",
+  "run_status": "completed",
+  "environment": {
+    "python": "3.12.11",
+    "sqlite": "3.50.4",
+    "platform": "Linux-6.17.9-76061709-generic-x86_64-with-glibc2.35"
+  },
+  "controls": {
+    "iterations": 10000,
+    "warmup": 200,
+    "batch_size": 1000,
+    "schemas": [
+      "json",
+      "typed",
+      "typeaware"
+    ]
+  },
+  "scale": {
+    "node_type_count": 4,
+    "edge_type_count": 4,
+    "nodes_per_type": 1000,
+    "edges_per_source": 3,
+    "multi_hop_length": 4,
+    "node_numeric_property_count": 10,
+    "node_text_property_count": 2,
+    "node_boolean_property_count": 2,
+    "edge_numeric_property_count": 6,
+    "edge_text_property_count": 2,
+    "edge_boolean_property_count": 1
+  },
+  "edge_specs": [
+    {
+      "type_index": 1,
+      "name": "EdgeType01",
+      "source_type_index": 1,
+      "target_type_index": 2
+    },
+    {
+      "type_index": 2,
+      "name": "EdgeType02",
+      "source_type_index": 2,
+      "target_type_index": 3
+    },
+    {
+      "type_index": 3,
+      "name": "EdgeType03",
+      "source_type_index": 3,
+      "target_type_index": 4
+    },
+    {
+      "type_index": 4,
+      "name": "EdgeType04",
+      "source_type_index": 4,
+      "target_type_index": 1
+    }
+  ],
+  "schemas": {
+    "json": {
+      "setup": {
+        "connect_ms": 56.52104,
+        "schema_ms": 28.353374,
+        "ingest_ms": 196.131953,
+        "index_ms": 35.052985,
+        "analyze_ms": 4.091361,
+        "database_size_mb": 4.796875,
+        "rss_mib": {
+          "connect": 54.39453125,
+          "schema": 54.4296875,
+          "ingest": 57.03515625,
+          "index": 57.4921875,
+          "analyze": 57.4921875
+        }
+      },
+      "row_counts": {
+        "node_count": 4000,
+        "edge_count": 12000
+      },
+      "pooled_execute": {
+        "min_ms": 0.003373,
+        "mean_ms": 1.5444603333333333,
+        "p50_ms": 0.058148,
+        "p95_ms": 5.96082125,
+        "p99_ms": 7.074370650000001,
+        "max_ms": 7.352758
+      },
+      "queries": [
+        {
+          "name": "point_lookup",
+          "category": "point-read",
+          "execute": {
+            "min_ms": 0.00312,
+            "mean_ms": 0.0033736026,
+            "p50_ms": 0.00335,
+            "p95_ms": 0.00347,
+            "p99_ms": 0.004560300000000007,
+            "max_ms": 0.00895
+          }
+        },
+        {
+          "name": "top_active_score",
+          "category": "ordered-top-k",
+          "execute": {
+            "min_ms": 0.01567,
+            "mean_ms": 0.016888097799999998,
+            "p50_ms": 0.01677,
+            "p95_ms": 0.01736,
+            "p99_ms": 0.021350100000000004,
+            "max_ms": 0.03025
+          }
+        },
+        {
+          "name": "one_hop_neighbors",
+          "category": "adjacency-read",
+          "execute": {
+            "min_ms": 0.0088,
+            "mean_ms": 0.009324814399999999,
+            "p50_ms": 0.00928,
+            "p95_ms": 0.00952,
+            "p99_ms": 0.011190100000000001,
+            "max_ms": 0.01664
+          }
+        },
+        {
+          "name": "multi_hop_chain",
+          "category": "multi-hop-read",
+          "execute": {
+            "min_ms": 0.09606,
+            "mean_ms": 0.0994080183,
+            "p50_ms": 0.0987,
+            "p95_ms": 0.10302,
+            "p99_ms": 0.11229480000000011,
+            "max_ms": 0.15086
+          }
+        },
+        {
+          "name": "relationship_stats",
+          "category": "relationship-aggregate",
+          "execute": {
+            "min_ms": 1.72078,
+            "mean_ms": 1.785011713,
+            "p50_ms": 1.773935,
+            "p95_ms": 1.8530075,
+            "p99_ms": 1.9546752000000007,
+            "max_ms": 2.696311
+          }
+        },
+        {
+          "name": "relationship_projection",
+          "category": "relationship-projection",
+          "execute": {
+            "min_ms": 7.154871,
+            "mean_ms": 7.352758039,
+            "p50_ms": 7.316691,
+            "p95_ms": 7.6189495,
+            "p99_ms": 8.0246344,
+            "max_ms": 10.506152
+          }
+        }
+      ]
+    },
+    "typed": {
+      "setup": {
+        "connect_ms": 26.067254,
+        "schema_ms": 9.169752,
+        "ingest_ms": 349.505427,
+        "index_ms": 158.363816,
+        "analyze_ms": 36.938026,
+        "database_size_mb": 14.56640625,
+        "rss_mib": {
+          "connect": 58.0234375,
+          "schema": 58.0546875,
+          "ingest": 59.390625,
+          "index": 61.26171875,
+          "analyze": 61.26171875
+        }
+      },
+      "row_counts": {
+        "node_count": 4000,
+        "edge_count": 12000,
+        "node_property_rows": 60000,
+        "edge_property_rows": 120000
+      },
+      "pooled_execute": {
+        "min_ms": 0.003733,
+        "mean_ms": 1.9081708333333331,
+        "p50_ms": 0.88804,
+        "p95_ms": 6.31557125,
+        "p99_ms": 7.504010250000001,
+        "max_ms": 7.80112
+      },
+      "queries": [
+        {
+          "name": "point_lookup",
+          "category": "point-read",
+          "execute": {
+            "min_ms": 0.0034,
+            "mean_ms": 0.0037337565,
+            "p50_ms": 0.00361,
+            "p95_ms": 0.00465,
+            "p99_ms": 0.00549,
+            "max_ms": 0.06827
+          }
+        },
+        {
+          "name": "top_active_score",
+          "category": "ordered-top-k",
+          "execute": {
+            "min_ms": 1.62488,
+            "mean_ms": 1.6851787678,
+            "p50_ms": 1.6796,
+            "p95_ms": 1.71076195,
+            "p99_ms": 1.72864149,
+            "max_ms": 2.251211
+          }
+        },
+        {
+          "name": "one_hop_neighbors",
+          "category": "adjacency-read",
+          "execute": {
+            "min_ms": 0.00871,
+            "mean_ms": 0.0091678615,
+            "p50_ms": 0.00913,
+            "p95_ms": 0.00935,
+            "p99_ms": 0.01085,
+            "max_ms": 0.01875
+          }
+        },
+        {
+          "name": "multi_hop_chain",
+          "category": "multi-hop-read",
+          "execute": {
+            "min_ms": 0.08837,
+            "mean_ms": 0.0909020457,
+            "p50_ms": 0.09057,
+            "p95_ms": 0.09387,
+            "p99_ms": 0.09540020000000002,
+            "max_ms": 0.11907
+          }
+        },
+        {
+          "name": "relationship_stats",
+          "category": "relationship-aggregate",
+          "execute": {
+            "min_ms": 1.82681,
+            "mean_ms": 1.8589257732,
+            "p50_ms": 1.8559905,
+            "p95_ms": 1.88028145,
+            "p99_ms": 1.8926514,
+            "max_ms": 2.714431
+          }
+        },
+        {
+          "name": "relationship_projection",
+          "category": "relationship-projection",
+          "execute": {
+            "min_ms": 7.637501,
+            "mean_ms": 7.8011209702,
+            "p50_ms": 7.7902415,
+            "p95_ms": 7.89196505,
+            "p99_ms": 8.07041731,
+            "max_ms": 9.455542
+          }
+        }
+      ]
+    },
+    "typeaware": {
+      "setup": {
+        "connect_ms": 59.48792,
+        "schema_ms": 32.809095,
+        "ingest_ms": 76.287913,
+        "index_ms": 9.152921,
+        "analyze_ms": 2.741821,
+        "database_size_mb": 2.94140625,
+        "rss_mib": {
+          "connect": 61.23046875,
+          "schema": 61.26171875,
+          "ingest": 61.26171875,
+          "index": 61.26171875,
+          "analyze": 61.26171875
+        }
+      },
+      "row_counts": {
+        "node_count": 4000,
+        "edge_count": 12000
+      },
+      "pooled_execute": {
+        "min_ms": 0.002991,
+        "mean_ms": 0.5765248333333334,
+        "p50_ms": 0.026534,
+        "p95_ms": 2.1044685,
+        "p99_ms": 2.4293953000000004,
+        "max_ms": 2.510627
+      },
+      "queries": [
+        {
+          "name": "point_lookup",
+          "category": "point-read",
+          "execute": {
+            "min_ms": 0.00276,
+            "mean_ms": 0.0029910284000000003,
+            "p50_ms": 0.00294,
+            "p95_ms": 0.00307,
+            "p99_ms": 0.00452,
+            "max_ms": 0.0107
+          }
+        },
+        {
+          "name": "top_active_score",
+          "category": "ordered-top-k",
+          "execute": {
+            "min_ms": 0.00787,
+            "mean_ms": 0.0085246804,
+            "p50_ms": 0.00843,
+            "p95_ms": 0.00877,
+            "p99_ms": 0.01215,
+            "max_ms": 0.01441
+          }
+        },
+        {
+          "name": "one_hop_neighbors",
+          "category": "adjacency-read",
+          "execute": {
+            "min_ms": 0.00596,
+            "mean_ms": 0.006470712000000001,
+            "p50_ms": 0.00634,
+            "p95_ms": 0.00662,
+            "p99_ms": 0.01095,
+            "max_ms": 0.06466
+          }
+        },
+        {
+          "name": "multi_hop_chain",
+          "category": "multi-hop-read",
+          "execute": {
+            "min_ms": 0.04319,
+            "mean_ms": 0.0445449023,
+            "p50_ms": 0.04436,
+            "p95_ms": 0.04706,
+            "p99_ms": 0.048410100000000005,
+            "max_ms": 0.05238
+          }
+        },
+        {
+          "name": "relationship_stats",
+          "category": "relationship-aggregate",
+          "execute": {
+            "min_ms": 0.8617,
+            "mean_ms": 0.8859931245,
+            "p50_ms": 0.88432,
+            "p95_ms": 0.90025,
+            "p99_ms": 0.9053303,
+            "max_ms": 2.02705
+          }
+        },
+        {
+          "name": "relationship_projection",
+          "category": "relationship-projection",
+          "execute": {
+            "min_ms": 2.412162,
+            "mean_ms": 2.5106275727,
+            "p50_ms": 2.507527,
+            "p95_ms": 2.54990395,
+            "p99_ms": 2.6003710300000007,
+            "max_ms": 4.178174
+          }
+        }
+      ]
+    }
+  }
+}

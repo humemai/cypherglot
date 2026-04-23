@@ -12,18 +12,29 @@ Controls:
 - batch size: `1000`
 - schemas: `json`, `typed`, `typeaware`
 
+Dataset:
+- node types: `4`
+- edge types: `4`
+- nodes per type: `1,000`
+- edges per source: `3`
+- multi-hop length: `4`
+- total nodes: `4,000`
+- total edges: `12,000`
+- node properties per node: `text=2`, `numeric=10`, `boolean=2`
+- edge properties per edge: `text=2`, `numeric=6`, `boolean=1`
+
 Files:
-- `schema-small-r01-20260422T092228Z.json`
-- `schema-small-r02-20260422T092228Z.json`
-- `schema-small-r03-20260422T092228Z.json`
+- `schema-small-r01-20260422T212315Z.json`
+- `schema-small-r02-20260422T212315Z.json`
+- `schema-small-r03-20260422T212315Z.json`
 
 ### Setup summary
 
 | Schema | Connect | DDL | Ingest | Index | Analyze | RSS Connect | RSS DDL | RSS Ingest | RSS Index | RSS Analyze | Size | Pooled Mean | Pooled p50 | Pooled p95 | Pooled p99 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| generic JSON | `47.33 ms +- 10.60` | `30.45 ms +- 1.46` | `191.04 ms +- 5.35` | `35.47 ms +- 0.85` | `3.71 ms +- 0.04` | `54.29 MiB +- 0.02` | `54.33 MiB +- 0.02` | `56.92 MiB +- 0.02` | `57.38 MiB +- 0.02` | `57.38 MiB +- 0.02` | `4.80 MiB +- 0.00` | `1.54 ms +- 0.00` | `0.06 ms +- 0.00` | `5.94 ms +- 0.02` | `7.05 ms +- 0.02` |
-| typed-property | `34.01 ms +- 7.03` | `19.82 ms +- 11.09` | `353.36 ms +- 2.31` | `149.87 ms +- 9.51` | `37.60 ms +- 0.43` | `57.75 MiB +- 0.02` | `57.78 MiB +- 0.02` | `59.27 MiB +- 0.02` | `61.15 MiB +- 0.02` | `61.15 MiB +- 0.02` | `14.57 MiB +- 0.00` | `1.91 ms +- 0.00` | `0.90 ms +- 0.01` | `6.29 ms +- 0.01` | `7.48 ms +- 0.01` |
-| type-aware | `26.15 ms +- 0.34` | `9.63 ms +- 0.15` | `74.56 ms +- 1.99` | `9.32 ms +- 0.08` | `2.82 ms +- 0.01` | `61.12 MiB +- 0.02` | `61.15 MiB +- 0.02` | `61.15 MiB +- 0.02` | `61.15 MiB +- 0.02` | `61.15 MiB +- 0.02` | `2.94 MiB +- 0.00` | `0.58 ms +- 0.00` | `0.03 ms +- 0.00` | `2.11 ms +- 0.00` | `2.43 ms +- 0.00` |
+| generic JSON | `58.26 ms +- 4.33` | `27.88 ms +- 0.83` | `199.00 ms +- 4.92` | `35.07 ms +- 0.01` | `4.05 ms +- 0.03` | `54.38 MiB +- 0.02` | `54.41 MiB +- 0.02` | `57.02 MiB +- 0.02` | `57.48 MiB +- 0.02` | `57.48 MiB +- 0.02` | `4.80 MiB +- 0.00` | `1.55 ms +- 0.00` | `0.06 ms +- 0.00` | `5.98 ms +- 0.02` | `7.10 ms +- 0.02` |
+| typed-property | `32.05 ms +- 5.19` | `15.54 ms +- 5.56` | `351.85 ms +- 2.11` | `151.21 ms +- 6.21` | `38.48 ms +- 1.53` | `58.01 MiB +- 0.02` | `58.04 MiB +- 0.02` | `59.38 MiB +- 0.02` | `61.26 MiB +- 0.02` | `61.26 MiB +- 0.02` | `14.57 MiB +- 0.00` | `1.91 ms +- 0.00` | `0.89 ms +- 0.01` | `6.31 ms +- 0.01` | `7.50 ms +- 0.01` |
+| type-aware | `48.45 ms +- 17.97` | `24.71 ms +- 13.09` | `74.99 ms +- 1.29` | `9.15 ms +- 0.04` | `2.75 ms +- 0.02` | `61.23 MiB +- 0.02` | `61.26 MiB +- 0.02` | `61.26 MiB +- 0.02` | `61.26 MiB +- 0.02` | `61.26 MiB +- 0.02` | `2.94 MiB +- 0.00` | `0.58 ms +- 0.00` | `0.03 ms +- 0.00` | `2.12 ms +- 0.01` | `2.44 ms +- 0.01` |
 
 ### Query mean summary
 
@@ -34,15 +45,15 @@ Files:
 | --- | --- | ---: | ---: | ---: |
 | `one_hop_neighbors` | `adjacency-read` | `0.01 ms +- 0.00` | `0.01 ms +- 0.00` | `0.01 ms +- 0.00` |
 | `point_lookup` | `point-read` | `0.00 ms +- 0.00` | `0.00 ms +- 0.00` | `0.00 ms +- 0.00` |
-| `top_active_score` | `ordered-top-k` | `0.02 ms +- 0.00` | `1.72 ms +- 0.01` | `0.01 ms +- 0.00` |
+| `top_active_score` | `ordered-top-k` | `0.02 ms +- 0.00` | `1.70 ms +- 0.03` | `0.01 ms +- 0.00` |
 
 #### OLAP-leaning query mean
 
 | Query | Category | generic JSON | typed-property | type-aware |
 | --- | --- | ---: | ---: | ---: |
 | `multi_hop_chain` | `multi-hop-read` | `0.10 ms +- 0.00` | `0.09 ms +- 0.00` | `0.04 ms +- 0.00` |
-| `relationship_projection` | `relationship-projection` | `7.33 ms +- 0.02` | `7.78 ms +- 0.01` | `2.52 ms +- 0.00` |
-| `relationship_stats` | `relationship-aggregate` | `1.77 ms +- 0.00` | `1.85 ms +- 0.02` | `0.90 ms +- 0.02` |
+| `relationship_projection` | `relationship-projection` | `7.38 ms +- 0.02` | `7.80 ms +- 0.01` | `2.52 ms +- 0.01` |
+| `relationship_stats` | `relationship-aggregate` | `1.78 ms +- 0.00` | `1.84 ms +- 0.01` | `0.89 ms +- 0.00` |
 
 ### Query p50 summary
 
@@ -53,15 +64,15 @@ Files:
 | --- | --- | ---: | ---: | ---: |
 | `one_hop_neighbors` | `adjacency-read` | `0.01 ms +- 0.00` | `0.01 ms +- 0.00` | `0.01 ms +- 0.00` |
 | `point_lookup` | `point-read` | `0.00 ms +- 0.00` | `0.00 ms +- 0.00` | `0.00 ms +- 0.00` |
-| `top_active_score` | `ordered-top-k` | `0.02 ms +- 0.00` | `1.72 ms +- 0.01` | `0.01 ms +- 0.00` |
+| `top_active_score` | `ordered-top-k` | `0.02 ms +- 0.00` | `1.69 ms +- 0.03` | `0.01 ms +- 0.00` |
 
 #### OLAP-leaning query p50
 
 | Query | Category | generic JSON | typed-property | type-aware |
 | --- | --- | ---: | ---: | ---: |
 | `multi_hop_chain` | `multi-hop-read` | `0.10 ms +- 0.00` | `0.09 ms +- 0.00` | `0.04 ms +- 0.00` |
-| `relationship_projection` | `relationship-projection` | `7.32 ms +- 0.02` | `7.77 ms +- 0.01` | `2.52 ms +- 0.00` |
-| `relationship_stats` | `relationship-aggregate` | `1.77 ms +- 0.01` | `1.85 ms +- 0.02` | `0.90 ms +- 0.02` |
+| `relationship_projection` | `relationship-projection` | `7.34 ms +- 0.02` | `7.79 ms +- 0.00` | `2.52 ms +- 0.02` |
+| `relationship_stats` | `relationship-aggregate` | `1.77 ms +- 0.00` | `1.84 ms +- 0.01` | `0.89 ms +- 0.01` |
 
 ### Query p95 summary
 
@@ -72,15 +83,15 @@ Files:
 | --- | --- | ---: | ---: | ---: |
 | `one_hop_neighbors` | `adjacency-read` | `0.01 ms +- 0.00` | `0.01 ms +- 0.00` | `0.01 ms +- 0.00` |
 | `point_lookup` | `point-read` | `0.00 ms +- 0.00` | `0.00 ms +- 0.00` | `0.00 ms +- 0.00` |
-| `top_active_score` | `ordered-top-k` | `0.02 ms +- 0.00` | `1.74 ms +- 0.02` | `0.01 ms +- 0.00` |
+| `top_active_score` | `ordered-top-k` | `0.02 ms +- 0.00` | `1.72 ms +- 0.02` | `0.01 ms +- 0.00` |
 
 #### OLAP-leaning query p95
 
 | Query | Category | generic JSON | typed-property | type-aware |
 | --- | --- | ---: | ---: | ---: |
 | `multi_hop_chain` | `multi-hop-read` | `0.10 ms +- 0.00` | `0.09 ms +- 0.00` | `0.05 ms +- 0.00` |
-| `relationship_projection` | `relationship-projection` | `7.40 ms +- 0.02` | `7.83 ms +- 0.02` | `2.56 ms +- 0.00` |
-| `relationship_stats` | `relationship-aggregate` | `1.79 ms +- 0.01` | `1.86 ms +- 0.02` | `0.91 ms +- 0.01` |
+| `relationship_projection` | `relationship-projection` | `7.64 ms +- 0.03` | `7.87 ms +- 0.02` | `2.57 ms +- 0.02` |
+| `relationship_stats` | `relationship-aggregate` | `1.85 ms +- 0.01` | `1.86 ms +- 0.02` | `0.90 ms +- 0.00` |
 
 ### Query p99 summary
 
@@ -91,38 +102,49 @@ Files:
 | --- | --- | ---: | ---: | ---: |
 | `one_hop_neighbors` | `adjacency-read` | `0.01 ms +- 0.00` | `0.01 ms +- 0.00` | `0.01 ms +- 0.00` |
 | `point_lookup` | `point-read` | `0.00 ms +- 0.00` | `0.00 ms +- 0.00` | `0.00 ms +- 0.00` |
-| `top_active_score` | `ordered-top-k` | `0.02 ms +- 0.00` | `1.75 ms +- 0.02` | `0.01 ms +- 0.00` |
+| `top_active_score` | `ordered-top-k` | `0.02 ms +- 0.00` | `1.76 ms +- 0.02` | `0.01 ms +- 0.00` |
 
 #### OLAP-leaning query p99
 
 | Query | Category | generic JSON | typed-property | type-aware |
 | --- | --- | ---: | ---: | ---: |
-| `multi_hop_chain` | `multi-hop-read` | `0.11 ms +- 0.01` | `0.10 ms +- 0.00` | `0.05 ms +- 0.01` |
-| `relationship_projection` | `relationship-projection` | `7.45 ms +- 0.01` | `7.92 ms +- 0.02` | `2.58 ms +- 0.00` |
-| `relationship_stats` | `relationship-aggregate` | `1.80 ms +- 0.00` | `1.87 ms +- 0.02` | `0.92 ms +- 0.01` |
+| `multi_hop_chain` | `multi-hop-read` | `0.12 ms +- 0.02` | `0.10 ms +- 0.00` | `0.05 ms +- 0.00` |
+| `relationship_projection` | `relationship-projection` | `8.01 ms +- 0.03` | `8.05 ms +- 0.05` | `2.60 ms +- 0.02` |
+| `relationship_stats` | `relationship-aggregate` | `1.98 ms +- 0.03` | `1.87 ms +- 0.02` | `0.91 ms +- 0.01` |
 
 ## Medium schema dataset
 
 Runs: `3`
 
 Controls:
-- iterations: `5000`
-- warmup: `100`
+- iterations: `2000`
+- warmup: `50`
 - batch size: `5000`
 - schemas: `json`, `typed`, `typeaware`
 
+Dataset:
+- node types: `6`
+- edge types: `8`
+- nodes per type: `100,000`
+- edges per source: `4`
+- multi-hop length: `5`
+- total nodes: `600,000`
+- total edges: `3,200,000`
+- node properties per node: `text=2`, `numeric=10`, `boolean=2`
+- edge properties per edge: `text=2`, `numeric=6`, `boolean=1`
+
 Files:
-- `schema-medium-r01-20260422T092742Z.json`
-- `schema-medium-r02-20260422T092742Z.json`
-- `schema-medium-r03-20260422T092742Z.json`
+- `schema-medium-r01-20260422T212723Z.json`
+- `schema-medium-r02-20260422T212723Z.json`
+- `schema-medium-r03-20260422T212723Z.json`
 
 ### Setup summary
 
 | Schema | Connect | DDL | Ingest | Index | Analyze | RSS Connect | RSS DDL | RSS Ingest | RSS Index | RSS Analyze | Size | Pooled Mean | Pooled p50 | Pooled p95 | Pooled p99 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| generic JSON | `35.19 ms +- 0.03` | `12.02 ms +- 5.08` | `1859.88 ms +- 5.12` | `320.38 ms +- 0.28` | `46.40 ms +- 0.44` | `54.02 MiB +- 0.10` | `54.05 MiB +- 0.10` | `59.35 MiB +- 0.11` | `61.28 MiB +- 0.11` | `61.28 MiB +- 0.11` | `55.39 MiB +- 0.00` | `10.54 ms +- 0.29` | `0.66 ms +- 0.00` | `41.48 ms +- 1.30` | `49.90 ms +- 1.64` |
-| typed-property | `42.79 ms +- 13.64` | `22.33 ms +- 10.93` | `4374.14 ms +- 82.68` | `1963.62 ms +- 18.18` | `458.34 ms +- 1.08` | `62.48 MiB +- 1.83` | `62.51 MiB +- 1.83` | `68.39 MiB +- 0.60` | `69.31 MiB +- 0.16` | `69.31 MiB +- 0.16` | `174.40 MiB +- 0.00` | `14.30 ms +- 0.01` | `5.03 ms +- 0.00` | `50.56 ms +- 0.02` | `60.72 ms +- 0.03` |
-| type-aware | `30.48 ms +- 5.30` | `13.09 ms +- 5.24` | `950.11 ms +- 7.00` | `158.70 ms +- 3.19` | `32.31 ms +- 0.16` | `65.38 MiB +- 2.24` | `65.42 MiB +- 2.24` | `65.61 MiB +- 1.97` | `65.81 MiB +- 1.63` | `65.81 MiB +- 1.63` | `33.00 MiB +- 0.00` | `3.97 ms +- 0.00` | `0.24 ms +- 0.01` | `14.80 ms +- 0.02` | `17.30 ms +- 0.03` |
+| generic JSON | `53.91 ms +- 9.98` | `31.58 ms +- 6.33` | `34964.09 ms +- 89.64` | `7374.50 ms +- 92.22` | `949.19 ms +- 5.09` | `54.27 MiB +- 0.11` | `54.31 MiB +- 0.11` | `61.90 MiB +- 0.12` | `63.61 MiB +- 0.12` | `63.61 MiB +- 0.12` | `1160.55 MiB +- 0.00` | `224.45 ms +- 0.11` | `0.69 ms +- 0.00` | `902.38 ms +- 0.42` | `1086.15 ms +- 0.50` |
+| typed-property | `45.04 ms +- 0.45` | `15.42 ms +- 5.06` | `98632.86 ms +- 912.78` | `54035.21 ms +- 593.08` | `9174.89 ms +- 205.46` | `69.72 MiB +- 0.09` | `69.75 MiB +- 0.09` | `77.84 MiB +- 0.75` | `77.84 MiB +- 0.75` | `77.84 MiB +- 0.75` | `3614.01 MiB +- 0.00` | `320.07 ms +- 0.24` | `100.40 ms +- 0.11` | `1146.60 ms +- 0.99` | `1376.04 ms +- 1.24` |
+| type-aware | `38.29 ms +- 4.05` | `15.17 ms +- 5.18` | `18683.28 ms +- 184.06` | `4026.89 ms +- 243.36` | `679.83 ms +- 14.04` | `78.10 MiB +- 1.68` | `78.13 MiB +- 1.68` | `79.28 MiB +- 1.57` | `79.28 MiB +- 1.57` | `79.28 MiB +- 1.57` | `670.94 MiB +- 0.00` | `91.65 ms +- 0.25` | `0.26 ms +- 0.00` | `349.07 ms +- 0.93` | `408.58 ms +- 1.07` |
 
 ### Query mean summary
 
@@ -133,15 +155,15 @@ Files:
 | --- | --- | ---: | ---: | ---: |
 | `one_hop_neighbors` | `adjacency-read` | `0.01 ms +- 0.00` | `0.01 ms +- 0.00` | `0.01 ms +- 0.00` |
 | `point_lookup` | `point-read` | `0.00 ms +- 0.00` | `0.00 ms +- 0.00` | `0.00 ms +- 0.00` |
-| `top_active_score` | `ordered-top-k` | `0.02 ms +- 0.00` | `8.91 ms +- 0.01` | `0.01 ms +- 0.00` |
+| `top_active_score` | `ordered-top-k` | `0.02 ms +- 0.00` | `199.53 ms +- 0.24` | `0.01 ms +- 0.00` |
 
 #### OLAP-leaning query mean
 
 | Query | Category | generic JSON | typed-property | type-aware |
 | --- | --- | ---: | ---: | ---: |
-| `multi_hop_chain` | `multi-hop-read` | `1.30 ms +- 0.00` | `1.16 ms +- 0.00` | `0.47 ms +- 0.02` |
-| `relationship_projection` | `relationship-projection` | `52.01 ms +- 1.73` | `63.25 ms +- 0.03` | `17.93 ms +- 0.03` |
-| `relationship_stats` | `relationship-aggregate` | `9.89 ms +- 0.02` | `12.49 ms +- 0.05` | `5.42 ms +- 0.03` |
+| `multi_hop_chain` | `multi-hop-read` | `1.37 ms +- 0.00` | `1.27 ms +- 0.01` | `0.50 ms +- 0.00` |
+| `relationship_projection` | `relationship-projection` | `1132.09 ms +- 0.52` | `1433.40 ms +- 1.30` | `423.46 ms +- 1.10` |
+| `relationship_stats` | `relationship-aggregate` | `213.23 ms +- 0.20` | `286.20 ms +- 0.22` | `125.89 ms +- 0.44` |
 
 ### Query p50 summary
 
@@ -152,15 +174,15 @@ Files:
 | --- | --- | ---: | ---: | ---: |
 | `one_hop_neighbors` | `adjacency-read` | `0.01 ms +- 0.00` | `0.01 ms +- 0.00` | `0.01 ms +- 0.00` |
 | `point_lookup` | `point-read` | `0.00 ms +- 0.00` | `0.00 ms +- 0.00` | `0.00 ms +- 0.00` |
-| `top_active_score` | `ordered-top-k` | `0.02 ms +- 0.00` | `8.89 ms +- 0.01` | `0.01 ms +- 0.00` |
+| `top_active_score` | `ordered-top-k` | `0.02 ms +- 0.00` | `199.23 ms +- 0.35` | `0.01 ms +- 0.00` |
 
 #### OLAP-leaning query p50
 
 | Query | Category | generic JSON | typed-property | type-aware |
 | --- | --- | ---: | ---: | ---: |
-| `multi_hop_chain` | `multi-hop-read` | `1.30 ms +- 0.00` | `1.16 ms +- 0.00` | `0.47 ms +- 0.02` |
-| `relationship_projection` | `relationship-projection` | `51.97 ms +- 1.72` | `63.20 ms +- 0.02` | `17.93 ms +- 0.02` |
-| `relationship_stats` | `relationship-aggregate` | `9.87 ms +- 0.02` | `12.47 ms +- 0.05` | `5.42 ms +- 0.03` |
+| `multi_hop_chain` | `multi-hop-read` | `1.37 ms +- 0.00` | `1.27 ms +- 0.01` | `0.50 ms +- 0.00` |
+| `relationship_projection` | `relationship-projection` | `1131.72 ms +- 0.62` | `1432.90 ms +- 1.02` | `423.32 ms +- 1.10` |
+| `relationship_stats` | `relationship-aggregate` | `213.12 ms +- 0.23` | `285.90 ms +- 0.17` | `125.83 ms +- 0.45` |
 
 ### Query p95 summary
 
@@ -171,15 +193,15 @@ Files:
 | --- | --- | ---: | ---: | ---: |
 | `one_hop_neighbors` | `adjacency-read` | `0.01 ms +- 0.00` | `0.01 ms +- 0.00` | `0.01 ms +- 0.00` |
 | `point_lookup` | `point-read` | `0.00 ms +- 0.00` | `0.00 ms +- 0.00` | `0.00 ms +- 0.00` |
-| `top_active_score` | `ordered-top-k` | `0.02 ms +- 0.00` | `9.01 ms +- 0.01` | `0.01 ms +- 0.00` |
+| `top_active_score` | `ordered-top-k` | `0.02 ms +- 0.00` | `201.91 ms +- 0.72` | `0.01 ms +- 0.00` |
 
 #### OLAP-leaning query p95
 
 | Query | Category | generic JSON | typed-property | type-aware |
 | --- | --- | ---: | ---: | ---: |
-| `multi_hop_chain` | `multi-hop-read` | `1.34 ms +- 0.02` | `1.18 ms +- 0.01` | `0.47 ms +- 0.02` |
-| `relationship_projection` | `relationship-projection` | `52.43 ms +- 1.71` | `63.77 ms +- 0.08` | `18.33 ms +- 0.03` |
-| `relationship_stats` | `relationship-aggregate` | `10.05 ms +- 0.01` | `12.55 ms +- 0.06` | `5.47 ms +- 0.03` |
+| `multi_hop_chain` | `multi-hop-read` | `1.39 ms +- 0.00` | `1.28 ms +- 0.01` | `0.51 ms +- 0.01` |
+| `relationship_projection` | `relationship-projection` | `1138.44 ms +- 0.55` | `1440.30 ms +- 2.42` | `427.31 ms +- 1.63` |
+| `relationship_stats` | `relationship-aggregate` | `214.49 ms +- 0.09` | `288.06 ms +- 0.46` | `126.79 ms +- 0.43` |
 
 ### Query p99 summary
 
@@ -188,14 +210,14 @@ Files:
 
 | Query | Category | generic JSON | typed-property | type-aware |
 | --- | --- | ---: | ---: | ---: |
-| `one_hop_neighbors` | `adjacency-read` | `0.01 ms +- 0.00` | `0.01 ms +- 0.00` | `0.01 ms +- 0.00` |
-| `point_lookup` | `point-read` | `0.00 ms +- 0.00` | `0.00 ms +- 0.00` | `0.00 ms +- 0.00` |
-| `top_active_score` | `ordered-top-k` | `0.02 ms +- 0.00` | `9.23 ms +- 0.05` | `0.01 ms +- 0.00` |
+| `one_hop_neighbors` | `adjacency-read` | `0.02 ms +- 0.00` | `0.01 ms +- 0.00` | `0.01 ms +- 0.00` |
+| `point_lookup` | `point-read` | `0.01 ms +- 0.00` | `0.01 ms +- 0.00` | `0.00 ms +- 0.00` |
+| `top_active_score` | `ordered-top-k` | `0.03 ms +- 0.00` | `203.55 ms +- 0.43` | `0.01 ms +- 0.00` |
 
 #### OLAP-leaning query p99
 
 | Query | Category | generic JSON | typed-property | type-aware |
 | --- | --- | ---: | ---: | ---: |
-| `multi_hop_chain` | `multi-hop-read` | `1.51 ms +- 0.04` | `1.19 ms +- 0.01` | `0.48 ms +- 0.02` |
-| `relationship_projection` | `relationship-projection` | `52.92 ms +- 1.82` | `64.54 ms +- 0.23` | `18.55 ms +- 0.03` |
-| `relationship_stats` | `relationship-aggregate` | `10.30 ms +- 0.02` | `12.89 ms +- 0.28` | `5.51 ms +- 0.04` |
+| `multi_hop_chain` | `multi-hop-read` | `1.43 ms +- 0.05` | `1.29 ms +- 0.02` | `0.54 ms +- 0.03` |
+| `relationship_projection` | `relationship-projection` | `1142.47 ms +- 0.52` | `1444.75 ms +- 2.17` | `429.96 ms +- 1.34` |
+| `relationship_stats` | `relationship-aggregate` | `216.58 ms +- 0.34` | `291.78 ms +- 0.97` | `127.90 ms +- 0.47` |

@@ -77,15 +77,6 @@ From the repo root:
 python -m scripts.benchmarks.schema.sqlite_shapes
 ```
 
-Useful overrides:
-
-```bash
-python -m scripts.benchmarks.schema.sqlite_shapes --iterations 10 --warmup 2
-python -m scripts.benchmarks.schema.sqlite_shapes --schema typeaware
-python -m scripts.benchmarks.schema.sqlite_shapes --node-type-count 12 --edge-type-count 12 --nodes-per-type 2000 --edges-per-source 6 --multi-hop-length 6
-python -m scripts.benchmarks.schema.sqlite_shapes --output scripts/benchmarks/results/schema/local-sqlite-schema-shape-benchmark.json
-```
-
 By default, the schema benchmark runs all three layouts: `json`, `typed`, and
 `typeaware`. Use repeated `--schema` flags only when you want to restrict the
 comparison to a subset.
@@ -110,13 +101,12 @@ The schema matrix runner uses three named presets:
 
 - `small`: `4` node types, `4` edge types, `1000` nodes per node type, `3`
   outgoing edges per source
-- `medium`: `6` node types, `8` edge types, `5000` nodes per node type, `4`
+- `medium`: `6` node types, `8` edge types, `100000` nodes per node type, `4`
   outgoing edges per source
-- `large`: `10` node types, `10` edge types, `100000` nodes per node type, `4`
+- `large`: `10` node types, `10` edge types, `1000000` nodes per node type, `8`
   outgoing edges per source
 
-These presets now follow the same small/medium/large progression style as the
-runtime matrix, while staying capped at tractable schema-benchmark sizes.
+These presets now match the runtime matrix dataset sizes directly.
 
 Suggested repeated-run commands with explicit methodology:
 
@@ -134,8 +124,8 @@ python -m scripts.benchmarks.schema.matrix \
   --scale medium \
   --workers 3 \
   --repeats 3 \
-  --iterations 5000 \
-  --warmup 100
+  --iterations 2000 \
+  --warmup 50
 ```
 
 ```bash
@@ -143,24 +133,16 @@ python -m scripts.benchmarks.schema.matrix \
   --scale large \
   --workers 3 \
   --repeats 3 \
-  --iterations 1000 \
-  --warmup 20
+  --iterations 500 \
+  --warmup 10
 ```
 
 These commands intentionally leave out `--schema`, so each run compares all
-three layouts. They also leave the preset batch size unchanged. Small and
-medium are intentionally sampled more heavily here because their runs are short
-enough that extra per-query measurements materially reduce noise at low cost.
-
-Examples:
-
-```bash
-python -m scripts.benchmarks.schema.matrix --scale small --repeats 5 --workers 2
-python -m scripts.benchmarks.schema.matrix --scale medium --repeats 3 --workers 2 --no-shuffle
-python -m scripts.benchmarks.schema.matrix --scale large --repeats 2 --workers 1
-python -m scripts.benchmarks.schema.matrix --scale small --schema typeaware --repeats 5 --workers 1
-python -m scripts.benchmarks.schema.matrix --scale small --repeats 3 --workers 2 --dry-run
-```
+three layouts. They also leave the preset batch size unchanged. Small is still
+sampled most heavily; medium and large now trade some inner-loop sampling for
+lower wall-clock cost while keeping `repeats=3`. The recommended worker count
+also drops with scale to reduce machine-level contention during the heaviest
+ingest and query phases.
 
 ### Schema result summarizer
 
@@ -180,21 +162,17 @@ The repeated-run summary now reports mean/std across runs for:
 - pooled execute `mean`, `p50`, `p95`, and `p99`
 - per-query `mean`, `p50`, `p95`, and `p99`
 
+Each grouped Markdown section also prints the dataset shape for that benchmark
+configuration, including the node/edge type counts, nodes per type, edges per
+source, multi-hop length, total node/edge counts, and per-entity property
+counts.
+
 The query sections are also split into lightweight workload groupings using the
 existing schema query set:
 
 - OLTP-leaning: point reads, ordered top-k, and one-hop adjacency reads
 - OLAP-leaning: multi-hop traversal, relationship aggregate, and relationship
   projection queries
-
-Examples:
-
-```bash
-python -m scripts.benchmarks.schema.summarize_results
-python -m scripts.benchmarks.schema.summarize_results --no-queries
-python -m scripts.benchmarks.schema.summarize_results scripts/benchmarks/results/schema --output scripts/benchmarks/results/schema-summary.md
-python -m scripts.benchmarks.schema.summarize_results scripts/benchmarks/results/schema/schema-small-r*.json
-```
 
 ### Schema output and baseline
 
@@ -302,15 +280,6 @@ From the repo root:
 python -m scripts.benchmarks.compiler.benchmark
 ```
 
-Useful overrides:
-
-```bash
-python -m scripts.benchmarks.compiler.benchmark --iterations 10000 --warmup 200
-python -m scripts.benchmarks.compiler.benchmark --output scripts/benchmarks/results/local-compiler-benchmark.json
-python -m scripts.benchmarks.compiler.benchmark --sqlglot-mode both
-python -m scripts.benchmarks.compiler.benchmark --sqlglot-mode off
-```
-
 The default compiler run uses:
 
 - `10000` measured iterations per query and entrypoint
@@ -349,26 +318,26 @@ Shared compiler entrypoint summary from the current checked-in run:
 
 | Entrypoint | p50 | p95 | p99 |
 | --- | ---: | ---: | ---: |
-| `parse_cypher_text(...)` | `0.54 ms` | `0.86 ms` | `0.92 ms` |
-| `validate_cypher_text(...)` | `0.64 ms` | `0.97 ms` | `1.03 ms` |
-| `normalize_cypher_text(...)` | `0.69 ms` | `1.12 ms` | `1.15 ms` |
+| `parse_cypher_text(...)` | `0.55 ms` | `0.91 ms` | `0.95 ms` |
+| `validate_cypher_text(...)` | `0.64 ms` | `1.00 ms` | `1.05 ms` |
+| `normalize_cypher_text(...)` | `0.71 ms` | `1.15 ms` | `1.26 ms` |
 
 Backend-dependent public entrypoint summary from the same run:
 
 | Entrypoint | SQLite p50 | DuckDB p50 | PostgreSQL p50 | SQLite p95 | DuckDB p95 | PostgreSQL p95 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `to_sqlglot_ast(...)` | `0.92 ms` | `0.92 ms` | `0.92 ms` | `1.26 ms` | `1.25 ms` | `1.25 ms` |
-| `to_sql(...)` | `1.07 ms` | `1.06 ms` | `1.06 ms` | `1.37 ms` | `1.41 ms` | `1.37 ms` |
-| `to_sqlglot_program(...)` | `0.83 ms` | `0.83 ms` | `0.83 ms` | `1.25 ms` | `1.24 ms` | `1.25 ms` |
-| `render_cypher_program_text(...)` | `0.94 ms` | `0.93 ms` | `0.94 ms` | `1.37 ms` | `1.40 ms` | `1.37 ms` |
+| `to_sqlglot_ast(...)` | `0.96 ms` | `0.94 ms` | `0.93 ms` | `1.28 ms` | `1.26 ms` | `1.26 ms` |
+| `to_sql(...)` | `1.08 ms` | `1.07 ms` | `1.07 ms` | `1.39 ms` | `1.41 ms` | `1.38 ms` |
+| `to_sqlglot_program(...)` | `0.83 ms` | `0.83 ms` | `0.83 ms` | `1.25 ms` | `1.24 ms` | `1.24 ms` |
+| `render_cypher_program_text(...)` | `0.95 ms` | `0.94 ms` | `0.94 ms` | `1.38 ms` | `1.40 ms` | `1.37 ms` |
 
 Backend pipeline summary from the same run:
 
 | Backend | IR build p50 | Bind p50 | Lower p50 | Render p50 | End-to-end p50 | End-to-end p95 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| SQLite | `2.83 us` | `0.37 us` | `63.10 us` | `64.84 us` | `0.94 ms` | `1.40 ms` |
-| DuckDB | `2.83 us` | `0.37 us` | `63.53 us` | `63.82 us` | `0.94 ms` | `1.41 ms` |
-| PostgreSQL | `2.84 us` | `0.37 us` | `63.53 us` | `63.97 us` | `0.94 ms` | `1.38 ms` |
+| SQLite | `2.87 us` | `0.37 us` | `63.85 us` | `64.14 us` | `0.95 ms` | `1.41 ms` |
+| DuckDB | `2.89 us` | `0.37 us` | `64.20 us` | `63.69 us` | `0.94 ms` | `1.40 ms` |
+| PostgreSQL | `2.86 us` | `0.37 us` | `63.69 us` | `63.91 us` | `0.95 ms` | `1.38 ms` |
 
 The key current result changed after the render-path update and the SQLGlot
 `30.6.0` rerun: the compiler benchmark no longer shows a DuckDB-specific render
@@ -379,13 +348,13 @@ PostgreSQL.
 What the current compiler run shows:
 
 - DuckDB is no longer materially behind in the compiler-only path.
-- `to_sql(...)` now lands at about `1.06 ms` p50 for DuckDB, versus about
-  `1.07 ms` for SQLite and about `1.06 ms` for PostgreSQL.
-- `render_cypher_program_text(...)` now lands at about `0.93 ms` p50 for
-  DuckDB, versus about `0.94 ms` for SQLite and about `0.94 ms` for
+- `to_sql(...)` now lands at about `1.07 ms` p50 for DuckDB, versus about
+  `1.08 ms` for SQLite and about `1.07 ms` for PostgreSQL.
+- `render_cypher_program_text(...)` now lands at about `0.94 ms` p50 for
+  DuckDB, versus about `0.95 ms` for SQLite and about `0.94 ms` for
   PostgreSQL.
 - The backend-lowering table shows the same convergence below the public API:
-  DuckDB `render_program` p50 is now about `63.82 us`, essentially aligned
+  DuckDB `render_program` p50 is now about `63.69 us`, essentially aligned
   with SQLite and PostgreSQL.
 - This means the old compiler-only DuckDB gap was largely in render-path setup
   behavior, not in IR build, backend binding, or backend lowering.
@@ -409,14 +378,14 @@ SQLGlot PostgreSQL-to-SQLite comparison summary from the same run:
 
 | Implementation | Method | Queries | p50 | p95 | p99 |
 | --- | --- | ---: | ---: | ---: | ---: |
-| compiled (`sqlglotc`, `30.6.0`) | `tokenize(...)` | 22 | `12.25 us` | `26.52 us` | `31.81 us` |
-| compiled (`sqlglotc`, `30.6.0`) | `parse_one(...)` | 22 | `33.96 us` | `80.22 us` | `89.95 us` |
-| compiled (`sqlglotc`, `30.6.0`) | `parse_one(...).sql(...)` | 22 | `95.30 us` | `221.62 us` | `253.84 us` |
-| compiled (`sqlglotc`, `30.6.0`) | `transpile(...)` | 22 | `59.49 us` | `135.14 us` | `145.68 us` |
-| pure Python (`30.6.0`) | `tokenize(...)` | 22 | `45.17 us` | `122.74 us` | `154.93 us` |
-| pure Python (`30.6.0`) | `parse_one(...)` | 22 | `116.54 us` | `292.89 us` | `348.93 us` |
-| pure Python (`30.6.0`) | `parse_one(...).sql(...)` | 22 | `211.40 us` | `514.02 us` | `621.79 us` |
-| pure Python (`30.6.0`) | `transpile(...)` | 22 | `163.92 us` | `394.22 us` | `470.24 us` |
+| compiled (`sqlglotc`, `30.6.0`) | `tokenize(...)` | 22 | `12.16 us` | `26.40 us` | `31.44 us` |
+| compiled (`sqlglotc`, `30.6.0`) | `parse_one(...)` | 22 | `34.26 us` | `80.43 us` | `91.24 us` |
+| compiled (`sqlglotc`, `30.6.0`) | `parse_one(...).sql(...)` | 22 | `95.29 us` | `224.52 us` | `255.07 us` |
+| compiled (`sqlglotc`, `30.6.0`) | `transpile(...)` | 22 | `59.14 us` | `135.50 us` | `147.21 us` |
+| pure Python (`30.6.0`) | `tokenize(...)` | 22 | `45.28 us` | `116.72 us` | `148.39 us` |
+| pure Python (`30.6.0`) | `parse_one(...)` | 22 | `116.76 us` | `292.52 us` | `346.94 us` |
+| pure Python (`30.6.0`) | `parse_one(...).sql(...)` | 22 | `210.71 us` | `520.06 us` | `620.75 us` |
+| pure Python (`30.6.0`) | `transpile(...)` | 22 | `160.77 us` | `397.67 us` | `463.10 us` |
 
 Compiled SQLGlot is still clearly faster than the pure-Python build, but the
 current compiler baseline no longer shows a DuckDB-specific render bottleneck
@@ -487,10 +456,10 @@ python -m scripts.benchmarks.runtime.matrix \
   --scale medium \
   --workers 3 \
   --repeats 3 \
-  --oltp-iterations 10000 \
-  --oltp-warmup 200 \
-  --olap-iterations 150 \
-  --olap-warmup 10 \
+  --oltp-iterations 5000 \
+  --oltp-warmup 100 \
+  --olap-iterations 75 \
+  --olap-warmup 5 \
   --neo4j-password cypherglot1
 ```
 
@@ -499,22 +468,18 @@ python -m scripts.benchmarks.runtime.matrix \
   --scale large \
   --workers 3 \
   --repeats 3 \
-  --oltp-iterations 5000 \
-  --oltp-warmup 100 \
-  --olap-iterations 20 \
-  --olap-warmup 3 \
+  --oltp-iterations 1500 \
+  --oltp-warmup 25 \
+  --olap-iterations 10 \
+  --olap-warmup 1 \
   --neo4j-password cypherglot1
 ```
 
-Useful overrides:
-
-```bash
-python -m scripts.benchmarks.runtime.matrix --scale small --workers 10 --repeats 1 --dry-run --neo4j-password cypherglot1
-python -m scripts.benchmarks.runtime.matrix --scale medium --workers 3 --repeats 5 --shuffle-seed 7 --neo4j-password cypherglot1
-python -m scripts.benchmarks.runtime.matrix --scale large --workers 2 --repeats 2 --arcadedb-jvm-args '-Xmx48g' --neo4j-password cypherglot1
-python -m scripts.benchmarks.runtime.matrix --scale small --variant sqlite-indexed --variant sqlite-unindexed --workers 2 --repeats 10
-python -m scripts.benchmarks.runtime.matrix --scale small --workers 3 --repeats 3 --no-iteration-progress --neo4j-password cypherglot1
-```
+For runtime runs, keep `repeats=3` across all scales and scale down worker
+parallelism plus per-run inner-loop sampling as datasets grow. That preserves a
+reviewer-friendly repeated-run methodology while avoiding heavy contention
+between large jobs, especially for Neo4j containers and the larger embedded
+database runs.
 
 Per-iteration progress output from the underlying benchmark scripts is enabled
 by default. Use `--no-iteration-progress` when you want quieter worker logs.
@@ -542,15 +507,6 @@ It also aggregates suite setup timings such as `connect_ms`, `schema_ms`,
 those fields exist for the grouped backend. Per-query end-to-end percentile
 tables are now included by default; use `--no-queries` if you want only the
 suite-level tables.
-
-Examples:
-
-```bash
-python -m scripts.benchmarks.runtime.summarize_results
-python -m scripts.benchmarks.runtime.summarize_results --no-queries
-python -m scripts.benchmarks.runtime.summarize_results scripts/benchmarks/results/runtime --output scripts/benchmarks/results/runtime-summary.md
-python -m scripts.benchmarks.runtime.summarize_results scripts/benchmarks/results/runtime/sqlite-indexed-medium-r01-*.json
-```
 
 ### Small runtime dataset
 
