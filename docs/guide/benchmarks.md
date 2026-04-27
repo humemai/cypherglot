@@ -277,7 +277,7 @@ SQL-backed output directly.
 From the repo root:
 
 ```bash
-python -m scripts.benchmarks.compiler.benchmark
+python -m scripts.benchmarks.compiler.benchmark --iterations 10000 --warmup 200
 ```
 
 The default compiler run uses:
@@ -458,8 +458,8 @@ python -m scripts.benchmarks.runtime.matrix \
   --repeats 3 \
   --oltp-iterations 5000 \
   --oltp-warmup 100 \
-  --olap-iterations 75 \
-  --olap-warmup 5 \
+  --olap-iterations 10 \
+  --olap-warmup 1 \
   --neo4j-password cypherglot1
 ```
 

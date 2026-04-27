@@ -142,8 +142,8 @@ ORDER BY u.name
 LIMIT 1
 ```
 
-The generated SQLGlot AST for the current product path is still a `Select`
-expression, but it now hangs off ordinary typed table and column references
+The generated SQLGlot AST for the product path is a `Select`
+expression that hangs off ordinary typed table and column references
 instead of generic property blobs. The exact aliasing and quoting details come
 from the active schema context and backend renderer; the important contract is
 that admitted reads lower through generated `cg_node_*` / `cg_edge_*` tables
@@ -187,8 +187,8 @@ The distinction matters:
 That is why `to_sql(...)` rejects these shapes. A multi-step write cannot be
 represented honestly as one flat SQL string without losing structure.
 
-For this example, the generated program still contains one loop with one source
-query and a small body of write statements. On the intended type-aware path,
+For this example, the generated program contains one loop with one source
+query and a small body of write statements. On the type-aware path,
 the useful mental model is:
 
 1. read matched `x.id` rows from the generated `Begin` node table
@@ -201,7 +201,7 @@ The exact SQLGlot AST node spelling depends on the active schema context, but
 the public contract is the step structure: `to_sqlglot_program(...)` preserves
 the multi-step program shape, while `render_cypher_program_text(...)` renders
 each step separately. It is not a promise that admitted writes flatten into one
-SQL string or route through the legacy generic table family.
+SQL string.
 
 ## Walkthrough: vector-aware normalization handoff
 

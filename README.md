@@ -16,6 +16,10 @@ It takes Neo4j-like Cypher, enforces an explicit admitted subset, normalizes the
 accepted shape, and lowers it into SQLGlot-backed output that another runtime can
 plan and execute.
 
+The compatibility target is Neo4j-valid first: admitted queries should ideally
+be valid on Neo4j unchanged, while other Cypher runtimes such as ArcadeDB and
+Ladybug may still require small compatibility rewrites around that same subset.
+
 ```text
 raw Cypher string
 → parse
@@ -41,27 +45,23 @@ CypherGlot is intentionally compiler-only.
 
 ## Current backend direction
 
-Phase 12 changes the compiler architecture target on purpose: equal
-multi-dialect SQL support now comes first, and the compiler is moving away from
-`Cypher AST -> mostly SQLite-oriented SQLGlot AST -> dialect tweaks` toward a
-backend-neutral IR plus backend-aware lowering path.
+CypherGlot targets equal multi-dialect SQL support through a backend-neutral IR
+plus backend-aware lowering.
 
 - the intended compiler path is now `Cypher AST -> normalize ->
   graph-relational IR -> backend-aware lowering -> SQLGlot AST/program -> SQL`
-- SQLite-through-IR is the first landed executable milestone, not the long-term
-  hidden shape of the whole compiler
+- SQLite has an executable lowering path through the shared IR
 - DuckDB now has an explicit lowering path from the same shared architecture;
-  parity work is still in progress and support claims remain strict
-- PostgreSQL is a planned first-class backend from the same IR path rather than
-  a renderer-only afterthought
+  support claims remain strict
+- PostgreSQL is part of the same IR-based backend path
 - `dialect=...` rendering support remains useful for string output experiments
   and host integration work, but rendering alone is still not a portability
   guarantee
 - a backend counts as supported only when admitted Cypher shapes execute
   correctly against that backend's schema and runtime contract
 
-HumemDB remains the main reference host runtime for the current SQLite-backed
-execution contract while the broader multi-dialect pass is in flight.
+HumemDB is the main reference host runtime for the current SQLite-backed
+execution contract.
 
 ## Graph-to-table schema contract
 
@@ -69,10 +69,9 @@ CypherGlot’s output is schema-aware. If you want to execute its compiled SQL,
 your runtime needs to provide the graph-to-table layout that the compiler
 expects.
 
-The repo is moving from the legacy generic graph layout toward a
-generated type-aware schema contract.
+CypherGlot uses a generated type-aware schema contract.
 
-The long-term target contract is:
+The target contract is:
 
 - one table per node type
 - one table per edge type
@@ -123,8 +122,8 @@ CREATE INDEX idx_cg_edge_works_at_from_to ON cg_edge_works_at(from_id, to_id);
 CREATE INDEX idx_cg_edge_works_at_to_from ON cg_edge_works_at(to_id, from_id);
 ```
 
-The generic `nodes` / `edges` / `node_labels` layout should now be treated as
-legacy compatibility rather than the intended long-term backend contract.
+CypherGlot's schema contract is the generated type-aware layout rather than a
+generic `nodes` / `edges` / `node_labels` family.
 
 See the dedicated guide for the full schema contract, column semantics, and
 indexing notes:
@@ -133,10 +132,15 @@ indexing notes:
 
 ## ✅ Current status
 
-The current target is a practical mainstream single-hop, read-heavy subset for
+CypherGlot targets a practical mainstream single-hop, read-heavy subset for
 Neo4j-style onboarding, not full Cypher parity.
 
-Today the public surface already covers:
+Neo4j is the reference Cypher engine for this admitted surface.
+CypherGlot's SQL backends execute that subset through compilation, while direct
+Cypher runtimes outside Neo4j may still need light query adaptation in a few
+compatibility-path cases.
+
+The public surface covers:
 
 - parsing through the vendored openCypher grammar
 - admitted-subset validation
@@ -145,7 +149,7 @@ Today the public surface already covers:
 - compilation of admitted multi-step write shapes into a small SQL-backed program
 - thin SQL rendering helpers over the compiled output
 
-The most useful admitted families today are:
+The most useful admitted families are:
 
 - `MATCH ... RETURN`
 - narrow standalone `OPTIONAL MATCH ... RETURN`

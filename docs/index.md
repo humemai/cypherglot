@@ -17,7 +17,7 @@ raw Cypher string
 The repository is intentionally compiler-focused.
 
 - It parses and lowers Neo4j-like Cypher.
-- It currently targets a practical mainstream single-hop read-heavy subset,
+- It targets a practical mainstream single-hop read-heavy subset,
   not full Cypher parity.
 - It returns SQLGlot AST or SQL-backed compiled programs instead of owning SQL
     execution.
@@ -31,15 +31,12 @@ The repository is intentionally compiler-focused.
 
 ## Current backend direction
 
-CypherGlot is moving away from a mostly SQLite-shaped compiler pipeline toward
-backend-neutral IR plus backend-aware lowering.
+CypherGlot uses a backend-neutral IR plus backend-aware lowering.
 
-- SQLite-through-IR is the first landed executable milestone, not the hidden
-    long-term shape for every backend.
+- SQLite has an executable lowering path through the shared IR.
 - DuckDB already has an explicit lowering path from the same shared
     architecture for admitted analytical reads.
-- PostgreSQL is part of the same source-first backend path rather than a
-    renderer-only dialect afterthought.
+- PostgreSQL is part of the same source-first backend path.
 - SQLGlot dialect rendering remains useful as an output helper, but rendering
     alone is not the support boundary.
 - A backend counts as supported only when admitted Cypher shapes execute

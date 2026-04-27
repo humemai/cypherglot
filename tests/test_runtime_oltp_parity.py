@@ -92,6 +92,20 @@ OLTP_MUTATION_VERIFICATIONS = {
             ),
         ),
     ),
+    "oltp_merge_cross_type_edge": (
+        (
+            "verify_merge_cross_type_edge",
+            (
+                "MATCH (a:%node_type_1% {name: '%node_type_1_name_1%'})"
+                "-[r:%edge_type_2%]->"
+                "(b:%node_type_2% {name: '%node_type_2_name_1%'}) "
+                "WHERE r.note = 'merge-note' "
+                "RETURN a.name AS source_name, b.name AS target_name, "
+                "r.weight AS weight, r.score AS score, r.active AS active, "
+                "r.rank AS rank ORDER BY source_name, target_name"
+            ),
+        ),
+    ),
     "oltp_delete_type1_edge": (
         (
             "verify_delete_type1_edge",
@@ -141,6 +155,7 @@ OLTP_MUTATION_VERIFICATIONS = {
 DEFAULT_OLTP_MUTATION_SMOKE_QUERIES = (
     "oltp_update_type1_score",
     "oltp_create_type1_node",
+    "oltp_merge_cross_type_edge",
     "oltp_delete_type1_edge",
     "oltp_program_create_and_link",
 )
@@ -468,6 +483,7 @@ class RuntimeOltpParityTests(unittest.TestCase):
             self._render_query(name, text) for name, text in verification_specs
         ]
 
+        self._ensure_neo4j_ready()
         _parity_progress(f"{query_name}: opening backend matrix")
         matrix = self._open_mutation_matrix()
         try:
@@ -479,6 +495,18 @@ class RuntimeOltpParityTests(unittest.TestCase):
             self._execute_sql_mutation(
                 matrix["postgresql_indexed"],
                 mutation_query,
+            )
+            _parity_progress(f"{query_name}: applying neo4j/indexed mutation")
+            neo4j_indexed_results = self._run_neo4j_mutation_and_verify(
+                mutation_query,
+                verification_queries,
+                index_mode="indexed",
+            )
+            _parity_progress(f"{query_name}: applying neo4j/unindexed mutation")
+            neo4j_unindexed_results = self._run_neo4j_mutation_and_verify(
+                mutation_query,
+                verification_queries,
+                index_mode="unindexed",
             )
 
             for verification_query in verification_queries:
@@ -512,6 +540,14 @@ class RuntimeOltpParityTests(unittest.TestCase):
                                 matrix["postgresql_indexed"],
                                 verification_query,
                             )[1],
+                        ),
+                        "neo4j_indexed": self._require_cached_read_result(
+                            neo4j_indexed_results,
+                            verification_query.name,
+                        ),
+                        "neo4j_unindexed": self._require_cached_read_result(
+                            neo4j_unindexed_results,
+                            verification_query.name,
                         ),
                     }
 

@@ -11,6 +11,9 @@ breadth alone.
 
 For mainstream onboarding, the current surface is best described as a strong
 single-hop, read-heavy Neo4j-style subset rather than full Cypher parity.
+Neo4j is the practical reference engine for this admitted surface: queries in
+the subset should ideally be valid there unchanged, while other Cypher runtimes
+may require small compatibility rewrites around the same core shapes.
 That includes:
 
 - ordinary `MATCH ... RETURN` reads over one connected pattern
@@ -36,6 +39,9 @@ That includes:
 That is the current 80%-style onboarding target: a practical mainstream subset
 for paste-in read queries that stay within simple connected patterns and narrow
 projection flows. It is not a claim of broad graph-semantic compatibility.
+It is also not a claim that every runtime in the benchmark matrix accepts the
+exact same raw query text unchanged; Neo4j anchors the subset, and some other
+engines may need light adaptation at execution time.
 
 ## Read subset
 
