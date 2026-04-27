@@ -8,7 +8,7 @@ CypherGlot exposes a small compiler-focused API:
 - define the graph schema in graph-native terms when needed
 - compile admitted queries into SQLGlot-backed output
 
-The current target is a practical mainstream single-hop, read-heavy subset, not
+CypherGlot targets a practical mainstream single-hop, read-heavy subset, not
 full Cypher parity.
 
 ## Parse and validate

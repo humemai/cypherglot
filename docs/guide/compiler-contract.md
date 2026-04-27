@@ -21,7 +21,7 @@ That means:
 - a host runtime such as `humemdb` owns planning, vector execution, dialect
   generation, and backend execution
 
-Today that contract is already live for the admitted subset: parse, validate,
+That contract is live for the admitted subset: parse, validate,
 normalize, and compile are repo-owned boundaries, while execution remains outside
 CypherGlot.
 
@@ -30,20 +30,17 @@ in the [Schema Contract](schema-contract.md) guide.
 
 ## Current backend stance
 
-CypherGlot returns SQLGlot-backed output, but Phase 12 changes the intended
-compiler architecture from a mostly SQLite-shaped lowering path into an
-explicit multi-backend compiler pipeline.
+CypherGlot returns SQLGlot-backed output through an explicit multi-backend
+compiler pipeline.
 
-In practice that means:
+That means:
 
 - the compiler now targets `Cypher AST -> normalize -> graph-relational IR ->
   backend-aware lowering -> SQLGlot-backed output`
-- SQLite-through-IR is the first landed executable milestone, not the intended
-  permanent hidden default for every backend
+- SQLite has an executable lowering path through the shared IR
 - DuckDB now has an explicit lowerer from the same shared IR path; parity work
   is still in progress and support claims remain strict
-- PostgreSQL is planned as another first-class lowerer from the same IR path,
-  not as a renderer-only dialect tweak
+- PostgreSQL is another first-class lowerer from the same IR path
 - HumemDB is the main reference runtime for execution
 - host runtimes should treat the current graph-to-table schema contract as part
   of the execution boundary, not as an incidental implementation detail
@@ -76,7 +73,7 @@ structure and carry vector intent forward as metadata or compiler-recognizable
 structure. A host runtime should then turn that into vector search plus a
 conditioned relational query path.
 
-Today that handoff shape is the normalized
+That handoff shape is the normalized
 `NormalizedQueryNodesVectorSearch` contract, which carries:
 
 - `procedure_kind='queryNodes'`
@@ -107,13 +104,13 @@ CypherGlot exposes two related output contracts:
 The admitted language boundary is documented in the
 [Admitted Subset](admitted-subset.md) guide.
 
-Today that also includes a narrow vector-aware normalization path for
+That also includes a narrow vector-aware normalization path for
 `CALL db.index.vector.queryNodes(...) YIELD node, score ...` queries. Those
 queries are validated and normalized so host runtimes can consume their vector
 intent, but they are not yet compiled into SQLGlot-backed output directly.
 
 For ordinary non-vector aggregation, the current admitted aggregate contract is
-still intentionally narrow compared with full Cypher, but it now includes the
+intentionally narrow compared with full Cypher, but it includes the
 practical grouped families that matter for mainstream onboarding:
 
 - `count(binding_alias)`

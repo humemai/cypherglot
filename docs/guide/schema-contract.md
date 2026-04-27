@@ -6,14 +6,10 @@ that assumes one concrete graph-to-table layout.
 If a host runtime wants to execute CypherGlot output directly, it should expose
 this physical contract or a compatibility layer that behaves the same way.
 
-## Migration status
+## Physical contract
 
-CypherGlot is moving away from the legacy generic `nodes` / `edges` /
-`node_labels` compatibility contract and toward a generated type-aware schema.
-
-The compiler is not fully switched yet, but this guide now describes the target
-contract the repo is migrating toward. The generic compatibility layout should
-be treated as legacy behavior rather than the intended long-term backend.
+CypherGlot lowers admitted Cypher against a generated type-aware schema rather
+than a generic `nodes` / `edges` / `node_labels` layout.
 
 ## Target physical layout
 
@@ -83,7 +79,7 @@ resolve to the appropriate typed table directly.
 The physical schema is fixed and relational, but Cypher return values can still
 be shaped in different ways.
 
-CypherGlot's long-term type-aware target is strict relational SQL output:
+CypherGlot's type-aware target is strict relational SQL output:
 
 - emitted SQL should return plain scalar values and typed columns
 - whole entities should expand into stable dotted columns such as `user.id` and
@@ -91,9 +87,8 @@ CypherGlot's long-term type-aware target is strict relational SQL output:
 - SQL should not rely on dialect-specific object or list constructors for the
   target path
 
-The current object-shaped compatibility mode exists only as transitional
-behavior while the compiler migration is still in flight. It is not the
-intended long-term contract for broad SQL-dialect support via SQLGlot.
+Object-shaped compatibility output is a compatibility mode. The portable SQL
+contract is the strict relational path described here.
 
 This distinction matters because the storage schema can be fully fixed and
 type-aware while some return helpers still try to package values back into one
@@ -101,9 +96,9 @@ structured SQL value. For the portable target path, that packaging should happen
 outside emitted SQL or be rejected when it cannot be represented as ordinary
 columns.
 
-## How CypherGlot should use the target schema
+## How CypherGlot uses the target schema
 
-The migrated compiler should assume these access patterns:
+CypherGlot uses these access patterns:
 
 - node scans read from the node table selected by the node type
 - relationship scans read from the edge table selected by the relationship type

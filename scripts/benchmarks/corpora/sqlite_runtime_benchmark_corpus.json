@@ -27,6 +27,33 @@
     "query": "MATCH (a:%node_type_1% {name: '%node_type_1_name_2%'})-[:%edge_type_2%]->(b:%node_type_2%) RETURN b.name AS target_name, b.score AS target_score ORDER BY target_score DESC LIMIT 25"
   },
   {
+    "name": "oltp_optional_type1_lookup",
+    "workload": "oltp",
+    "category": "read-optional",
+    "backends": ["sqlite", "duckdb", "postgresql"],
+    "mode": "statement",
+    "mutation": false,
+    "query": "OPTIONAL MATCH (n:%node_type_1%) WHERE n.name = '%node_type_1_name_1%' RETURN n.name AS name ORDER BY name LIMIT 1"
+  },
+  {
+    "name": "oltp_optional_missing_type1_lookup",
+    "workload": "oltp",
+    "category": "read-optional-null",
+    "backends": ["sqlite", "duckdb", "postgresql"],
+    "mode": "statement",
+    "mutation": false,
+    "query": "OPTIONAL MATCH (n:%node_type_1%) WHERE n.name = '%created_type_1_name%' RETURN n.name AS name ORDER BY name LIMIT 1"
+  },
+  {
+    "name": "oltp_unwind_literal_top2",
+    "workload": "oltp",
+    "category": "unwind",
+    "backends": ["sqlite", "duckdb", "postgresql"],
+    "mode": "statement",
+    "mutation": false,
+    "query": "UNWIND [1, 2, 3] AS x RETURN x AS value ORDER BY value DESC LIMIT 2"
+  },
+  {
     "name": "oltp_update_type1_score",
     "workload": "oltp",
     "category": "update-node",
@@ -52,6 +79,15 @@
     "mode": "statement",
     "mutation": true,
     "query": "MATCH (a:%node_type_1% {name: '%node_type_1_name_1%'}), (b:%node_type_2% {name: '%node_type_2_name_1%'}) CREATE (a)-[:%edge_type_2% {note: 'bench-note', weight: 1.5, score: 2.0, active: true, rank: 7}]->(b)"
+  },
+  {
+    "name": "oltp_merge_cross_type_edge",
+    "workload": "oltp",
+    "category": "merge-edge",
+    "backends": ["sqlite", "duckdb", "postgresql"],
+    "mode": "statement",
+    "mutation": true,
+    "query": "MATCH (a:%node_type_1% {name: '%node_type_1_name_1%'}), (b:%node_type_2% {name: '%node_type_2_name_1%'}) MERGE (a)-[:%edge_type_2% {note: 'merge-note', weight: 1.25, score: 2.5, active: true, rank: 9}]->(b)"
   },
   {
     "name": "oltp_delete_type1_edge",
@@ -108,6 +144,15 @@
     "query": "MATCH (n:%node_type_1%) RETURN n.active AS active, count(*) AS total, avg(n.score) AS avg_score, max(n.age) AS max_age ORDER BY active"
   },
   {
+    "name": "olap_optional_type1_aggregate",
+    "workload": "olap",
+    "category": "optional-aggregation",
+    "backends": ["sqlite", "duckdb", "postgresql"],
+    "mode": "statement",
+    "mutation": false,
+    "query": "OPTIONAL MATCH (n:%node_type_1%) RETURN n.active AS active, count(*) AS total, max(n.score) AS max_score ORDER BY active"
+  },
+  {
     "name": "olap_cross_type_edge_rollup",
     "workload": "olap",
     "category": "join-aggregation",
@@ -153,6 +198,15 @@
     "query": "MATCH (a:%node_type_1%)-[:%edge_type_2%]->(b:%node_type_2%)-[:%edge_type_3%]->(c:%node_type_3%) RETURN a.name AS source_name, b.name AS middle_name, c.name AS sink_name ORDER BY source_name, middle_name, sink_name LIMIT 50"
   },
   {
+    "name": "olap_fixed_length_path_with_rebinding",
+    "workload": "olap",
+    "category": "multi-hop-with",
+    "backends": ["sqlite", "duckdb", "postgresql"],
+    "mode": "statement",
+    "mutation": false,
+    "query": "MATCH (a:%node_type_1%)-[:%edge_type_2%]->(b:%node_type_2%)-[:%edge_type_3%]->(c:%node_type_3%) WITH a.name AS source_name, c.score AS sink_score WHERE sink_score >= 2.0 RETURN source_name, round(sink_score) AS rounded_score ORDER BY rounded_score DESC, source_name ASC LIMIT 50"
+  },
+  {
     "name": "olap_graph_introspection_rollup",
     "workload": "olap",
     "category": "introspection",
@@ -171,6 +225,33 @@
     "query": "MATCH (n:%node_type_1%) WITH n.name AS name, n.score AS score, n.active AS active RETURN active, count(*) AS total, avg(score) AS avg_score, min(name) AS first_name ORDER BY total DESC, active"
   },
   {
+    "name": "olap_with_where_lower_projection",
+    "workload": "olap",
+    "category": "with-filter",
+    "backends": ["sqlite", "duckdb", "postgresql"],
+    "mode": "statement",
+    "mutation": false,
+    "query": "MATCH (n:%node_type_1%) WITH n.name AS name, n.score AS score WHERE score >= 2.0 RETURN lower(name) AS lower_name, score AS score ORDER BY score DESC, lower_name ASC LIMIT 50"
+  },
+  {
+    "name": "olap_with_size_predicate_projection",
+    "workload": "olap",
+    "category": "with-predicate",
+    "backends": ["sqlite", "duckdb", "postgresql"],
+    "mode": "statement",
+    "mutation": false,
+    "query": "MATCH (n:%node_type_1%) WITH n.name AS name, n.score AS score WHERE size(name) >= 3 RETURN name, score >= 2.0 AS high_score ORDER BY high_score DESC, name ASC LIMIT 50"
+  },
+  {
+    "name": "olap_relationship_function_projection",
+    "workload": "olap",
+    "category": "join-functions",
+    "backends": ["sqlite", "duckdb", "postgresql"],
+    "mode": "statement",
+    "mutation": false,
+    "query": "MATCH (a:%node_type_1%)-[r:%edge_type_2%]->(b:%node_type_2%) RETURN lower(r.note) AS note_text, round(r.score) AS rounded_score, toBoolean(r.active) AS edge_active ORDER BY rounded_score DESC, note_text ASC LIMIT 25"
+  },
+  {
     "name": "olap_variable_length_grouped_rollup",
     "workload": "olap",
     "category": "variable-length-grouped",
@@ -178,5 +259,14 @@
     "mode": "statement",
     "mutation": false,
     "query": "MATCH (a:%node_type_1%)-[:%edge_type_1%*0..%grouped_rollup_variable_hop_max%]->(b:%node_type_1%) RETURN b.active AS active, count(b) AS total, avg(b.score) AS avg_score ORDER BY total DESC, active"
+  },
+  {
+    "name": "olap_variable_length_grouped_max_rollup",
+    "workload": "olap",
+    "category": "variable-length-grouped-max",
+    "backends": ["sqlite", "duckdb", "postgresql"],
+    "mode": "statement",
+    "mutation": false,
+    "query": "MATCH (a:%node_type_1% {name: '%node_type_1_name_1%'})-[:%edge_type_1%*0..%grouped_rollup_variable_hop_max%]->(b:%node_type_1%) RETURN b.active AS active, count(*) AS total, max(b.score) AS max_score ORDER BY total DESC, active"
   }
 ]

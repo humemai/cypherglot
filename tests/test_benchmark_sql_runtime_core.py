@@ -241,14 +241,14 @@ class BenchmarkSQLRuntimeCoreTests(unittest.TestCase):
 
         queries = load_corpus(CORPUS_PATH)
 
-        self.assertEqual(len(queries), 20)
+        self.assertEqual(len(queries), 30)
         self.assertEqual(
             len([query for query in queries if query.workload == "oltp"]),
-            10,
+            14,
         )
         self.assertEqual(
             len([query for query in queries if query.workload == "olap"]),
-            10,
+            16,
         )
         self.assertTrue(all(query.backends for query in queries))
         self.assertEqual(benchmark_sql_runtime_core.RuntimeScale().total_nodes, 100_000)

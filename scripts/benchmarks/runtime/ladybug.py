@@ -16,6 +16,7 @@ import csv
 import gc
 import json
 import platform
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -261,7 +262,16 @@ def _rewrite_ladybug_query(
             "'EdgeType02' AS rel_type, a.id AS start_id, b.id AS end_id",
             1,
         )
-    return query.query
+    statement = re.sub(
+        r"\bround\s*\(\s*([^(),]+?)\s*\)",
+        r"round(\1, 0)",
+        query.query,
+    )
+    return re.sub(
+        r"\btoBoolean\s*\(\s*([^()]+?)\s*\)",
+        r"\1",
+        statement,
+    )
 
 
 def _prepare_ladybug_fixture(
