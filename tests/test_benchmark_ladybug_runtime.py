@@ -96,6 +96,29 @@ class BenchmarkLadybugRuntimeScriptTests(unittest.TestCase):
         self.assertEqual(payload["database_versions"], {"ladybug": "0.15.3"})
         self.assertEqual(payload["index_mode"], "unindexed")
 
+    def test_open_ladybug_sets_explicit_max_db_size(self) -> None:
+        open_ladybug = getattr(benchmark_ladybug_runtime, "_open_ladybug")
+        database = object()
+        connection = object()
+
+        with mock.patch.object(
+            benchmark_ladybug_runtime.ladybug,
+            "Database",
+            return_value=database,
+        ) as database_ctor, mock.patch.object(
+            benchmark_ladybug_runtime.ladybug,
+            "Connection",
+            return_value=connection,
+        ) as connection_ctor:
+            result = open_ladybug(Path("/tmp/runtime.lbug"))
+
+        self.assertEqual(result, (database, connection))
+        database_ctor.assert_called_once_with(
+            "/tmp/runtime.lbug",
+            max_db_size=benchmark_ladybug_runtime.LADYBUG_MAX_DB_SIZE_BYTES,
+        )
+        connection_ctor.assert_called_once_with(database)
+
     def test_run_query_once_sets_native_ladybug_query_timeout(self) -> None:
         run_query_once = getattr(benchmark_ladybug_runtime, "_run_query_once")
         query = benchmark_ladybug_runtime.CorpusQuery(
