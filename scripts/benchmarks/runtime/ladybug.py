@@ -71,6 +71,7 @@ DEFAULT_RUNTIME_RESULTS_DIR = (
 )
 DEFAULT_OUTPUT_PATH = DEFAULT_RUNTIME_RESULTS_DIR / "ladybug_runtime_benchmark.json"
 LADYBUG_INDEX_MODE = "unindexed"
+LADYBUG_MAX_DB_SIZE_BYTES = 1 << 43
 RuntimeProgressCallback = Callable[[dict[str, object], int], None]
 
 
@@ -110,7 +111,10 @@ def _open_ladybug(db_path: Path) -> tuple[Any, Any]:
         raise ValueError(
             "ladybug is not installed. Install it with `uv pip install ladybug`."
         )
-    database = ladybug.Database(str(db_path))
+    database = ladybug.Database(
+        str(db_path),
+        max_db_size=LADYBUG_MAX_DB_SIZE_BYTES,
+    )
     connection = ladybug.Connection(database)
     return database, connection
 
