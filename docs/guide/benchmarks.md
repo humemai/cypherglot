@@ -461,9 +461,9 @@ python -m scripts.benchmarks.runtime.matrix \
   --scale small \
   --workers 6 \
   --repeats 3 \
-  --oltp-iterations 20000 \
+  --oltp-iterations 10000 \
   --oltp-warmup 200 \
-  --oltp-timeout-ms 1000 \
+  --oltp-timeout-ms 200 \
   --olap-iterations 500 \
   --olap-warmup 20 \
   --olap-timeout-ms 10000 \
@@ -479,10 +479,10 @@ python -m scripts.benchmarks.runtime.matrix \
   --repeats 3 \
   --oltp-iterations 5000 \
   --oltp-warmup 100 \
-  --oltp-timeout-ms 1000 \
-  --olap-iterations 75 \
-  --olap-warmup 5 \
-  --olap-timeout-ms 10000 \
+  --oltp-timeout-ms 500 \
+  --olap-iterations 100 \
+  --olap-warmup 10 \
+  --olap-timeout-ms 100000 \
   --neo4j-password cypherglot1
 ```
 
@@ -493,12 +493,12 @@ python -m scripts.benchmarks.runtime.matrix \
   --scale large \
   --workers 6 \
   --repeats 3 \
-  --oltp-iterations 1500 \
-  --oltp-warmup 25 \
+  --oltp-iterations 2000 \
+  --oltp-warmup 20 \
   --oltp-timeout-ms 1000 \
   --olap-iterations 50 \
-  --olap-warmup 3 \
-  --olap-timeout-ms 20000 \
+  --olap-warmup 5 \
+  --olap-timeout-ms 200000 \
   --neo4j-password cypherglot1
 ```
 
