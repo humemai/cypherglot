@@ -5,6 +5,8 @@ import json
 import sys
 import tempfile
 import unittest
+import csv
+from types import SimpleNamespace
 from pathlib import Path
 from unittest import mock
 
@@ -64,6 +66,107 @@ class BenchmarkLadybugRuntimeScriptTests(unittest.TestCase):
         self.assertEqual(
             copy_column_names(["from_id", "to_id", "rank", "active"]),
             ["from", "to", "rank", "active"],
+        )
+
+    def test_rewrite_fixture_edge_csv_chunks_splits_large_edge_csv(self) -> None:
+        rewrite_chunks = getattr(
+            benchmark_ladybug_runtime,
+            "_rewrite_fixture_edge_csv_chunks",
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            source_path = temp_path / "cg_edge_edgetype01.csv"
+            with source_path.open("w", encoding="utf-8", newline="") as handle:
+                writer = csv.DictWriter(
+                    handle,
+                    fieldnames=["id", "from_id", "to_id", "rank"],
+                )
+                writer.writeheader()
+                writer.writerows(
+                    [
+                        {"id": "1", "from_id": "10", "to_id": "20", "rank": "1"},
+                        {"id": "2", "from_id": "11", "to_id": "21", "rank": "2"},
+                        {"id": "3", "from_id": "12", "to_id": "22", "rank": "3"},
+                    ]
+                )
+
+            fixture = mock.Mock(
+                table_csv_paths={"cg_edge_edgetype01": source_path},
+            )
+
+            chunk_paths = rewrite_chunks(
+                fixture,
+                table_name="cg_edge_edgetype01",
+                output_dir=temp_path,
+                chunk_rows=2,
+            )
+
+            self.assertEqual(
+                [path.name for path in chunk_paths],
+                [
+                    "cg_edge_edgetype01-chunk-0000.csv",
+                    "cg_edge_edgetype01-chunk-0001.csv",
+                ],
+            )
+            first_chunk = list(csv.DictReader(chunk_paths[0].open(encoding="utf-8")))
+            second_chunk = list(csv.DictReader(chunk_paths[1].open(encoding="utf-8")))
+            self.assertEqual(first_chunk, [
+                {"from": "10", "to": "20", "rank": "1"},
+                {"from": "11", "to": "21", "rank": "2"},
+            ])
+            self.assertEqual(second_chunk, [
+                {"from": "12", "to": "22", "rank": "3"},
+            ])
+
+    def test_seed_ladybug_from_fixture_imports_edges_in_chunks_with_parallel_disabled(self) -> None:
+        seed_fixture = getattr(
+            benchmark_ladybug_runtime,
+            "_seed_ladybug_from_fixture",
+        )
+
+        connection = mock.Mock()
+        sqlite_source = mock.Mock(
+            table_csv_paths={"cg_node_nodetype01": Path("/tmp/nodes.csv")},
+            row_counts={"node_count": 1, "edge_count": 2},
+        )
+        graph_schema = mock.Mock(
+            node_types=[
+                SimpleNamespace(table_name="cg_node_nodetype01", name="NodeType01")
+            ],
+            edge_types=[
+                SimpleNamespace(table_name="cg_edge_edgetype01", name="EdgeType01")
+            ],
+        )
+
+        with mock.patch.object(
+            benchmark_ladybug_runtime,
+            "_rewrite_fixture_edge_csv_chunks",
+            return_value=[
+                Path("/tmp/cg_edge_edgetype01-chunk-0000.csv"),
+                Path("/tmp/cg_edge_edgetype01-chunk-0001.csv"),
+            ],
+        ) as rewrite_chunks:
+            result = seed_fixture(
+                connection,
+                sqlite_source=sqlite_source,
+                graph_schema=graph_schema,
+                output_dir=Path("/tmp"),
+            )
+
+        self.assertEqual(result, {"node_count": 1, "edge_count": 2})
+        rewrite_chunks.assert_called_once_with(
+            sqlite_source,
+            table_name="cg_edge_edgetype01",
+            output_dir=Path("/tmp"),
+        )
+        self.assertEqual(
+            [call.args[0] for call in connection.execute.call_args_list],
+            [
+                'COPY NodeType01 FROM "/tmp/nodes.csv" (header=true, parallel=false)',
+                'COPY EdgeType01 FROM "/tmp/cg_edge_edgetype01-chunk-0000.csv" (header=true, parallel=false)',
+                'COPY EdgeType01 FROM "/tmp/cg_edge_edgetype01-chunk-0001.csv" (header=true, parallel=false)',
+            ],
         )
 
     def test_build_payload_includes_database_versions(self) -> None:

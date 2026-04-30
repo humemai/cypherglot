@@ -71,6 +71,7 @@ DEFAULT_RUNTIME_RESULTS_DIR = (
 )
 DEFAULT_OUTPUT_PATH = DEFAULT_RUNTIME_RESULTS_DIR / "ladybug_runtime_benchmark.json"
 LADYBUG_INDEX_MODE = "unindexed"
+LADYBUG_EDGE_COPY_CHUNK_ROWS = 250_000
 LADYBUG_MAX_DB_SIZE_BYTES = 1 << 43
 RuntimeProgressCallback = Callable[[dict[str, object], int], None]
 
@@ -163,28 +164,50 @@ def _create_ladybug_schema(
         conn.execute(f"CREATE REL TABLE {edge_type.name}({', '.join(columns)})")
 
 
-def _rewrite_fixture_edge_csv(
+def _rewrite_fixture_edge_csv_chunks(
     fixture: GeneratedGraphFixture,
     *,
     table_name: str,
-    csv_path: Path,
-) -> None:
-    with csv_path.open("w", encoding="utf-8", newline="") as handle:
-        with fixture.table_csv_paths[table_name].open(
-            "r",
-            encoding="utf-8",
-            newline="",
-        ) as source_handle:
-            reader = csv.DictReader(source_handle)
-            fieldnames = [
-                fieldname
-                for fieldname in reader.fieldnames or []
-                if fieldname != "id"
-            ]
-            output_header = _ladybug_copy_column_names(fieldnames)
-            writer = csv.DictWriter(handle, fieldnames=output_header)
-            writer.writeheader()
+    output_dir: Path,
+    chunk_rows: int = LADYBUG_EDGE_COPY_CHUNK_ROWS,
+) -> list[Path]:
+    chunk_paths: list[Path] = []
+
+    with fixture.table_csv_paths[table_name].open(
+        "r",
+        encoding="utf-8",
+        newline="",
+    ) as source_handle:
+        reader = csv.DictReader(source_handle)
+        fieldnames = [
+            fieldname
+            for fieldname in reader.fieldnames or []
+            if fieldname != "id"
+        ]
+        output_header = _ladybug_copy_column_names(fieldnames)
+
+        chunk_index = 0
+        rows_in_chunk = 0
+        handle: Any | None = None
+        writer: csv.DictWriter[str] | None = None
+
+        def open_chunk() -> tuple[Any, csv.DictWriter[str], Path]:
+            chunk_path = output_dir / f"{table_name}-chunk-{chunk_index:04d}.csv"
+            chunk_handle = chunk_path.open("w", encoding="utf-8", newline="")
+            chunk_writer = csv.DictWriter(chunk_handle, fieldnames=output_header)
+            chunk_writer.writeheader()
+            return chunk_handle, chunk_writer, chunk_path
+
+        try:
             for row in reader:
+                if writer is None or rows_in_chunk >= chunk_rows:
+                    if handle is not None:
+                        handle.close()
+                    handle, writer, chunk_path = open_chunk()
+                    chunk_paths.append(chunk_path)
+                    chunk_index += 1
+                    rows_in_chunk = 0
+
                 writer.writerow(
                     {
                         output_name: row[input_name]
@@ -195,6 +218,12 @@ def _rewrite_fixture_edge_csv(
                         )
                     }
                 )
+                rows_in_chunk += 1
+        finally:
+            if handle is not None:
+                handle.close()
+
+    return chunk_paths
 
 
 def _ladybug_copy_column_names(column_names: list[str]) -> list[str]:
@@ -218,17 +247,23 @@ def _seed_ladybug_from_fixture(
     for node_type in graph_schema.node_types:
         table_name = node_type.table_name
         csv_path = sqlite_source.table_csv_paths[table_name]
-        conn.execute(f'COPY {node_type.name} FROM "{csv_path}" (header=true)')
+        conn.execute(
+            f'COPY {node_type.name} FROM "{csv_path}" '
+            '(header=true, parallel=false)'
+        )
 
     for edge_type in graph_schema.edge_types:
         table_name = edge_type.table_name
-        csv_path = output_dir / f"{table_name}.csv"
-        _rewrite_fixture_edge_csv(
+        csv_paths = _rewrite_fixture_edge_csv_chunks(
             sqlite_source,
             table_name=table_name,
-            csv_path=csv_path,
+            output_dir=output_dir,
         )
-        conn.execute(f'COPY {edge_type.name} FROM "{csv_path}" (header=true)')
+        for csv_path in csv_paths:
+            conn.execute(
+                f'COPY {edge_type.name} FROM "{csv_path}" '
+                '(header=true, parallel=false)'
+            )
 
     return dict(sqlite_source.row_counts)
 
