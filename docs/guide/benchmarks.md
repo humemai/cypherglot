@@ -429,57 +429,92 @@ Each queued job writes:
 The queue is shuffled by default. Use `--shuffle-seed` for a deterministic
 order or `--no-shuffle` to preserve the declared variant order.
 
+Use repeated `--variant` flags when you want to run only a subset of the
+matrix. The available variant names are the same ones returned by
+`python -m scripts.benchmarks.runtime.matrix --list-variants`.
+
+The current runtime matrix variants are:
+
+- `sqlite-indexed`
+- `sqlite-unindexed`
+- `duckdb-unindexed`
+- `postgresql-indexed`
+- `postgresql-unindexed`
+- `neo4j-indexed`
+- `neo4j-unindexed`
+- `arcadedb-indexed`
+- `arcadedb-unindexed`
+- `ladybug-unindexed`
+
 ArcadeDB heap defaults now follow the scale preset automatically:
 
 - `small`: `ARCADEDB_JVM_ARGS='-Xmx4g'`
-- `medium`: `ARCADEDB_JVM_ARGS='-Xmx8g'`
+- `medium`: `ARCADEDB_JVM_ARGS='-Xmx16g'`
 - `large`: `ARCADEDB_JVM_ARGS='-Xmx32g'`
 
 Override that default for a given run with `--arcadedb-jvm-args`.
 
-Example full-matrix run:
+Recommended `small` run:
 
 ```bash
 python -m scripts.benchmarks.runtime.matrix \
   --scale small \
-  --workers 3 \
+  --workers 6 \
   --repeats 3 \
   --oltp-iterations 20000 \
   --oltp-warmup 200 \
+  --oltp-timeout-ms 1000 \
   --olap-iterations 500 \
   --olap-warmup 20 \
+  --olap-timeout-ms 10000 \
   --neo4j-password cypherglot1
 ```
+
+Recommended `medium` run:
 
 ```bash
 python -m scripts.benchmarks.runtime.matrix \
   --scale medium \
-  --workers 3 \
+  --workers 6 \
   --repeats 3 \
   --oltp-iterations 5000 \
   --oltp-warmup 100 \
-  --olap-iterations 10 \
-  --olap-warmup 1 \
+  --oltp-timeout-ms 1000 \
+  --olap-iterations 75 \
+  --olap-warmup 5 \
+  --olap-timeout-ms 10000 \
   --neo4j-password cypherglot1
 ```
+
+Recommended `large` run:
 
 ```bash
 python -m scripts.benchmarks.runtime.matrix \
   --scale large \
-  --workers 3 \
+  --workers 6 \
   --repeats 3 \
   --oltp-iterations 1500 \
   --oltp-warmup 25 \
-  --olap-iterations 10 \
-  --olap-warmup 1 \
+  --oltp-timeout-ms 1000 \
+  --olap-iterations 50 \
+  --olap-warmup 3 \
+  --olap-timeout-ms 20000 \
   --neo4j-password cypherglot1
 ```
 
 For runtime runs, keep `repeats=3` across all scales and scale down worker
-parallelism plus per-run inner-loop sampling as datasets grow. That preserves a
-reviewer-friendly repeated-run methodology while avoiding heavy contention
-between large jobs, especially for Neo4j containers and the larger embedded
-database runs.
+parallelism plus per-run inner-loop sampling as datasets grow, but not so far
+that medium and large OLAP suites become too noisy. The current recommended
+methodology is to run the full ten-variant matrix at each scale:
+`sqlite-indexed`, `sqlite-unindexed`, `duckdb-unindexed`,
+`postgresql-indexed`, `postgresql-unindexed`, `neo4j-indexed`,
+`neo4j-unindexed`, `arcadedb-indexed`, `arcadedb-unindexed`, and
+`ladybug-unindexed`. The commands above now rely on the matrix runner's default
+behavior, which is to queue all ten variants unless you explicitly narrow the
+run with repeated `--variant` flags. They also pin the current runtime
+guardrails explicitly: hard query timeouts of `1000 ms` for OLTP and
+`20000 ms` for OLAP. The timeout limits are the emergency brake for queries
+that stop making progress.
 
 Per-iteration progress output from the underlying benchmark scripts is enabled
 by default. Use `--no-iteration-progress` when you want quieter worker logs.

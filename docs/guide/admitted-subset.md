@@ -36,12 +36,13 @@ That includes:
 - optional final-`RETURN` aliases for common admitted introspection,
   aggregate, unary computed, and narrow multi-argument computed outputs
 
-That is the current 80%-style onboarding target: a practical mainstream subset
-for paste-in read queries that stay within simple connected patterns and narrow
-projection flows. It is not a claim of broad graph-semantic compatibility.
-It is also not a claim that every runtime in the benchmark matrix accepts the
-exact same raw query text unchanged; Neo4j anchors the subset, and some other
-engines may need light adaptation at execution time.
+That is the current strong onboarding/read-heavy target: a practical mainstream
+subset for paste-in read queries that stay within simple connected patterns and
+narrow projection flows, plus the narrow write and bounded traversal families
+documented below. It is not a claim of broad Neo4j parity or of coverage for
+most Neo4j users overall. It is also not a claim that every runtime in the
+benchmark matrix accepts the exact same raw query text unchanged; Neo4j anchors
+the subset, and some other engines may need light adaptation at execution time.
 
 ## Read subset
 

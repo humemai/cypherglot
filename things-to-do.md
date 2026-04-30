@@ -20,10 +20,12 @@ It should not:
 Its main product is a single `Expression` tree for single-statement shapes, or a
 small compiled program of SQLGlot statements for multi-step writes.
 
-Current estimate: roughly 25% to 30% of practical Cypher usage overall, or
+Current estimate: roughly 45% to 55% of practical Cypher usage overall, with
+materially stronger coverage for onboarding-style, read-heavy Neo4j query
+workloads.
 
-Near-term target: reach roughly 50% practical coverage before pushing for a much
-broader 80% claim.
+Near-term target: harden and document that strong onboarding/read-heavy subset
+for `v0.1.0` before pushing for materially broader Cypher parity claims.
 
 - [x] Add narrow `substring(...)` support for ordinary single-node/relationship
       reads, narrow `OPTIONAL MATCH`, and final `WITH ... RETURN` projections,

@@ -227,6 +227,37 @@ def _payload(
     }
 
 
+def _payload_with_non_passing_query(
+    *,
+    generated_at: str,
+    suite_name: str,
+) -> dict[str, object]:
+    payload = _payload(
+        generated_at=generated_at,
+        suite_name=suite_name,
+        p50=10.0,
+        p95=20.0,
+        p99=30.0,
+        query_p50=1.0,
+        query_p95=2.0,
+        query_p99=3.0,
+    )
+    payload["results"]["workloads"]["oltp"][suite_name]["queries"] = [
+        {
+            "name": "oltp_type1_point_lookup",
+            "status": "timed_out",
+            "query_timeout": {
+                "phase": "warmup",
+                "timeout_ms": 1000.0,
+                "iteration": 1,
+            },
+        }
+    ]
+    payload["results"]["workloads"]["oltp"][suite_name]["pass_count"] = 0
+    payload["results"]["workloads"]["oltp"][suite_name]["timeout_count"] = 1
+    return payload
+
+
 class SummarizeRuntimeResultsTests(unittest.TestCase):
     def test_parse_args_defaults_to_benchmark_results_runtime_dir(self) -> None:
         with patch.object(sys, "argv", ["runtime/summarize_results.py"]):
@@ -361,6 +392,32 @@ class SummarizeRuntimeResultsTests(unittest.TestCase):
         self.assertIn("##### OLTP query breakdown, end-to-end `p50`", markdown)
         self.assertIn("oltp_type1_point_lookup", markdown)
         self.assertIn("`1.00 ms +- 0.00`", markdown)
+
+    def test_render_summary_skips_non_passing_query_rows_without_metrics(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            result_path = temp_path / "sqlite-indexed-small-r01.json"
+            result_path.write_text(
+                json.dumps(
+                    _payload_with_non_passing_query(
+                        generated_at="2026-04-21T13:00:00+00:00",
+                        suite_name="sqlite_indexed",
+                    )
+                ),
+                encoding="utf-8",
+            )
+
+            discovered = discover_json_files([temp_path])
+            completed, skipped = load_completed_runs(discovered)
+            markdown = summarize_runtime_results.render_summary(
+                completed,
+                skipped=skipped,
+                include_queries=True,
+            )
+
+        self.assertIn("#### Small runtime query breakdowns", markdown)
+        self.assertIn("oltp_type1_point_lookup", markdown)
+        self.assertIn("| `oltp_type1_point_lookup` | - |", markdown)
 
     def test_render_summary_handles_empty_completed_set(self) -> None:
         markdown = summarize_runtime_results.render_summary(

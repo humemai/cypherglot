@@ -27,6 +27,8 @@ DEFAULT_SESSION_ROOT = (
     REPO_ROOT / "scripts" / "benchmarks" / "results" / "runtime-matrix"
 )
 DEFAULT_DB_ROOT = REPO_ROOT / "my_test_databases"
+DEFAULT_OLTP_TIMEOUT_MS = 1_000.0
+DEFAULT_OLAP_TIMEOUT_MS = 10_000.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -197,7 +199,7 @@ SCALE_PRESETS: dict[str, ScalePreset] = {
             ingest_batch_size=5_000,
             variable_hop_max=5,
         ),
-        arcadedb_jvm_args="-Xmx8g",
+        arcadedb_jvm_args="-Xmx16g",
     ),
     "large": ScalePreset(
         name="large",
@@ -352,6 +354,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--oltp-warmup", type=int)
     parser.add_argument("--olap-iterations", type=int)
     parser.add_argument("--olap-warmup", type=int)
+    parser.add_argument("--oltp-timeout-ms", type=float, default=DEFAULT_OLTP_TIMEOUT_MS)
+    parser.add_argument("--olap-timeout-ms", type=float, default=DEFAULT_OLAP_TIMEOUT_MS)
     parser.add_argument(
         "--variant",
         action="append",
@@ -395,7 +399,7 @@ def _parse_args() -> argparse.Namespace:
         "--arcadedb-jvm-args",
         help=(
             "Override ARCADEDB_JVM_ARGS for ArcadeDB jobs. Defaults to -Xmx4g, "
-            "-Xmx8g, or -Xmx32g for small, medium, and large respectively."
+            "-Xmx16g, or -Xmx32g for small, medium, and large respectively."
         ),
     )
     parser.add_argument("--postgres-dsn", help="Optional PostgreSQL DSN override.")
@@ -559,6 +563,9 @@ def _build_command(
     neo4j_ports: tuple[int, int] | None = None,
     neo4j_container_name: str | None = None,
 ) -> tuple[list[str], dict[str, str]]:
+    args_dict = vars(args)
+    oltp_timeout_ms = args_dict.get("oltp_timeout_ms", DEFAULT_OLTP_TIMEOUT_MS)
+    olap_timeout_ms = args_dict.get("olap_timeout_ms", DEFAULT_OLAP_TIMEOUT_MS)
     command = [
         sys.executable,
         "-m",
@@ -579,6 +586,10 @@ def _build_command(
         command.extend(["--olap-iterations", str(args.olap_iterations)])
     if args.olap_warmup is not None:
         command.extend(["--olap-warmup", str(args.olap_warmup)])
+    if oltp_timeout_ms is not None:
+        command.extend(["--oltp-timeout-ms", str(oltp_timeout_ms)])
+    if olap_timeout_ms is not None:
+        command.extend(["--olap-timeout-ms", str(olap_timeout_ms)])
     if args.iteration_progress:
         command.append("--iteration-progress")
     if job.variant.index_mode is not None:
@@ -639,6 +650,7 @@ def _initial_manifest(
     session_dir: Path,
     jobs: list[MatrixJob],
 ) -> dict[str, Any]:
+    args_dict = vars(args)
     return {
         "run_stamp": run_stamp,
         "scale": scale_preset.name,
@@ -679,6 +691,8 @@ def _initial_manifest(
         "oltp_warmup": args.oltp_warmup,
         "olap_iterations": args.olap_iterations,
         "olap_warmup": args.olap_warmup,
+        "oltp_timeout_ms": args_dict.get("oltp_timeout_ms", DEFAULT_OLTP_TIMEOUT_MS),
+        "olap_timeout_ms": args_dict.get("olap_timeout_ms", DEFAULT_OLAP_TIMEOUT_MS),
         "shuffle": not args.no_shuffle,
         "shuffle_seed": args.shuffle_seed,
         "arcadedb_jvm_args": _resolve_arcadedb_jvm_args(
@@ -772,6 +786,9 @@ def _port_is_available(port: int) -> bool:
 
 
 def _validate_args(args: argparse.Namespace, variants: list[VariantSpec]) -> None:
+    args_dict = vars(args)
+    oltp_timeout_ms = args_dict.get("oltp_timeout_ms", DEFAULT_OLTP_TIMEOUT_MS)
+    olap_timeout_ms = args_dict.get("olap_timeout_ms", DEFAULT_OLAP_TIMEOUT_MS)
     if args.workers <= 0:
         raise ValueError("--workers must be positive.")
     if args.repeats <= 0:
@@ -788,6 +805,10 @@ def _validate_args(args: argparse.Namespace, variants: list[VariantSpec]) -> Non
         raise ValueError("--olap-iterations must be positive.")
     if args.olap_warmup is not None and args.olap_warmup < 0:
         raise ValueError("--olap-warmup must be non-negative.")
+    if oltp_timeout_ms is not None and oltp_timeout_ms <= 0:
+        raise ValueError("--oltp-timeout-ms must be positive.")
+    if olap_timeout_ms is not None and olap_timeout_ms <= 0:
+        raise ValueError("--olap-timeout-ms must be positive.")
     if args.neo4j_docker_startup_timeout <= 0:
         raise ValueError("--neo4j-docker-startup-timeout must be positive.")
     if args.neo4j_port_scan_limit <= 0:

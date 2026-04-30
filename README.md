@@ -132,8 +132,8 @@ indexing notes:
 
 ## ✅ Current status
 
-CypherGlot targets a practical mainstream single-hop, read-heavy subset for
-Neo4j-style onboarding, not full Cypher parity.
+CypherGlot targets a strong onboarding-oriented, read-heavy Neo4j subset with
+narrow write flows and bounded traversal support, not broad Neo4j parity.
 
 Neo4j is the reference Cypher engine for this admitted surface.
 CypherGlot's SQL backends execute that subset through compilation, while direct

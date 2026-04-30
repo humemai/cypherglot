@@ -96,6 +96,61 @@ class BenchmarkLadybugRuntimeScriptTests(unittest.TestCase):
         self.assertEqual(payload["database_versions"], {"ladybug": "0.15.3"})
         self.assertEqual(payload["index_mode"], "unindexed")
 
+    def test_run_query_once_sets_native_ladybug_query_timeout(self) -> None:
+        run_query_once = getattr(benchmark_ladybug_runtime, "_run_query_once")
+        query = benchmark_ladybug_runtime.CorpusQuery(
+            name="oltp_type1_point_lookup",
+            workload="oltp",
+            category="read-point",
+            query="MATCH (n) RETURN n",
+            backends=("ladybug",),
+        )
+        connection = mock.MagicMock()
+        connection.execute.return_value = [object()]
+        fixture = mock.Mock(connection=connection)
+
+        with mock.patch.object(
+            benchmark_ladybug_runtime,
+            "_rewrite_ladybug_query",
+            return_value=query.query,
+        ):
+            run_query_once(
+                fixture,
+                query=query,
+                timeout_ms=2500.0,
+            )
+
+        connection.set_query_timeout.assert_called_once_with(2500)
+
+    def test_measure_query_classifies_native_ladybug_timeout(self) -> None:
+        measure_query = getattr(benchmark_ladybug_runtime, "_measure_query")
+        query = benchmark_ladybug_runtime.CorpusQuery(
+            name="olap_variable_length_grouped_rollup",
+            workload="olap",
+            category="path-rollup",
+            query="MATCH (n) RETURN n",
+            backends=("ladybug",),
+        )
+
+        with mock.patch.object(
+            benchmark_ladybug_runtime,
+            "_run_query_once",
+            side_effect=RuntimeError("query timed out"),
+        ):
+            result = measure_query(
+                mock.Mock(),
+                query=query,
+                iterations=5,
+                warmup=1,
+                progress_label="ladybug/olap",
+                iteration_progress=False,
+                timeout_ms=10000.0,
+            )
+
+        self.assertEqual(result["status"], "timed_out")
+        self.assertEqual(result["query_timeout"]["phase"], "warmup")
+        self.assertEqual(result["query_timeout"]["iteration"], 1)
+
     def test_benchmark_result_reports_incremental_progress(self) -> None:
         benchmark_result = getattr(benchmark_ladybug_runtime, "_benchmark_result")
         load_corpus = getattr(benchmark_ladybug_runtime, "_load_corpus")

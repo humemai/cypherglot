@@ -68,6 +68,16 @@ def parse_sql_runtime_args(
         help="Optional warmup iterations to run per OLAP query. Defaults to --warmup.",
     )
     parser.add_argument(
+        "--oltp-timeout-ms",
+        type=float,
+        help="Abort an OLTP warmup or measured iteration if it exceeds this timeout.",
+    )
+    parser.add_argument(
+        "--olap-timeout-ms",
+        type=float,
+        help="Abort an OLAP warmup or measured iteration if it exceeds this timeout.",
+    )
+    parser.add_argument(
         "--query-name",
         action="append",
         dest="query_names",

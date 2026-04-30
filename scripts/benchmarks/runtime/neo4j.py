@@ -690,10 +690,13 @@ def _run_query_once(
     *,
     database: str,
     query: CorpusQuery,
+    timeout_ms: float | None = None,
 ) -> dict[str, int]:
     reset_ns = 0
     with driver.session(database=database) as session:
-        transaction = session.begin_transaction()
+        transaction = session.begin_transaction(
+            timeout=(timeout_ms / 1_000.0) if timeout_ms is not None else None,
+        )
         try:
             total_started_ns = time.perf_counter_ns()
             result = transaction.run(query.query)
@@ -714,6 +717,41 @@ def _run_query_once(
     }
 
 
+def _neo4j_error_is_query_timeout(exc: Neo4jError) -> bool:
+    error_code = str(getattr(exc, "code", "") or "").lower()
+    error_message = str(exc).lower()
+    if "transactiontimedout" in error_code:
+        return True
+    if "timeout" in error_code:
+        return True
+    return "timed out" in error_message or "timeout" in error_message
+
+
+def _neo4j_timeout_result(
+    *,
+    query: CorpusQuery,
+    index_mode: str,
+    timeout_ms: float | None,
+    phase: str,
+    iteration: int,
+) -> dict[str, object]:
+    return {
+        "name": query.name,
+        "workload": query.workload,
+        "category": query.category,
+        "backend": "neo4j",
+        "index_mode": index_mode,
+        "mode": query.mode,
+        "mutation": query.mutation,
+        "status": "timed_out",
+        "query_timeout": {
+            "phase": phase,
+            "timeout_ms": timeout_ms,
+            "iteration": iteration,
+        },
+    }
+
+
 def _measure_query(
     driver: Any,
     *,
@@ -724,6 +762,7 @@ def _measure_query(
     warmup: int,
     progress_label: str,
     iteration_progress: bool,
+    timeout_ms: float | None = None,
 ) -> dict[str, object]:
     try:
         for warmup_index in range(1, warmup + 1):
@@ -734,8 +773,22 @@ def _measure_query(
                     current=warmup_index,
                     total=warmup,
                 )
-            _run_query_once(driver, database=database, query=query)
+            started_ns = time.perf_counter_ns()
+            _run_query_once(
+                driver,
+                database=database,
+                query=query,
+                timeout_ms=timeout_ms,
+            )
     except Neo4jError as exc:
+        if timeout_ms is not None and _neo4j_error_is_query_timeout(exc):
+            return _neo4j_timeout_result(
+                query=query,
+                index_mode=index_mode,
+                timeout_ms=timeout_ms,
+                phase="warmup",
+                iteration=warmup_index,
+            )
         return {
             "name": query.name,
             "workload": query.workload,
@@ -764,11 +817,24 @@ def _measure_query(
                     current=iteration_index,
                     total=iterations,
                 )
-            metrics = _run_query_once(driver, database=database, query=query)
+            metrics = _run_query_once(
+                driver,
+                database=database,
+                query=query,
+                timeout_ms=timeout_ms,
+            )
             execute_latencies.append(metrics["execute_ns"])
             end_to_end_latencies.append(metrics["end_to_end_ns"])
             reset_latencies.append(metrics["reset_ns"])
     except Neo4jError as exc:
+        if timeout_ms is not None and _neo4j_error_is_query_timeout(exc):
+            return _neo4j_timeout_result(
+                query=query,
+                index_mode=index_mode,
+                timeout_ms=timeout_ms,
+                phase="iteration",
+                iteration=len(execute_latencies) + 1,
+            )
         return {
             "name": query.name,
             "workload": query.workload,
@@ -812,6 +878,7 @@ def _run_workload_suite(
     setup: dict[str, object],
     docker_config: DockerNeo4jConfig | None,
     iteration_progress: bool,
+    timeout_ms: float | None = None,
 ) -> dict[str, object]:
     suite_name = f"{workload}/neo4j_{index_mode}"
     rss_snapshots_mib = {
@@ -839,19 +906,22 @@ def _run_workload_suite(
                 warmup=warmup,
                 progress_label=query_progress_label,
                 iteration_progress=iteration_progress,
+                timeout_ms=timeout_ms,
             )
         )
     rss_snapshots_mib["suite_complete"] = _capture_neo4j_rss_snapshot(docker_config)
     _progress(f"{suite_name}: suite complete")
 
     failures = [result for result in query_results if result["status"] == "failed"]
+    timed_out = [result for result in query_results if result["status"] == "timed_out"]
     return {
         "backend": "neo4j",
         "index_mode": index_mode,
         "iterations": iterations,
         "warmup": warmup,
         "query_count": len(queries),
-        "pass_count": len(query_results) - len(failures),
+        "pass_count": len(query_results) - len(failures) - len(timed_out),
+        "timeout_count": len(timed_out),
         "fail_count": len(failures),
         "setup": {
             "reset_ms": setup["setup_metrics"]["reset_ns"] / 1_000_000.0,
@@ -885,6 +955,8 @@ def _benchmark_result(
     index_mode: str,
     docker_config: DockerNeo4jConfig | None,
     iteration_progress: bool,
+    oltp_timeout_ms: float | None = None,
+    olap_timeout_ms: float | None = None,
     progress_callback: RuntimeProgressCallback | None = None,
 ) -> tuple[dict[str, object], int]:
     graph_schema, edge_plans = _build_graph_schema(scale)
@@ -899,6 +971,13 @@ def _benchmark_result(
     olap_warmup_value = warmup if olap_warmup is None else olap_warmup
 
     index_modes = [index_mode] if index_mode != "both" else ["indexed", "unindexed"]
+
+    def suite_kwargs(timeout_ms: float | None) -> dict[str, object]:
+        kwargs: dict[str, object] = {"iteration_progress": iteration_progress}
+        if timeout_ms is not None:
+            kwargs["timeout_ms"] = timeout_ms
+        return kwargs
+
     workloads: dict[str, object] = {}
     failure_count = 0
 
@@ -938,10 +1017,11 @@ def _benchmark_result(
                 warmup=oltp_warmup_value,
                 setup=setup,
                 docker_config=docker_config,
-                iteration_progress=iteration_progress,
+                **suite_kwargs(oltp_timeout_ms),
             )
             workloads["oltp"][f"neo4j_{mode}"] = suite
             failure_count += int(suite["fail_count"])
+            failure_count += int(suite.get("timeout_count", 0))
             if progress_callback is not None:
                 progress_callback(
                     {"workloads": workloads, "token_map": token_map},
@@ -968,10 +1048,11 @@ def _benchmark_result(
                 warmup=olap_warmup_value,
                 setup=setup,
                 docker_config=docker_config,
-                iteration_progress=iteration_progress,
+                **suite_kwargs(olap_timeout_ms),
             )
             workloads["olap"][f"neo4j_{mode}"] = suite
             failure_count += int(suite["fail_count"])
+            failure_count += int(suite.get("timeout_count", 0))
             if progress_callback is not None:
                 progress_callback(
                     {"workloads": workloads, "token_map": token_map},
@@ -1001,8 +1082,10 @@ def _build_payload(
     default_warmup: int,
     oltp_iterations: int,
     oltp_warmup: int,
+    oltp_timeout_ms: float | None = None,
     olap_iterations: int,
     olap_warmup: int,
+    olap_timeout_ms: float | None = None,
     connect_ms: float | None,
     connect_rss_mib: dict[str, float | None] | None,
     result: dict[str, object],
@@ -1078,8 +1161,10 @@ def _build_payload(
             "default_warmup": default_warmup,
             "oltp_iterations": oltp_iterations,
             "oltp_warmup": oltp_warmup,
+            "oltp_timeout_ms": oltp_timeout_ms,
             "olap_iterations": olap_iterations,
             "olap_warmup": olap_warmup,
+            "olap_timeout_ms": olap_timeout_ms,
         },
         "setup": {
             "connect_ms": connect_ms,
@@ -1119,7 +1204,8 @@ def _print_suite(name: str, suite: dict[str, object]) -> None:
     )
     print(
         "  status: "
-        f"passed={suite['pass_count']}, failed={suite['fail_count']}"
+        f"passed={suite['pass_count']}, skipped={suite.get('skip_count', 0)}, "
+        f"timed_out={suite.get('timeout_count', 0)}, failed={suite['fail_count']}"
     )
     if suite["pass_count"]:
         print(
@@ -1145,6 +1231,16 @@ def _print_suite(name: str, suite: dict[str, object]) -> None:
                 f"end_to_end_p95={query_result['end_to_end']['p95_ms']:.2f} ms"
             )
             continue
+        if query_result["status"] == "timed_out":
+            timeout = query_result["query_timeout"]
+            print(
+                "    - "
+                f"{query_result['name']} [{query_result['category']}]: "
+                "TIMED OUT "
+                f"(phase={timeout['phase']}, iteration={timeout['iteration']}, "
+                f"timeout={timeout['timeout_ms']:.2f} ms)"
+            )
+            continue
         print(
             "    - "
             f"{query_result['name']} [{query_result['category']}]: "
@@ -1167,6 +1263,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--oltp-warmup", type=int)
     parser.add_argument("--olap-iterations", type=int)
     parser.add_argument("--olap-warmup", type=int)
+    parser.add_argument("--oltp-timeout-ms", type=float)
+    parser.add_argument("--olap-timeout-ms", type=float)
     parser.add_argument(
         "--iteration-progress",
         action="store_true",
@@ -1254,6 +1352,9 @@ def _parse_args() -> argparse.Namespace:
 def main() -> int:
     args = _parse_args()
     started_at = datetime.now(UTC)
+    args_dict = vars(args)
+    oltp_timeout_ms = args_dict.get("oltp_timeout_ms", None)
+    olap_timeout_ms = args_dict.get("olap_timeout_ms", None)
     if args.iterations <= 0:
         raise ValueError("--iterations must be positive.")
     if args.warmup < 0:
@@ -1266,6 +1367,10 @@ def main() -> int:
         raise ValueError("--olap-iterations must be positive.")
     if args.olap_warmup is not None and args.olap_warmup < 0:
         raise ValueError("--olap-warmup must be non-negative.")
+    if oltp_timeout_ms is not None and oltp_timeout_ms <= 0:
+        raise ValueError("--oltp-timeout-ms must be positive.")
+    if olap_timeout_ms is not None and olap_timeout_ms <= 0:
+        raise ValueError("--olap-timeout-ms must be positive.")
     if args.node_type_count <= 0:
         raise ValueError("--node-type-count must be positive.")
     if args.edge_type_count <= 0:
@@ -1359,6 +1464,7 @@ def main() -> int:
             oltp_warmup=(
                 args.oltp_warmup if args.oltp_warmup is not None else args.warmup
             ),
+            oltp_timeout_ms=oltp_timeout_ms,
             olap_iterations=(
                 args.olap_iterations
                 if args.olap_iterations is not None
@@ -1367,6 +1473,7 @@ def main() -> int:
             olap_warmup=(
                 args.olap_warmup if args.olap_warmup is not None else args.warmup
             ),
+            olap_timeout_ms=olap_timeout_ms,
             connect_ms=connect_ms,
             connect_rss_mib=connect_rss_mib,
             result=result,
@@ -1434,6 +1541,8 @@ def main() -> int:
             scale=scale,
             index_mode=args.index_mode,
             iteration_progress=args.iteration_progress,
+            oltp_timeout_ms=oltp_timeout_ms,
+            olap_timeout_ms=olap_timeout_ms,
             progress_callback=lambda partial_result, partial_failure_count: (
                 write_checkpoint(
                     partial_result,

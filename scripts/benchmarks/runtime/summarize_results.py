@@ -394,9 +394,16 @@ def _query_metric_lists(
     )
     for suite in suites:
         for query in suite.get("queries", []):
-            metrics[query["name"]]["p50_ms"].append(query["end_to_end"]["p50_ms"])
-            metrics[query["name"]]["p95_ms"].append(query["end_to_end"]["p95_ms"])
-            metrics[query["name"]]["p99_ms"].append(query["end_to_end"]["p99_ms"])
+            query_name = query.get("name")
+            if not isinstance(query_name, str) or not query_name:
+                continue
+            query_metrics = metrics[query_name]
+            end_to_end = query.get("end_to_end")
+            if not isinstance(end_to_end, dict):
+                continue
+            query_metrics["p50_ms"].append(end_to_end["p50_ms"])
+            query_metrics["p95_ms"].append(end_to_end["p95_ms"])
+            query_metrics["p99_ms"].append(end_to_end["p99_ms"])
     return metrics
 
 

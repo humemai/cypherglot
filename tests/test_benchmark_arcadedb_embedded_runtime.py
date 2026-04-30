@@ -75,6 +75,54 @@ class BenchmarkArcadeDBEmbeddedRuntimeScriptTests(unittest.TestCase):
         ):
             self.assertEqual(arcadedb_version(), "26.4.1.dev3")
 
+    def test_open_arcadedb_opens_existing_database(self) -> None:
+        open_arcadedb = getattr(
+            benchmark_arcadedb_embedded_runtime,
+            "_open_arcadedb",
+        )
+
+        with mock.patch.object(
+            benchmark_arcadedb_embedded_runtime.arcadedb,
+            "database_exists",
+            return_value=True,
+        ), mock.patch.object(
+            benchmark_arcadedb_embedded_runtime.arcadedb,
+            "open_database",
+            return_value="opened-db",
+        ) as open_database, mock.patch.object(
+            benchmark_arcadedb_embedded_runtime.arcadedb,
+            "create_database",
+        ) as create_database:
+            result = open_arcadedb(Path("/tmp/runtime.arcadedb"))
+
+        self.assertEqual(result, "opened-db")
+        open_database.assert_called_once_with("/tmp/runtime.arcadedb")
+        create_database.assert_not_called()
+
+    def test_open_arcadedb_creates_missing_database(self) -> None:
+        open_arcadedb = getattr(
+            benchmark_arcadedb_embedded_runtime,
+            "_open_arcadedb",
+        )
+
+        with mock.patch.object(
+            benchmark_arcadedb_embedded_runtime.arcadedb,
+            "database_exists",
+            return_value=False,
+        ), mock.patch.object(
+            benchmark_arcadedb_embedded_runtime.arcadedb,
+            "create_database",
+            return_value="created-db",
+        ) as create_database, mock.patch.object(
+            benchmark_arcadedb_embedded_runtime.arcadedb,
+            "open_database",
+        ) as open_database:
+            result = open_arcadedb(Path("/tmp/runtime.arcadedb"))
+
+        self.assertEqual(result, "created-db")
+        create_database.assert_called_once_with("/tmp/runtime.arcadedb")
+        open_database.assert_not_called()
+
     def test_rewrite_arcadedb_query_injects_ids_for_mutations(self) -> None:
         rewrite_query = getattr(
             benchmark_arcadedb_embedded_runtime,
@@ -170,6 +218,282 @@ class BenchmarkArcadeDBEmbeddedRuntimeScriptTests(unittest.TestCase):
             {"arcadedb-embedded": "26.4.1.dev3"},
         )
         self.assertEqual(payload["index_mode"], "both")
+
+    def test_arcadedb_timeout_result_uses_next_iteration_after_progress(self) -> None:
+        timeout_result = getattr(
+            benchmark_arcadedb_embedded_runtime,
+            "_arcadedb_timeout_result",
+        )
+        query = benchmark_arcadedb_embedded_runtime.CorpusQuery(
+            name="olap_variable_length_grouped_rollup",
+            workload="olap",
+            category="path-rollup",
+            query="MATCH (n) RETURN n",
+            backends=("arcadedb-embedded",),
+        )
+
+        result = timeout_result(
+            query=query,
+            index_mode="indexed",
+            timeout_ms=10000.0,
+            last_progress_event={"phase": "warmup", "iteration": 2},
+            warmup=2,
+        )
+
+        self.assertEqual(result["status"], "timed_out")
+        self.assertEqual(result["query_timeout"]["phase"], "iteration")
+        self.assertEqual(result["query_timeout"]["iteration"], 1)
+
+    def test_arcadedb_timeout_result_treats_ready_as_before_warmup(self) -> None:
+        timeout_result = getattr(
+            benchmark_arcadedb_embedded_runtime,
+            "_arcadedb_timeout_result",
+        )
+        query = benchmark_arcadedb_embedded_runtime.CorpusQuery(
+            name="oltp_type1_point_lookup",
+            workload="oltp",
+            category="read-point",
+            query="MATCH (n) RETURN n",
+            backends=("arcadedb-embedded",),
+        )
+
+        result = timeout_result(
+            query=query,
+            index_mode="indexed",
+            timeout_ms=100.0,
+            last_progress_event={"phase": "ready", "iteration": 0},
+            warmup=5,
+        )
+
+        self.assertEqual(result["status"], "timed_out")
+        self.assertEqual(result["query_timeout"]["phase"], "warmup")
+        self.assertEqual(result["query_timeout"]["iteration"], 1)
+
+    def test_arcadedb_worker_writes_passed_result_and_progress(self) -> None:
+        run_worker = getattr(
+            benchmark_arcadedb_embedded_runtime,
+            "_run_arcadedb_query_worker",
+        )
+        query = benchmark_arcadedb_embedded_runtime.CorpusQuery(
+            name="oltp_type1_point_lookup",
+            workload="oltp",
+            category="read-point",
+            query="MATCH (n) RETURN n",
+            backends=("arcadedb-embedded",),
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            spec_path = temp_path / "spec.json"
+            progress_path = temp_path / "progress.jsonl"
+            result_path = temp_path / "result.json"
+            spec_path.write_text(
+                json.dumps(
+                    {
+                        "db_path": str(temp_path / "runtime.arcadedb"),
+                        "row_counts": {"node_count": 60, "edge_count": 120},
+                        "index_mode": "indexed",
+                        "query": {
+                            "name": query.name,
+                            "workload": query.workload,
+                            "category": query.category,
+                            "query": query.query,
+                            "backends": list(query.backends),
+                            "mode": query.mode,
+                            "mutation": query.mutation,
+                        },
+                        "warmup": 2,
+                        "iterations": 3,
+                        "progress_path": str(progress_path),
+                        "result_path": str(result_path),
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            fixture = mock.Mock(database=mock.Mock(close=mock.Mock()))
+            with mock.patch.object(
+                benchmark_arcadedb_embedded_runtime,
+                "_arcadedb_worker_fixture",
+                return_value=fixture,
+            ), mock.patch.object(
+                benchmark_arcadedb_embedded_runtime,
+                "_run_query_once",
+                return_value={
+                    "execute_ns": 1_000_000,
+                    "end_to_end_ns": 1_000_000,
+                    "reset_ns": 0,
+                },
+            ):
+                exit_code = run_worker(spec_path)
+
+            self.assertEqual(exit_code, 0)
+            events = [
+                json.loads(line)
+                for line in progress_path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            self.assertEqual(
+                events,
+                [
+                    {"phase": "ready", "iteration": 0},
+                    {"phase": "warmup", "iteration": 1},
+                    {"phase": "warmup", "iteration": 2},
+                    {"phase": "iteration", "iteration": 1},
+                    {"phase": "iteration", "iteration": 2},
+                    {"phase": "iteration", "iteration": 3},
+                ],
+            )
+            result = json.loads(result_path.read_text(encoding="utf-8"))
+            self.assertEqual(result["status"], "passed")
+            self.assertEqual(result["execute"]["p50_ms"], 1.0)
+
+    def test_arcadedb_worker_process_launches_from_repo_root(self) -> None:
+        measure_query = getattr(
+            benchmark_arcadedb_embedded_runtime,
+            "_measure_query_in_arcadedb_worker",
+        )
+        query = benchmark_arcadedb_embedded_runtime.CorpusQuery(
+            name="oltp_type1_point_lookup",
+            workload="oltp",
+            category="read-point",
+            query="MATCH (n) RETURN n",
+            backends=("arcadedb-embedded",),
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            fixture = benchmark_arcadedb_embedded_runtime.ArcadeDBFixture(
+                work_dir=mock.Mock(path=temp_path),
+                db_path=temp_path / "runtime.arcadedb",
+                database=mock.Mock(),
+                setup_metrics={},
+                row_counts={"node_count": 60, "edge_count": 120},
+                rss_snapshots_mib={},
+                db_size_mib=0.0,
+                wal_size_mib=0.0,
+                index_mode="indexed",
+            )
+            result_path = temp_path / f"{query.name}.worker-result.json"
+            result_path.write_text(
+                json.dumps(
+                    {
+                        "name": query.name,
+                        "workload": query.workload,
+                        "category": query.category,
+                        "backend": "arcadedb-embedded",
+                        "index_mode": "indexed",
+                        "mode": query.mode,
+                        "mutation": query.mutation,
+                        "status": "passed",
+                        "execute": {"min_ms": 1.0, "mean_ms": 1.0, "p50_ms": 1.0, "p95_ms": 1.0, "p99_ms": 1.0, "max_ms": 1.0},
+                        "end_to_end": {"min_ms": 1.0, "mean_ms": 1.0, "p50_ms": 1.0, "p95_ms": 1.0, "p99_ms": 1.0, "max_ms": 1.0},
+                        "reset": {"min_ms": 0.0, "mean_ms": 0.0, "p50_ms": 0.0, "p95_ms": 0.0, "p99_ms": 0.0, "max_ms": 0.0},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            process = mock.Mock()
+            process.poll.return_value = 0
+            process.communicate.return_value = ("", "")
+
+            with mock.patch.object(
+                benchmark_arcadedb_embedded_runtime.subprocess,
+                "Popen",
+                return_value=process,
+            ) as popen:
+                result = measure_query(
+                    fixture,
+                    query=query,
+                    iterations=1,
+                    warmup=0,
+                    timeout_ms=1000.0,
+                )
+
+            self.assertEqual(result["status"], "passed")
+            popen.assert_called_once()
+            self.assertEqual(
+                popen.call_args.args[0],
+                [
+                    sys.executable,
+                    "-m",
+                    "scripts.benchmarks.runtime.arcadedb_embedded",
+                    "--query-worker-spec",
+                    str(temp_path / f"{query.name}.worker-spec.json"),
+                ],
+            )
+            self.assertEqual(
+                popen.call_args.kwargs["cwd"],
+                str(benchmark_arcadedb_embedded_runtime.REPO_ROOT),
+            )
+
+    def test_arcadedb_worker_returns_result_before_process_exit(self) -> None:
+        measure_query = getattr(
+            benchmark_arcadedb_embedded_runtime,
+            "_measure_query_in_arcadedb_worker",
+        )
+        query = benchmark_arcadedb_embedded_runtime.CorpusQuery(
+            name="oltp_type1_point_lookup",
+            workload="oltp",
+            category="read-point",
+            query="MATCH (n) RETURN n",
+            backends=("arcadedb-embedded",),
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            fixture = benchmark_arcadedb_embedded_runtime.ArcadeDBFixture(
+                work_dir=mock.Mock(path=temp_path),
+                db_path=temp_path / "runtime.arcadedb",
+                database=mock.Mock(),
+                setup_metrics={},
+                row_counts={"node_count": 60, "edge_count": 120},
+                rss_snapshots_mib={},
+                db_size_mib=0.0,
+                wal_size_mib=0.0,
+                index_mode="indexed",
+            )
+            result_payload = {
+                "name": query.name,
+                "workload": query.workload,
+                "category": query.category,
+                "backend": "arcadedb-embedded",
+                "index_mode": "indexed",
+                "mode": query.mode,
+                "mutation": query.mutation,
+                "status": "passed",
+                "execute": {"min_ms": 1.0, "mean_ms": 1.0, "p50_ms": 1.0, "p95_ms": 1.0, "p99_ms": 1.0, "max_ms": 1.0},
+                "end_to_end": {"min_ms": 1.0, "mean_ms": 1.0, "p50_ms": 1.0, "p95_ms": 1.0, "p99_ms": 1.0, "max_ms": 1.0},
+                "reset": {"min_ms": 0.0, "mean_ms": 0.0, "p50_ms": 0.0, "p95_ms": 0.0, "p99_ms": 0.0, "max_ms": 0.0},
+            }
+            result_path = temp_path / f"{query.name}.worker-result.json"
+            result_path.write_text(json.dumps(result_payload), encoding="utf-8")
+            process = mock.Mock()
+            process.poll.return_value = None
+            process.wait.return_value = 0
+
+            with mock.patch.object(
+                benchmark_arcadedb_embedded_runtime.subprocess,
+                "Popen",
+                return_value=process,
+            ), mock.patch.object(
+                benchmark_arcadedb_embedded_runtime,
+                "_read_arcadedb_worker_progress",
+                return_value=([{"phase": "ready", "iteration": 0}], 0),
+            ):
+                result = measure_query(
+                    fixture,
+                    query=query,
+                    iterations=1,
+                    warmup=0,
+                    timeout_ms=1000.0,
+                )
+
+            self.assertEqual(result["status"], "passed")
+            process.wait.assert_called_once_with(
+                timeout=benchmark_arcadedb_embedded_runtime.ARCADEDB_WORKER_SHUTDOWN_TIMEOUT_S
+            )
+            process.kill.assert_not_called()
 
     def test_arcadedb_gav_statement_covers_runtime_schema(self) -> None:
         gav_statement = getattr(
