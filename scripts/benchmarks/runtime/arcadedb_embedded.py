@@ -779,13 +779,20 @@ def _read_arcadedb_worker_progress(
     with progress_path.open("r", encoding="utf-8") as handle:
         handle.seek(offset)
         chunk = handle.read()
-        new_offset = handle.tell()
-    events = [
-        json.loads(line)
-        for line in chunk.splitlines()
-        if line.strip()
-    ]
-    return events, new_offset
+    if not chunk:
+        return [], offset
+
+    events: list[dict[str, object]] = []
+    consumed = 0
+    for line in chunk.splitlines(keepends=True):
+        if not line.endswith(("\n", "\r")):
+            break
+        consumed += len(line)
+        stripped = line.strip()
+        if not stripped:
+            continue
+        events.append(json.loads(stripped))
+    return events, offset + consumed
 
 
 def _run_arcadedb_query_worker(spec_path: Path) -> int:

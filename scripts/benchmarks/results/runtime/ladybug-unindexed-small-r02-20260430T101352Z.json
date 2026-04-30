@@ -1,0 +1,1298 @@
+{
+  "benchmark_entrypoint": "ladybug",
+  "enabled_backends": [
+    "ladybug"
+  ],
+  "generated_at": "2026-04-30T10:23:58.465677+00:00",
+  "updated_at": "2026-04-30T10:29:25.260898+00:00",
+  "run_status": "completed",
+  "python_version": "3.12.11",
+  "platform": "Linux-6.17.9-76061709-generic-x86_64-with-glibc2.35",
+  "cypherglot_version": "0.0.1.dev14",
+  "database_versions": {
+    "ladybug": "0.15.3"
+  },
+  "corpus_path": "/mnt/ssd2/repos/cypherglot/scripts/benchmarks/corpora/sqlite_runtime_benchmark_corpus.json",
+  "workload_counts": {
+    "oltp": 14,
+    "olap": 16
+  },
+  "graph_scale": {
+    "node_type_count": 4,
+    "edge_type_count": 4,
+    "nodes_per_type": 1000,
+    "edges_per_source": 3,
+    "edge_degree_profile": "uniform",
+    "average_edges_per_source": 3.0,
+    "total_nodes": 4000,
+    "total_edges": 12000,
+    "node_extra_text_property_count": 2,
+    "node_extra_numeric_property_count": 6,
+    "node_extra_boolean_property_count": 2,
+    "edge_extra_text_property_count": 1,
+    "edge_extra_numeric_property_count": 3,
+    "edge_extra_boolean_property_count": 1,
+    "ingest_batch_size": 1000,
+    "variable_hop_max": 2
+  },
+  "schema_contract": {
+    "layout": "property-graph",
+    "node_labels": [
+      "NodeType01",
+      "NodeType02",
+      "NodeType03",
+      "NodeType04"
+    ],
+    "relationship_types": [
+      "EdgeType01",
+      "EdgeType02",
+      "EdgeType03",
+      "EdgeType04"
+    ]
+  },
+  "index_mode": "unindexed",
+  "workload_controls": {
+    "default_iterations": 1000,
+    "default_warmup": 10,
+    "oltp_iterations": 10000,
+    "oltp_warmup": 200,
+    "oltp_timeout_ms": 200.0,
+    "olap_iterations": 500,
+    "olap_warmup": 20,
+    "olap_timeout_ms": 10000.0
+  },
+  "db_root_dir": "/mnt/ssd2/repos/cypherglot/my_test_databases/runtime-small-20260430T101352Z/ladybug-unindexed/r02",
+  "results": {
+    "workloads": {
+      "oltp": {
+        "description": "Transactional-style Ladybug execution over the generated graph using the runtime corpus directly as Cypher.",
+        "ladybug_unindexed": {
+          "backend": "ladybug",
+          "index_mode": "unindexed",
+          "iterations": 10000,
+          "warmup": 200,
+          "query_count": 14,
+          "pass_count": 14,
+          "timeout_count": 0,
+          "fail_count": 0,
+          "setup": {
+            "connect_ms": 71.507048,
+            "schema_ms": 39.961473,
+            "ingest_ms": 700.556408,
+            "index_ms": 0.0,
+            "checkpoint_ms": 20.440498
+          },
+          "row_counts": {
+            "node_count": 4000,
+            "edge_count": 12000,
+            "node_type_count": 4,
+            "edge_type_count": 4
+          },
+          "rss_snapshots_mib": {
+            "after_connect": {
+              "client_mib": 265.8671875,
+              "server_mib": null,
+              "combined_mib": 265.8671875
+            },
+            "after_schema": {
+              "client_mib": 292.65625,
+              "server_mib": null,
+              "combined_mib": 292.65625
+            },
+            "after_ingest": {
+              "client_mib": 526.55859375,
+              "server_mib": null,
+              "combined_mib": 526.55859375
+            },
+            "after_index": {
+              "client_mib": 526.55859375,
+              "server_mib": null,
+              "combined_mib": 526.55859375
+            },
+            "after_checkpoint": {
+              "client_mib": 526.87109375,
+              "server_mib": null,
+              "combined_mib": 526.87109375
+            },
+            "suite_start": {
+              "client_mib": 526.87109375,
+              "server_mib": null,
+              "combined_mib": 526.87109375
+            },
+            "suite_complete": {
+              "client_mib": 581.6875,
+              "server_mib": null,
+              "combined_mib": 581.6875
+            }
+          },
+          "storage": {
+            "db_size_mib": 14.38671875,
+            "wal_size_mib": 0.0
+          },
+          "db_path": "/mnt/ssd2/repos/cypherglot/my_test_databases/runtime-small-20260430T101352Z/ladybug-unindexed/r02/ladybug-oltp-unindexed-suite/runtime.lbug",
+          "execute": {
+            "mean_of_mean_ms": 1.69547403535,
+            "mean_of_p50_ms": 1.5374640714285714,
+            "mean_of_p95_ms": 2.863371307142857,
+            "mean_of_p99_ms": 3.8197839857142872
+          },
+          "end_to_end": {
+            "mean_of_mean_ms": 1.69547403535,
+            "mean_of_p50_ms": 1.5374640714285714,
+            "mean_of_p95_ms": 2.863371307142857,
+            "mean_of_p99_ms": 3.8197839857142872
+          },
+          "reset": {
+            "mean_of_mean_ms": 0.07567447108571428,
+            "mean_of_p50_ms": 0.04300439285714286,
+            "mean_of_p95_ms": 0.2599810357142855,
+            "mean_of_p99_ms": 0.5956564214285719
+          },
+          "queries": [
+            {
+              "name": "oltp_type1_point_lookup",
+              "workload": "oltp",
+              "category": "read-point",
+              "backend": "ladybug",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.207781,
+                "mean_ms": 0.365594839,
+                "p50_ms": 0.3532615,
+                "p95_ms": 0.4542469499999999,
+                "p99_ms": 0.600865290000001,
+                "max_ms": 3.334041
+              },
+              "end_to_end": {
+                "min_ms": 0.207781,
+                "mean_ms": 0.365594839,
+                "p50_ms": 0.3532615,
+                "p95_ms": 0.4542469499999999,
+                "p99_ms": 0.600865290000001,
+                "max_ms": 3.334041
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "oltp_type1_neighbors",
+              "workload": "oltp",
+              "category": "read-adjacency",
+              "backend": "ladybug",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.743643,
+                "mean_ms": 2.4855894385000004,
+                "p50_ms": 2.383473,
+                "p95_ms": 3.5290864999999987,
+                "p99_ms": 4.899716910000003,
+                "max_ms": 11.449518
+              },
+              "end_to_end": {
+                "min_ms": 0.743643,
+                "mean_ms": 2.4855894385000004,
+                "p50_ms": 2.383473,
+                "p95_ms": 3.5290864999999987,
+                "p99_ms": 4.899716910000003,
+                "max_ms": 11.449518
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "oltp_cross_type_lookup",
+              "workload": "oltp",
+              "category": "read-join",
+              "backend": "ladybug",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.844623,
+                "mean_ms": 2.5387556633,
+                "p50_ms": 2.466963,
+                "p95_ms": 3.537040999999999,
+                "p99_ms": 4.5102114,
+                "max_ms": 12.13312
+              },
+              "end_to_end": {
+                "min_ms": 0.844623,
+                "mean_ms": 2.5387556633,
+                "p50_ms": 2.466963,
+                "p95_ms": 3.537040999999999,
+                "p99_ms": 4.5102114,
+                "max_ms": 12.13312
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "oltp_optional_type1_lookup",
+              "workload": "oltp",
+              "category": "read-optional",
+              "backend": "ladybug",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.328491,
+                "mean_ms": 0.8741036021999999,
+                "p50_ms": 0.671132,
+                "p95_ms": 2.0593179999999993,
+                "p99_ms": 3.0187393100000044,
+                "max_ms": 11.526668
+              },
+              "end_to_end": {
+                "min_ms": 0.328491,
+                "mean_ms": 0.8741036021999999,
+                "p50_ms": 0.671132,
+                "p95_ms": 2.0593179999999993,
+                "p99_ms": 3.0187393100000044,
+                "max_ms": 11.526668
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "oltp_optional_missing_type1_lookup",
+              "workload": "oltp",
+              "category": "read-optional-null",
+              "backend": "ladybug",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.340071,
+                "mean_ms": 1.0881348606,
+                "p50_ms": 0.8304325,
+                "p95_ms": 2.422925999999999,
+                "p99_ms": 3.601165800000001,
+                "max_ms": 7.363474
+              },
+              "end_to_end": {
+                "min_ms": 0.340071,
+                "mean_ms": 1.0881348606,
+                "p50_ms": 0.8304325,
+                "p95_ms": 2.422925999999999,
+                "p99_ms": 3.601165800000001,
+                "max_ms": 7.363474
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "oltp_unwind_literal_top2",
+              "workload": "oltp",
+              "category": "unwind",
+              "backend": "ladybug",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.243361,
+                "mean_ms": 0.776250772,
+                "p50_ms": 0.573627,
+                "p95_ms": 1.8542139999999996,
+                "p99_ms": 2.665585500000001,
+                "max_ms": 5.197007
+              },
+              "end_to_end": {
+                "min_ms": 0.243361,
+                "mean_ms": 0.776250772,
+                "p50_ms": 0.573627,
+                "p95_ms": 1.8542139999999996,
+                "p99_ms": 2.665585500000001,
+                "max_ms": 5.197007
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "oltp_update_type1_score",
+              "workload": "oltp",
+              "category": "update-node",
+              "backend": "ladybug",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": true,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.218661,
+                "mean_ms": 0.6656460346999999,
+                "p50_ms": 0.517762,
+                "p95_ms": 1.5343274999999994,
+                "p99_ms": 2.4304627000000014,
+                "max_ms": 8.010647
+              },
+              "end_to_end": {
+                "min_ms": 0.218661,
+                "mean_ms": 0.6656460346999999,
+                "p50_ms": 0.517762,
+                "p95_ms": 1.5343274999999994,
+                "p99_ms": 2.4304627000000014,
+                "max_ms": 8.010647
+              },
+              "reset": {
+                "min_ms": 0.027711,
+                "mean_ms": 0.1199478764,
+                "p50_ms": 0.0504,
+                "p95_ms": 0.5166944999999998,
+                "p99_ms": 1.1744062000000002,
+                "max_ms": 3.630002
+              }
+            },
+            {
+              "name": "oltp_create_type1_node",
+              "workload": "oltp",
+              "category": "create-node",
+              "backend": "ladybug",
+              "index_mode": "unindexed",
+              "mode": "program",
+              "mutation": true,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.18037,
+                "mean_ms": 0.5236997875,
+                "p50_ms": 0.410802,
+                "p95_ms": 1.221582,
+                "p99_ms": 1.8085708,
+                "max_ms": 3.966374
+              },
+              "end_to_end": {
+                "min_ms": 0.18037,
+                "mean_ms": 0.5236997875,
+                "p50_ms": 0.410802,
+                "p95_ms": 1.221582,
+                "p99_ms": 1.8085708,
+                "max_ms": 3.966374
+              },
+              "reset": {
+                "min_ms": 0.03619,
+                "mean_ms": 0.1700033429,
+                "p50_ms": 0.0933955,
+                "p95_ms": 0.5803459999999997,
+                "p99_ms": 1.2101687000000003,
+                "max_ms": 3.742183
+              }
+            },
+            {
+              "name": "oltp_create_cross_type_edge",
+              "workload": "oltp",
+              "category": "create-edge",
+              "backend": "ladybug",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": true,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.470381,
+                "mean_ms": 1.2335856894000001,
+                "p50_ms": 1.027278,
+                "p95_ms": 2.4284484999999996,
+                "p99_ms": 3.3854247000000006,
+                "max_ms": 7.905316
+              },
+              "end_to_end": {
+                "min_ms": 0.470381,
+                "mean_ms": 1.2335856894000001,
+                "p50_ms": 1.027278,
+                "p95_ms": 2.4284484999999996,
+                "p99_ms": 3.3854247000000006,
+                "max_ms": 7.905316
+              },
+              "reset": {
+                "min_ms": 0.03332,
+                "mean_ms": 0.1042296157,
+                "p50_ms": 0.05802,
+                "p95_ms": 0.2998579999999999,
+                "p99_ms": 0.9662065000000026,
+                "max_ms": 7.337484
+              }
+            },
+            {
+              "name": "oltp_merge_cross_type_edge",
+              "workload": "oltp",
+              "category": "merge-edge",
+              "backend": "ladybug",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": true,
+              "status": "passed",
+              "execute": {
+                "min_ms": 2.755479,
+                "mean_ms": 6.3353544076,
+                "p50_ms": 6.0722855,
+                "p95_ms": 9.10543285,
+                "p99_ms": 11.018625690000002,
+                "max_ms": 27.450831
+              },
+              "end_to_end": {
+                "min_ms": 2.755479,
+                "mean_ms": 6.3353544076,
+                "p50_ms": 6.0722855,
+                "p95_ms": 9.10543285,
+                "p99_ms": 11.018625690000002,
+                "max_ms": 27.450831
+              },
+              "reset": {
+                "min_ms": 0.04887,
+                "mean_ms": 0.1206487178,
+                "p50_ms": 0.09959,
+                "p95_ms": 0.21577354999999995,
+                "p99_ms": 0.4698650100000009,
+                "max_ms": 5.541068
+              }
+            },
+            {
+              "name": "oltp_delete_type1_edge",
+              "workload": "oltp",
+              "category": "delete-edge",
+              "backend": "ladybug",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": true,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.474102,
+                "mean_ms": 2.3690844359,
+                "p50_ms": 2.2234995,
+                "p95_ms": 3.8941334499999996,
+                "p99_ms": 4.971156100000003,
+                "max_ms": 7.616742
+              },
+              "end_to_end": {
+                "min_ms": 0.474102,
+                "mean_ms": 2.3690844359,
+                "p50_ms": 2.2234995,
+                "p95_ms": 3.8941334499999996,
+                "p99_ms": 4.971156100000003,
+                "max_ms": 7.616742
+              },
+              "reset": {
+                "min_ms": 0.03383,
+                "mean_ms": 0.13749850190000001,
+                "p50_ms": 0.0678005,
+                "p95_ms": 0.6014599999999988,
+                "p99_ms": 1.2144374000000007,
+                "max_ms": 3.377524
+              }
+            },
+            {
+              "name": "oltp_delete_type1_node",
+              "workload": "oltp",
+              "category": "delete-node",
+              "backend": "ladybug",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": true,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.307361,
+                "mean_ms": 0.7483756072,
+                "p50_ms": 0.596102,
+                "p95_ms": 1.5948890500000001,
+                "p99_ms": 2.2353065,
+                "max_ms": 6.359867
+              },
+              "end_to_end": {
+                "min_ms": 0.307361,
+                "mean_ms": 0.7483756072,
+                "p50_ms": 0.596102,
+                "p95_ms": 1.5948890500000001,
+                "p99_ms": 2.2353065,
+                "max_ms": 6.359867
+              },
+              "reset": {
+                "min_ms": 0.03357,
+                "mean_ms": 0.132828135,
+                "p50_ms": 0.06994,
+                "p95_ms": 0.5326279999999991,
+                "p99_ms": 1.1757091000000004,
+                "max_ms": 3.321464
+              }
+            },
+            {
+              "name": "oltp_program_create_and_link",
+              "workload": "oltp",
+              "category": "create-program",
+              "backend": "ladybug",
+              "index_mode": "unindexed",
+              "mode": "program",
+              "mutation": true,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.468542,
+                "mean_ms": 1.0781381398,
+                "p50_ms": 0.899134,
+                "p95_ms": 2.1369415,
+                "p99_ms": 2.8643247,
+                "max_ms": 5.125911
+              },
+              "end_to_end": {
+                "min_ms": 0.468542,
+                "mean_ms": 1.0781381398,
+                "p50_ms": 0.899134,
+                "p95_ms": 2.1369415,
+                "p99_ms": 2.8643247,
+                "max_ms": 5.125911
+              },
+              "reset": {
+                "min_ms": 0.04712,
+                "mean_ms": 0.13431599489999999,
+                "p50_ms": 0.0911905,
+                "p95_ms": 0.33476245,
+                "p99_ms": 0.9128739900000015,
+                "max_ms": 3.224913
+              }
+            },
+            {
+              "name": "oltp_update_cross_type_edge_rank",
+              "workload": "oltp",
+              "category": "update-edge",
+              "backend": "ladybug",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": true,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.613412,
+                "mean_ms": 2.6543232172,
+                "p50_ms": 2.498745,
+                "p95_ms": 4.314611,
+                "p99_ms": 5.4668204000000005,
+                "max_ms": 8.949518
+              },
+              "end_to_end": {
+                "min_ms": 0.613412,
+                "mean_ms": 2.6543232172,
+                "p50_ms": 2.498745,
+                "p95_ms": 4.314611,
+                "p99_ms": 5.4668204000000005,
+                "max_ms": 8.949518
+              },
+              "reset": {
+                "min_ms": 0.03544,
+                "mean_ms": 0.1399704106,
+                "p50_ms": 0.071725,
+                "p95_ms": 0.5582119999999998,
+                "p99_ms": 1.2155230000000001,
+                "max_ms": 4.373528
+              }
+            }
+          ]
+        }
+      },
+      "olap": {
+        "description": "Analytical-style Ladybug execution over the generated graph using the runtime corpus directly as Cypher.",
+        "ladybug_unindexed": {
+          "backend": "ladybug",
+          "index_mode": "unindexed",
+          "iterations": 500,
+          "warmup": 20,
+          "query_count": 16,
+          "pass_count": 16,
+          "timeout_count": 0,
+          "fail_count": 0,
+          "setup": {
+            "connect_ms": 141.810575,
+            "schema_ms": 31.01513,
+            "ingest_ms": 896.552309,
+            "index_ms": 0.0,
+            "checkpoint_ms": 25.995299
+          },
+          "row_counts": {
+            "node_count": 4000,
+            "edge_count": 12000,
+            "node_type_count": 4,
+            "edge_type_count": 4
+          },
+          "rss_snapshots_mib": {
+            "after_connect": {
+              "client_mib": 540.65625,
+              "server_mib": null,
+              "combined_mib": 540.65625
+            },
+            "after_schema": {
+              "client_mib": 543.6875,
+              "server_mib": null,
+              "combined_mib": 543.6875
+            },
+            "after_ingest": {
+              "client_mib": 524.875,
+              "server_mib": null,
+              "combined_mib": 524.875
+            },
+            "after_index": {
+              "client_mib": 524.875,
+              "server_mib": null,
+              "combined_mib": 524.875
+            },
+            "after_checkpoint": {
+              "client_mib": 524.875,
+              "server_mib": null,
+              "combined_mib": 524.875
+            },
+            "suite_start": {
+              "client_mib": 524.875,
+              "server_mib": null,
+              "combined_mib": 524.875
+            },
+            "suite_complete": {
+              "client_mib": 599.11328125,
+              "server_mib": null,
+              "combined_mib": 599.11328125
+            }
+          },
+          "storage": {
+            "db_size_mib": 14.38671875,
+            "wal_size_mib": 0.0
+          },
+          "db_path": "/mnt/ssd2/repos/cypherglot/my_test_databases/runtime-small-20260430T101352Z/ladybug-unindexed/r02/ladybug-olap-unindexed-suite/runtime.lbug",
+          "execute": {
+            "mean_of_mean_ms": 6.407306860125,
+            "mean_of_p50_ms": 6.3020021250000005,
+            "mean_of_p95_ms": 8.221185528124998,
+            "mean_of_p99_ms": 9.332897402499997
+          },
+          "end_to_end": {
+            "mean_of_mean_ms": 6.407306860125,
+            "mean_of_p50_ms": 6.3020021250000005,
+            "mean_of_p95_ms": 8.221185528124998,
+            "mean_of_p99_ms": 9.332897402499997
+          },
+          "reset": {
+            "mean_of_mean_ms": 0.0,
+            "mean_of_p50_ms": 0.0,
+            "mean_of_p95_ms": 0.0,
+            "mean_of_p99_ms": 0.0
+          },
+          "queries": [
+            {
+              "name": "olap_type1_active_leaderboard",
+              "workload": "olap",
+              "category": "scan-order",
+              "backend": "ladybug",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.420471,
+                "mean_ms": 0.991594118,
+                "p50_ms": 0.8112585,
+                "p95_ms": 2.011783,
+                "p99_ms": 2.884946699999999,
+                "max_ms": 4.288448
+              },
+              "end_to_end": {
+                "min_ms": 0.420471,
+                "mean_ms": 0.991594118,
+                "p50_ms": 0.8112585,
+                "p95_ms": 2.011783,
+                "p99_ms": 2.884946699999999,
+                "max_ms": 4.288448
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_type1_age_rollup",
+              "workload": "olap",
+              "category": "aggregation",
+              "backend": "ladybug",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 1.426936,
+                "mean_ms": 3.919761944,
+                "p50_ms": 3.784901,
+                "p95_ms": 5.742145499999999,
+                "p99_ms": 7.0135160999999995,
+                "max_ms": 8.476156
+              },
+              "end_to_end": {
+                "min_ms": 1.426936,
+                "mean_ms": 3.919761944,
+                "p50_ms": 3.784901,
+                "p95_ms": 5.742145499999999,
+                "p99_ms": 7.0135160999999995,
+                "max_ms": 8.476156
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_optional_type1_aggregate",
+              "workload": "olap",
+              "category": "optional-aggregation",
+              "backend": "ladybug",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 1.633117,
+                "mean_ms": 4.619783698,
+                "p50_ms": 4.5192385,
+                "p95_ms": 6.586932,
+                "p99_ms": 7.4147403999999995,
+                "max_ms": 8.920557
+              },
+              "end_to_end": {
+                "min_ms": 1.633117,
+                "mean_ms": 4.619783698,
+                "p50_ms": 4.5192385,
+                "p95_ms": 6.586932,
+                "p99_ms": 7.4147403999999995,
+                "max_ms": 8.920557
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_cross_type_edge_rollup",
+              "workload": "olap",
+              "category": "join-aggregation",
+              "backend": "ladybug",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 4.72101,
+                "mean_ms": 7.694573645999999,
+                "p50_ms": 7.601477,
+                "p95_ms": 10.155119,
+                "p99_ms": 11.517287809999997,
+                "max_ms": 13.861978
+              },
+              "end_to_end": {
+                "min_ms": 4.72101,
+                "mean_ms": 7.694573645999999,
+                "p50_ms": 7.601477,
+                "p95_ms": 10.155119,
+                "p99_ms": 11.517287809999997,
+                "max_ms": 13.861978
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_variable_length_reachability",
+              "workload": "olap",
+              "category": "variable-length",
+              "backend": "ladybug",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 1.621437,
+                "mean_ms": 3.810737596,
+                "p50_ms": 3.67801,
+                "p95_ms": 5.347262499999999,
+                "p99_ms": 6.58896771,
+                "max_ms": 7.412501
+              },
+              "end_to_end": {
+                "min_ms": 1.621437,
+                "mean_ms": 3.810737596,
+                "p50_ms": 3.67801,
+                "p95_ms": 5.347262499999999,
+                "p99_ms": 6.58896771,
+                "max_ms": 7.412501
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_three_type_path_count",
+              "workload": "olap",
+              "category": "multi-hop",
+              "backend": "ladybug",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 2.100459,
+                "mean_ms": 5.069744196,
+                "p50_ms": 4.847851,
+                "p95_ms": 7.303552999999999,
+                "p99_ms": 8.191890709999997,
+                "max_ms": 9.060968
+              },
+              "end_to_end": {
+                "min_ms": 2.100459,
+                "mean_ms": 5.069744196,
+                "p50_ms": 4.847851,
+                "p95_ms": 7.303552999999999,
+                "p99_ms": 8.191890709999997,
+                "max_ms": 9.060968
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_type2_score_distribution",
+              "workload": "olap",
+              "category": "group-order",
+              "backend": "ladybug",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 1.930508,
+                "mean_ms": 4.7629067759999995,
+                "p50_ms": 4.6736795,
+                "p95_ms": 6.434836999999999,
+                "p99_ms": 7.977999119999996,
+                "max_ms": 9.245969
+              },
+              "end_to_end": {
+                "min_ms": 1.930508,
+                "mean_ms": 4.7629067759999995,
+                "p50_ms": 4.6736795,
+                "p95_ms": 6.434836999999999,
+                "p99_ms": 7.977999119999996,
+                "max_ms": 9.245969
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_fixed_length_path_projection",
+              "workload": "olap",
+              "category": "multi-hop-projection",
+              "backend": "ladybug",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 15.398704,
+                "mean_ms": 18.906547454,
+                "p50_ms": 18.4787725,
+                "p95_ms": 22.799254949999998,
+                "p99_ms": 25.12709861,
+                "max_ms": 27.907497
+              },
+              "end_to_end": {
+                "min_ms": 15.398704,
+                "mean_ms": 18.906547454,
+                "p50_ms": 18.4787725,
+                "p95_ms": 22.799254949999998,
+                "p99_ms": 25.12709861,
+                "max_ms": 27.907497
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_fixed_length_path_with_rebinding",
+              "workload": "olap",
+              "category": "multi-hop-with",
+              "backend": "ladybug",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 5.195682,
+                "mean_ms": 7.921060784,
+                "p50_ms": 7.7803525,
+                "p95_ms": 10.219093499999998,
+                "p99_ms": 11.045423809999999,
+                "max_ms": 12.216612
+              },
+              "end_to_end": {
+                "min_ms": 5.195682,
+                "mean_ms": 7.921060784,
+                "p50_ms": 7.7803525,
+                "p95_ms": 10.219093499999998,
+                "p99_ms": 11.045423809999999,
+                "max_ms": 12.216612
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_graph_introspection_rollup",
+              "workload": "olap",
+              "category": "introspection",
+              "backend": "ladybug",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 1.593597,
+                "mean_ms": 2.90088723,
+                "p50_ms": 2.734521,
+                "p95_ms": 4.19012095,
+                "p99_ms": 5.3780662,
+                "max_ms": 5.751204
+              },
+              "end_to_end": {
+                "min_ms": 1.593597,
+                "mean_ms": 2.90088723,
+                "p50_ms": 2.734521,
+                "p95_ms": 4.19012095,
+                "p99_ms": 5.3780662,
+                "max_ms": 5.751204
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_with_scalar_rebinding",
+              "workload": "olap",
+              "category": "with-aggregation",
+              "backend": "ladybug",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 1.212765,
+                "mean_ms": 2.396848054,
+                "p50_ms": 2.33316,
+                "p95_ms": 3.1640859999999997,
+                "p99_ms": 3.9543953,
+                "max_ms": 4.65083
+              },
+              "end_to_end": {
+                "min_ms": 1.212765,
+                "mean_ms": 2.396848054,
+                "p50_ms": 2.33316,
+                "p95_ms": 3.1640859999999997,
+                "p99_ms": 3.9543953,
+                "max_ms": 4.65083
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_with_where_lower_projection",
+              "workload": "olap",
+              "category": "with-filter",
+              "backend": "ladybug",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.497422,
+                "mean_ms": 0.7065244399999999,
+                "p50_ms": 0.667053,
+                "p95_ms": 1.0145674999999996,
+                "p99_ms": 1.8142300900000001,
+                "max_ms": 2.802171
+              },
+              "end_to_end": {
+                "min_ms": 0.497422,
+                "mean_ms": 0.7065244399999999,
+                "p50_ms": 0.667053,
+                "p95_ms": 1.0145674999999996,
+                "p99_ms": 1.8142300900000001,
+                "max_ms": 2.802171
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_with_size_predicate_projection",
+              "workload": "olap",
+              "category": "with-predicate",
+              "backend": "ladybug",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.658873,
+                "mean_ms": 0.7836564699999999,
+                "p50_ms": 0.7462635,
+                "p95_ms": 0.8894119999999999,
+                "p99_ms": 1.2461470499999892,
+                "max_ms": 2.644541
+              },
+              "end_to_end": {
+                "min_ms": 0.658873,
+                "mean_ms": 0.7836564699999999,
+                "p50_ms": 0.7462635,
+                "p95_ms": 0.8894119999999999,
+                "p99_ms": 1.2461470499999892,
+                "max_ms": 2.644541
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_relationship_function_projection",
+              "workload": "olap",
+              "category": "join-functions",
+              "backend": "ladybug",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 2.099099,
+                "mean_ms": 3.17950134,
+                "p50_ms": 3.104583,
+                "p95_ms": 4.171431049999997,
+                "p99_ms": 4.965191099999999,
+                "max_ms": 5.401232
+              },
+              "end_to_end": {
+                "min_ms": 2.099099,
+                "mean_ms": 3.17950134,
+                "p50_ms": 3.104583,
+                "p95_ms": 4.171431049999997,
+                "p99_ms": 4.965191099999999,
+                "max_ms": 5.401232
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_variable_length_grouped_rollup",
+              "workload": "olap",
+              "category": "variable-length-grouped",
+              "backend": "ladybug",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 21.43636,
+                "mean_ms": 26.989449046,
+                "p50_ms": 27.32864,
+                "p95_ms": 31.610187999999997,
+                "p99_ms": 33.25782001999999,
+                "max_ms": 36.468353
+              },
+              "end_to_end": {
+                "min_ms": 21.43636,
+                "mean_ms": 26.989449046,
+                "p50_ms": 27.32864,
+                "p95_ms": 31.610187999999997,
+                "p99_ms": 33.25782001999999,
+                "max_ms": 36.468353
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_variable_length_grouped_max_rollup",
+              "workload": "olap",
+              "category": "variable-length-grouped-max",
+              "backend": "ladybug",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 4.108927,
+                "mean_ms": 7.86333297,
+                "p50_ms": 7.742273,
+                "p95_ms": 9.899182499999998,
+                "p99_ms": 10.948637709999996,
+                "max_ms": 12.320001
+              },
+              "end_to_end": {
+                "min_ms": 4.108927,
+                "mean_ms": 7.86333297,
+                "p50_ms": 7.742273,
+                "p95_ms": 9.899182499999998,
+                "p99_ms": 10.948637709999996,
+                "max_ms": 12.320001
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            }
+          ]
+        }
+      }
+    },
+    "token_map": {
+      "variable_hop_max": "2",
+      "grouped_rollup_variable_hop_max": "2",
+      "created_type_1_name": "nodetype01-created-node",
+      "created_type_1_peer_name": "nodetype01-created-peer",
+      "created_type_2_name": "nodetype02-created-node",
+      "node_type_1": "NodeType01",
+      "node_type_1_name_1": "nodetype01-000001",
+      "node_type_1_name_2": "nodetype01-000002",
+      "node_type_1_name_3": "nodetype01-000003",
+      "node_type_1_name_4": "nodetype01-000004",
+      "node_type_2": "NodeType02",
+      "node_type_2_name_1": "nodetype02-000001",
+      "node_type_2_name_2": "nodetype02-000002",
+      "node_type_2_name_3": "nodetype02-000003",
+      "node_type_2_name_4": "nodetype02-000004",
+      "node_type_3": "NodeType03",
+      "node_type_3_name_1": "nodetype03-000001",
+      "node_type_3_name_2": "nodetype03-000002",
+      "node_type_3_name_3": "nodetype03-000003",
+      "node_type_3_name_4": "nodetype03-000004",
+      "node_type_4": "NodeType04",
+      "node_type_4_name_1": "nodetype04-000001",
+      "node_type_4_name_2": "nodetype04-000002",
+      "node_type_4_name_3": "nodetype04-000003",
+      "node_type_4_name_4": "nodetype04-000004",
+      "edge_type_1": "EdgeType01",
+      "edge_type_2": "EdgeType02",
+      "edge_type_3": "EdgeType03",
+      "edge_type_4": "EdgeType04"
+    }
+  },
+  "failure_count": 0,
+  "completed_at": "2026-04-30T10:29:25.260888+00:00"
+}

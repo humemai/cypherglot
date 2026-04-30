@@ -348,6 +348,39 @@ class BenchmarkArcadeDBEmbeddedRuntimeScriptTests(unittest.TestCase):
             self.assertEqual(result["status"], "passed")
             self.assertEqual(result["execute"]["p50_ms"], 1.0)
 
+    def test_read_arcadedb_worker_progress_ignores_partial_trailing_line(self) -> None:
+        read_progress = getattr(
+            benchmark_arcadedb_embedded_runtime,
+            "_read_arcadedb_worker_progress",
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            progress_path = Path(temp_dir) / "progress.jsonl"
+            progress_path.write_text(
+                '{"phase": "ready", "iteration": 0}\n'
+                '{"phase": "warmup", "iteration": 1',
+                encoding="utf-8",
+            )
+
+            events, offset = read_progress(progress_path, offset=0)
+
+            self.assertEqual(events, [{"phase": "ready", "iteration": 0}])
+            self.assertEqual(offset, len('{"phase": "ready", "iteration": 0}\n'))
+
+            with progress_path.open("a", encoding="utf-8") as handle:
+                handle.write('}\n')
+
+            events, offset = read_progress(progress_path, offset=offset)
+
+            self.assertEqual(events, [{"phase": "warmup", "iteration": 1}])
+            self.assertEqual(
+                offset,
+                len(
+                    '{"phase": "ready", "iteration": 0}\n'
+                    '{"phase": "warmup", "iteration": 1}\n'
+                ),
+            )
+
     def test_arcadedb_worker_process_launches_from_repo_root(self) -> None:
         measure_query = getattr(
             benchmark_arcadedb_embedded_runtime,
