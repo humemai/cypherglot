@@ -453,6 +453,101 @@ class BenchmarkSQLRuntimeCoreTests(unittest.TestCase):
         self.assertGreaterEqual(result["execute"]["p50_ms"], 0.0)
         self.assertGreaterEqual(result["end_to_end"]["p50_ms"], 0.0)
 
+    def test_measure_query_marks_timeouts(self) -> None:
+        measure_query = getattr(benchmark_sql_runtime_core, "_measure_query")
+        timeout_error = getattr(
+            benchmark_sql_runtime_core,
+            "BenchmarkQueryTimeoutError",
+        )
+        runner = SimpleNamespace(backend="sqlite", index_mode="indexed")
+        query = SimpleNamespace(
+            name="oltp_type1_point_lookup",
+            workload="oltp",
+            category="read-point",
+            mode="statement",
+            mutation=False,
+        )
+
+        with mock.patch.object(
+            benchmark_sql_runtime_core,
+            "_call_with_timeout",
+            side_effect=timeout_error(
+                operation="sqlite:oltp_type1_point_lookup:warmup",
+                timeout_ms=1000.0,
+            ),
+        ):
+            result = measure_query(
+                runner,
+                query,
+                iterations=5,
+                warmup=2,
+                timeout_ms=1000.0,
+            )
+
+        self.assertEqual(result["status"], "timed_out")
+        self.assertEqual(result["query_timeout"]["phase"], "warmup")
+        self.assertEqual(result["query_timeout"]["iteration"], 1)
+        self.assertEqual(result["query_timeout"]["timeout_ms"], 1000.0)
+
+    def test_postgresql_execute_query_sets_local_statement_timeout(self) -> None:
+        backend_runner = getattr(benchmark_sql_runtime_core, "_BackendRunner")
+        prepared_artifact = getattr(benchmark_sql_runtime_core, "PreparedArtifact")
+
+        runner = object.__new__(backend_runner)
+        runner.backend = "postgresql"
+        runner.connection = mock.MagicMock()
+
+        cursor = mock.MagicMock()
+        cursor.description = None
+        runner.connection.cursor.return_value.__enter__.return_value = cursor
+        runner.connection.cursor.return_value.__exit__.return_value = None
+
+        artifact = prepared_artifact(mode="statement", compiled="SELECT 1")
+
+        backend_runner.execute_query(runner, artifact, timeout_ms=2500.0)
+
+        self.assertEqual(
+            cursor.execute.call_args_list[0],
+            mock.call("SET LOCAL statement_timeout = %s", (2500,)),
+        )
+        self.assertEqual(cursor.execute.call_args_list[1], mock.call("SELECT 1"))
+
+    def test_measure_query_classifies_postgresql_statement_timeout(self) -> None:
+        measure_query = getattr(benchmark_sql_runtime_core, "_measure_query")
+
+        class PostgreSQLTimeoutError(Exception):
+            @property
+            def pgcode(self) -> str:
+                return "57014"
+
+        runner = SimpleNamespace(backend="postgresql", index_mode="indexed")
+        query = SimpleNamespace(
+            name="olap_variable_length_grouped_rollup",
+            workload="olap",
+            category="path-rollup",
+            mode="program",
+            mutation=False,
+        )
+
+        with mock.patch.object(
+            benchmark_sql_runtime_core,
+            "_run_iteration",
+            side_effect=PostgreSQLTimeoutError(
+                "canceling statement due to statement timeout"
+            ),
+        ):
+            result = measure_query(
+                runner,
+                query,
+                iterations=5,
+                warmup=1,
+                timeout_ms=10000.0,
+            )
+
+        self.assertEqual(result["status"], "timed_out")
+        self.assertEqual(result["query_timeout"]["phase"], "warmup")
+        self.assertEqual(result["query_timeout"]["iteration"], 1)
+
     def test_mutation_iteration_rolls_back_state(self) -> None:
         build_graph_schema = getattr(benchmark_sql_runtime_core, "_build_graph_schema")
         prepare_fixture = getattr(

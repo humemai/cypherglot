@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import math
 from pathlib import Path
 import re
 from typing import Any
@@ -287,12 +288,29 @@ def _execute_bound_postgresql_sql(
     cur.execute(bound_sql)
 
 
+def _set_local_postgresql_statement_timeout(
+    cur: Any,
+    timeout_ms: float | None,
+) -> None:
+    if timeout_ms is None:
+        return
+    if timeout_ms <= 0:
+        raise ValueError("timeout_ms must be positive when provided.")
+    cur.execute(
+        "SET LOCAL statement_timeout = %s",
+        (max(1, math.ceil(timeout_ms)),),
+    )
+
+
 def _execute_postgresql_program(
     conn: PostgreSQLConnection,
     program: cypherglot.RenderedCypherProgram,
+    *,
+    timeout_ms: float | None = None,
 ) -> None:
     bindings: dict[str, object] = {}
     with conn.cursor() as cur:
+        _set_local_postgresql_statement_timeout(cur, timeout_ms)
         for step in program.steps:
             if isinstance(step, cypherglot.RenderedCypherLoop):
                 _execute_bound_postgresql_sql(cur, step.source, bindings)

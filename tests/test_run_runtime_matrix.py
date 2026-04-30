@@ -112,6 +112,8 @@ class RunRuntimeMatrixTests(unittest.TestCase):
             args = parse_args()
 
         self.assertTrue(args.iteration_progress)
+        self.assertEqual(args.oltp_timeout_ms, 1000.0)
+        self.assertEqual(args.olap_timeout_ms, 10000.0)
 
     def test_parse_args_supports_no_iteration_progress_opt_out(self) -> None:
         with patch.object(
@@ -201,7 +203,7 @@ class RunRuntimeMatrixTests(unittest.TestCase):
         )
         self.assertEqual(
             resolve_arcadedb_jvm_args("medium", None),
-            "-Xmx8g",
+            "-Xmx16g",
         )
         self.assertEqual(
             resolve_arcadedb_jvm_args("large", None),
@@ -284,7 +286,7 @@ class RunRuntimeMatrixTests(unittest.TestCase):
         self.assertIn("250", command)
         self.assertIn("--olap-iterations", command)
         self.assertIn("50", command)
-        self.assertEqual(env["ARCADEDB_JVM_ARGS"], "-Xmx8g")
+        self.assertEqual(env["ARCADEDB_JVM_ARGS"], "-Xmx16g")
 
     def test_build_command_for_neo4j_adds_docker_isolation(self) -> None:
         args = argparse.Namespace(
@@ -335,6 +337,48 @@ class RunRuntimeMatrixTests(unittest.TestCase):
         self.assertIn("8575", command)
         self.assertIn("--docker-keep-container", command)
         self.assertNotIn("ARCADEDB_JVM_ARGS", env)
+
+    def test_build_command_forwards_timeout_flags(self) -> None:
+        args = argparse.Namespace(
+            scale="medium",
+            iterations=1000,
+            warmup=10,
+            oltp_iterations=None,
+            oltp_warmup=None,
+            olap_iterations=None,
+            olap_warmup=None,
+            oltp_timeout_ms=750.0,
+            olap_timeout_ms=9000.0,
+            iteration_progress=True,
+            postgres_dsn=None,
+            neo4j_user="neo4j",
+            neo4j_database="neo4j",
+            neo4j_password="secret",
+            neo4j_docker_image="neo4j:5.26.24-community",
+            neo4j_docker_startup_timeout=120,
+            neo4j_keep_container=False,
+            arcadedb_jvm_args=None,
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            job = run_runtime_matrix.MatrixJob(
+                sequence=1,
+                variant=run_runtime_matrix.VARIANT_BY_NAME["sqlite-indexed"],
+                repeat=1,
+                output_path=temp_path / "result.json",
+                log_path=temp_path / "job.log",
+                db_root_dir=temp_path / "db",
+            )
+            command, _env = build_command(
+                args,
+                job=job,
+                scale_preset=run_runtime_matrix.SCALE_PRESETS["medium"],
+            )
+
+        self.assertIn("--oltp-timeout-ms", command)
+        self.assertIn("750.0", command)
+        self.assertIn("--olap-timeout-ms", command)
+        self.assertIn("9000.0", command)
 
     def test_validate_args_requires_neo4j_password_when_selected(self) -> None:
         args = argparse.Namespace(

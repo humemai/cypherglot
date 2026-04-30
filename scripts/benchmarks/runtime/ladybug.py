@@ -15,8 +15,10 @@ import argparse
 import csv
 import gc
 import json
+import math
 import platform
 import re
+import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -436,10 +438,13 @@ def _run_query_once(
     fixture: LadybugFixture,
     *,
     query: CorpusQuery,
+    timeout_ms: float | None = None,
 ) -> dict[str, int]:
     reset_ns = 0
     transaction_started = False
     try:
+        if timeout_ms is not None:
+            fixture.connection.set_query_timeout(max(1, math.ceil(timeout_ms)))
         if query.mutation:
             fixture.connection.execute("BEGIN TRANSACTION")
             transaction_started = True
@@ -466,6 +471,11 @@ def _run_query_once(
     }
 
 
+def _ladybug_error_is_query_timeout(exc: Exception) -> bool:
+    error_message = str(exc).lower()
+    return "timed out" in error_message or "timeout" in error_message
+
+
 def _measure_query(
     fixture: LadybugFixture,
     *,
@@ -474,6 +484,7 @@ def _measure_query(
     warmup: int,
     progress_label: str,
     iteration_progress: bool,
+    timeout_ms: float | None = None,
 ) -> dict[str, object]:
     try:
         for warmup_index in range(1, warmup + 1):
@@ -484,8 +495,29 @@ def _measure_query(
                     current=warmup_index,
                     total=warmup,
                 )
-            _run_query_once(fixture, query=query)
+            started_ns = time.perf_counter_ns()
+            _run_query_once(
+                fixture,
+                query=query,
+                timeout_ms=timeout_ms,
+            )
     except (RuntimeError, ValueError) as exc:
+        if timeout_ms is not None and _ladybug_error_is_query_timeout(exc):
+            return {
+                "name": query.name,
+                "workload": query.workload,
+                "category": query.category,
+                "backend": "ladybug",
+                "index_mode": LADYBUG_INDEX_MODE,
+                "mode": query.mode,
+                "mutation": query.mutation,
+                "status": "timed_out",
+                "query_timeout": {
+                    "phase": "warmup",
+                    "timeout_ms": timeout_ms,
+                    "iteration": warmup_index,
+                },
+            }
         return {
             "name": query.name,
             "workload": query.workload,
@@ -514,11 +546,31 @@ def _measure_query(
                     current=iteration_index,
                     total=iterations,
                 )
-            metrics = _run_query_once(fixture, query=query)
+            metrics = _run_query_once(
+                fixture,
+                query=query,
+                timeout_ms=timeout_ms,
+            )
             execute_latencies.append(metrics["execute_ns"])
             end_to_end_latencies.append(metrics["end_to_end_ns"])
             reset_latencies.append(metrics["reset_ns"])
     except (RuntimeError, ValueError) as exc:
+        if timeout_ms is not None and _ladybug_error_is_query_timeout(exc):
+            return {
+                "name": query.name,
+                "workload": query.workload,
+                "category": query.category,
+                "backend": "ladybug",
+                "index_mode": LADYBUG_INDEX_MODE,
+                "mode": query.mode,
+                "mutation": query.mutation,
+                "status": "timed_out",
+                "query_timeout": {
+                    "phase": "iteration",
+                    "timeout_ms": timeout_ms,
+                    "iteration": len(execute_latencies) + 1,
+                },
+            }
         return {
             "name": query.name,
             "workload": query.workload,
@@ -560,6 +612,7 @@ def _run_workload_suite(
     sqlite_source: GeneratedGraphFixture,
     db_root_dir: Path | None,
     iteration_progress: bool,
+    timeout_ms: float | None = None,
 ) -> dict[str, object]:
     suite_name = f"{workload}/ladybug_{LADYBUG_INDEX_MODE}"
     fixture = _prepare_ladybug_fixture(
@@ -592,19 +645,22 @@ def _run_workload_suite(
                     warmup=warmup,
                     progress_label=query_progress_label,
                     iteration_progress=iteration_progress,
+                    timeout_ms=timeout_ms,
                 )
             )
         rss_snapshots_mib["suite_complete"] = _capture_rss_snapshot(backend="ladybug")
         _progress(f"{suite_name}: suite complete")
 
         failures = [result for result in query_results if result["status"] == "failed"]
+        timed_out = [result for result in query_results if result["status"] == "timed_out"]
         return {
             "backend": "ladybug",
             "index_mode": LADYBUG_INDEX_MODE,
             "iterations": iterations,
             "warmup": warmup,
             "query_count": len(queries),
-            "pass_count": len(query_results) - len(failures),
+            "pass_count": len(query_results) - len(failures) - len(timed_out),
+            "timeout_count": len(timed_out),
             "fail_count": len(failures),
             "setup": {
                 "connect_ms": fixture.setup_metrics["connect_ns"] / 1_000_000.0,
@@ -641,6 +697,8 @@ def _benchmark_result(
     scale: RuntimeScale,
     db_root_dir: Path | None,
     iteration_progress: bool,
+    oltp_timeout_ms: float | None = None,
+    olap_timeout_ms: float | None = None,
     progress_callback: RuntimeProgressCallback | None = None,
 ) -> tuple[dict[str, object], int]:
     graph_schema, edge_plans = _build_graph_schema(scale)
@@ -653,6 +711,12 @@ def _benchmark_result(
     oltp_warmup_value = warmup if oltp_warmup is None else oltp_warmup
     olap_iterations_value = iterations if olap_iterations is None else olap_iterations
     olap_warmup_value = warmup if olap_warmup is None else olap_warmup
+
+    def suite_kwargs(timeout_ms: float | None) -> dict[str, object]:
+        kwargs: dict[str, object] = {"iteration_progress": iteration_progress}
+        if timeout_ms is not None:
+            kwargs["timeout_ms"] = timeout_ms
+        return kwargs
 
     workloads: dict[str, object] = {}
     failure_count = 0
@@ -688,10 +752,11 @@ def _benchmark_result(
                 graph_schema=graph_schema,
                 sqlite_source=sqlite_source,
                 db_root_dir=db_root_dir,
-                iteration_progress=iteration_progress,
+                **suite_kwargs(oltp_timeout_ms),
             )
             workloads["oltp"]["ladybug_unindexed"] = suite
             failure_count += int(suite["fail_count"])
+            failure_count += int(suite.get("timeout_count", 0))
             if progress_callback is not None:
                 progress_callback(
                     {"workloads": workloads, "token_map": token_map},
@@ -716,10 +781,11 @@ def _benchmark_result(
                 graph_schema=graph_schema,
                 sqlite_source=sqlite_source,
                 db_root_dir=db_root_dir,
-                iteration_progress=iteration_progress,
+                **suite_kwargs(olap_timeout_ms),
             )
             workloads["olap"]["ladybug_unindexed"] = suite
             failure_count += int(suite["fail_count"])
+            failure_count += int(suite.get("timeout_count", 0))
             if progress_callback is not None:
                 progress_callback(
                     {"workloads": workloads, "token_map": token_map},
@@ -746,8 +812,10 @@ def _build_payload(
     default_warmup: int,
     oltp_iterations: int,
     oltp_warmup: int,
+    oltp_timeout_ms: float | None = None,
     olap_iterations: int,
     olap_warmup: int,
+    olap_timeout_ms: float | None = None,
     db_root_dir: Path | None,
     result: dict[str, object],
     failure_count: int,
@@ -808,8 +876,10 @@ def _build_payload(
             "default_warmup": default_warmup,
             "oltp_iterations": oltp_iterations,
             "oltp_warmup": oltp_warmup,
+            "oltp_timeout_ms": oltp_timeout_ms,
             "olap_iterations": olap_iterations,
             "olap_warmup": olap_warmup,
+            "olap_timeout_ms": olap_timeout_ms,
         },
         "db_root_dir": str(db_root_dir) if db_root_dir is not None else None,
         "results": result,
@@ -837,7 +907,8 @@ def _print_suite(name: str, suite: dict[str, object]) -> None:
     )
     print(
         "  status: "
-        f"passed={suite['pass_count']}, failed={suite['fail_count']}"
+        f"passed={suite['pass_count']}, "
+        f"timed_out={suite.get('timeout_count', 0)}, failed={suite['fail_count']}"
     )
     if suite["pass_count"]:
         print(
@@ -851,6 +922,32 @@ def _print_suite(name: str, suite: dict[str, object]) -> None:
             f"mean={suite['end_to_end']['mean_of_mean_ms']:.2f} ms, "
             f"p50={suite['end_to_end']['mean_of_p50_ms']:.2f} ms, "
             f"p95={suite['end_to_end']['mean_of_p95_ms']:.2f} ms"
+        )
+    for query_result in suite["queries"]:
+        if query_result["status"] == "passed":
+            print(
+                "    - "
+                f"{query_result['name']} [{query_result['category']}]: "
+                f"execute_p50={query_result['execute']['p50_ms']:.2f} ms, "
+                f"execute_p95={query_result['execute']['p95_ms']:.2f} ms, "
+                f"end_to_end_p50={query_result['end_to_end']['p50_ms']:.2f} ms, "
+                f"end_to_end_p95={query_result['end_to_end']['p95_ms']:.2f} ms"
+            )
+            continue
+        if query_result["status"] == "timed_out":
+            timeout = query_result["query_timeout"]
+            print(
+                "    - "
+                f"{query_result['name']} [{query_result['category']}]: "
+                "TIMED OUT "
+                f"(phase={timeout['phase']}, iteration={timeout['iteration']}, "
+                f"timeout={timeout['timeout_ms']:.2f} ms)"
+            )
+            continue
+        print(
+            "    - "
+            f"{query_result['name']} [{query_result['category']}]: "
+            f"FAILED {query_result['error_type']}: {query_result['error_message']}"
         )
 
 
@@ -869,6 +966,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--oltp-warmup", type=int)
     parser.add_argument("--olap-iterations", type=int)
     parser.add_argument("--olap-warmup", type=int)
+    parser.add_argument("--oltp-timeout-ms", type=float)
+    parser.add_argument("--olap-timeout-ms", type=float)
     parser.add_argument(
         "--iteration-progress",
         action="store_true",
@@ -906,6 +1005,9 @@ def _parse_args() -> argparse.Namespace:
 def main() -> int:
     args = _parse_args()
     started_at = datetime.now(UTC)
+    args_dict = vars(args)
+    oltp_timeout_ms = args_dict.get("oltp_timeout_ms", None)
+    olap_timeout_ms = args_dict.get("olap_timeout_ms", None)
     if args.iterations <= 0:
         raise ValueError("--iterations must be positive.")
     if args.warmup < 0:
@@ -918,6 +1020,10 @@ def main() -> int:
         raise ValueError("--olap-iterations must be positive.")
     if args.olap_warmup is not None and args.olap_warmup < 0:
         raise ValueError("--olap-warmup must be non-negative.")
+    if oltp_timeout_ms is not None and oltp_timeout_ms <= 0:
+        raise ValueError("--oltp-timeout-ms must be positive.")
+    if olap_timeout_ms is not None and olap_timeout_ms <= 0:
+        raise ValueError("--olap-timeout-ms must be positive.")
     if args.node_type_count <= 0:
         raise ValueError("--node-type-count must be positive.")
     if args.edge_type_count <= 0:
@@ -988,6 +1094,7 @@ def main() -> int:
             oltp_warmup=(
                 args.oltp_warmup if args.oltp_warmup is not None else args.warmup
             ),
+            oltp_timeout_ms=oltp_timeout_ms,
             olap_iterations=(
                 args.olap_iterations
                 if args.olap_iterations is not None
@@ -996,6 +1103,7 @@ def main() -> int:
             olap_warmup=(
                 args.olap_warmup if args.olap_warmup is not None else args.warmup
             ),
+            olap_timeout_ms=olap_timeout_ms,
             db_root_dir=args.db_root_dir,
             result=result,
             failure_count=failure_count,
@@ -1021,6 +1129,8 @@ def main() -> int:
         scale=scale,
         db_root_dir=args.db_root_dir,
         iteration_progress=args.iteration_progress,
+        oltp_timeout_ms=oltp_timeout_ms,
+        olap_timeout_ms=olap_timeout_ms,
         progress_callback=(
             lambda partial_result, partial_failure_count: write_checkpoint(
                 partial_result,

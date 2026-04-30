@@ -7,6 +7,7 @@ import gc
 import json
 import platform
 import sqlite3
+import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -15,11 +16,13 @@ import cypherglot
 
 from scripts.benchmarks.common.cli import parse_sql_runtime_args
 from scripts.benchmarks.common.shared import (
+    BenchmarkQueryTimeoutError,
     CorpusQuery,
     RuntimeScale,
     RuntimeProgressCallback,
     _average_edges_per_source,
     _build_graph_schema,
+    _call_with_timeout,
     _edge_out_degree as _shared_edge_out_degree,
     _measure_ns,
     _progress,
@@ -56,6 +59,7 @@ from scripts.benchmarks.common.runtime_postgresql_backend import (
     _postgresql_server_version,
     _reset_postgresql_schema,
     _seed_postgresql_from_fixture,
+    _set_local_postgresql_statement_timeout,
 )
 from scripts.benchmarks.common.runtime_shared import (
     DuckDBConnection,
@@ -77,6 +81,11 @@ from scripts.benchmarks.common.runtime_sqlite_backend import (
     _seed_sqlite_from_generated_fixture,
     _sqlite_file_size_mib,
 )
+
+try:
+    from psycopg2 import errorcodes as _psycopg2_errorcodes
+except ImportError:  # pragma: no cover - optional dependency
+    _psycopg2_errorcodes = None
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -450,7 +459,12 @@ class _BackendRunner:
             ),
         )
 
-    def execute_query(self, artifact: PreparedArtifact) -> None:
+    def execute_query(
+        self,
+        artifact: PreparedArtifact,
+        *,
+        timeout_ms: float | None = None,
+    ) -> None:
         if artifact.mode == "statement":
             if self.backend == "sqlite":
                 cursor = self.sqlite.execute(artifact.compiled)
@@ -459,6 +473,7 @@ class _BackendRunner:
                 return
             if self.backend == "postgresql":
                 with self.postgresql.cursor() as cur:
+                    _set_local_postgresql_statement_timeout(cur, timeout_ms)
                     _execute_bound_postgresql_sql(cur, artifact.compiled, {})
                     if cur.description is not None:
                         cur.fetchall()
@@ -468,7 +483,11 @@ class _BackendRunner:
                 cursor.fetchall()
             return
         if self.backend == "postgresql":
-            _execute_postgresql_program(self.postgresql, artifact.compiled)
+            _execute_postgresql_program(
+                self.postgresql,
+                artifact.compiled,
+                timeout_ms=timeout_ms,
+            )
             return
         if self.backend == "duckdb":
             _execute_duckdb_program(self.duck, artifact.compiled)
@@ -481,9 +500,14 @@ class _BackendRunner:
         _execute_sqlite_program(self.sqlite, artifact.compiled, commit=False)
 
 
-def _run_iteration(runner: _BackendRunner, query: CorpusQuery) -> dict[str, int]:
+def _run_iteration(
+    runner: _BackendRunner,
+    query: CorpusQuery,
+    *,
+    timeout_ms: float | None = None,
+) -> dict[str, int]:
     if runner.backend == "postgresql":
-        return _run_postgresql_iteration(runner, query)
+        return _run_postgresql_iteration(runner, query, timeout_ms=timeout_ms)
 
     reset_ns = 0
     rss_stages_mib = {"before_compile": runner.capture_rss_snapshot()}
@@ -494,7 +518,13 @@ def _run_iteration(runner: _BackendRunner, query: CorpusQuery) -> dict[str, int]
     try:
         artifact, compile_ns = _measure_ns(lambda: runner.compile_query(query))
         rss_stages_mib["after_compile"] = runner.capture_rss_snapshot()
-        _, execute_ns = _measure_ns(lambda: runner.execute_query(artifact))
+        _, execute_ns = _measure_ns(
+            lambda: _execute_runner_query(
+                runner,
+                artifact,
+                timeout_ms=timeout_ms,
+            )
+        )
         end_to_end_ns = compile_ns + execute_ns
         rss_stages_mib["after_execute"] = runner.capture_rss_snapshot()
     finally:
@@ -517,6 +547,8 @@ def _run_iteration(runner: _BackendRunner, query: CorpusQuery) -> dict[str, int]
 def _run_postgresql_iteration(
     runner: _BackendRunner,
     query: CorpusQuery,
+    *,
+    timeout_ms: float | None = None,
 ) -> dict[str, int]:
     reset_ns = 0
     capture_iteration_rss = getattr(
@@ -528,7 +560,13 @@ def _run_postgresql_iteration(
     try:
         artifact, compile_ns = _measure_ns(lambda: runner.compile_query(query))
         rss_stages_mib["after_compile"] = capture_iteration_rss()
-        _, execute_ns = _measure_ns(lambda: runner.execute_query(artifact))
+        _, execute_ns = _measure_ns(
+            lambda: _execute_runner_query(
+                runner,
+                artifact,
+                timeout_ms=timeout_ms,
+            )
+        )
         end_to_end_ns = compile_ns + execute_ns
         rss_stages_mib["after_execute"] = capture_iteration_rss()
         if query.mutation:
@@ -548,6 +586,44 @@ def _run_postgresql_iteration(
     }
 
 
+def _execute_runner_query(
+    runner: _BackendRunner,
+    artifact: PreparedArtifact,
+    *,
+    timeout_ms: float | None,
+) -> None:
+    if timeout_ms is None:
+        runner.execute_query(artifact)
+        return
+    runner.execute_query(artifact, timeout_ms=timeout_ms)
+
+
+def _postgresql_error_is_query_timeout(exc: Exception) -> bool:
+    if _psycopg2_errorcodes is None:
+        return False
+    pgcode = str(getattr(exc, "pgcode", "") or "")
+    if pgcode != _psycopg2_errorcodes.QUERY_CANCELED:
+        return False
+    error_message = str(exc).lower()
+    return "statement timeout" in error_message or "timed out" in error_message
+
+
+def _run_iteration_with_timeout(
+    runner: _BackendRunner,
+    query: CorpusQuery,
+    *,
+    timeout_ms: float | None,
+    operation: str,
+) -> dict[str, int]:
+    if runner.backend == "postgresql":
+        return _run_iteration(runner, query, timeout_ms=timeout_ms)
+    return _call_with_timeout(
+        lambda: _run_iteration(runner, query),
+        timeout_ms=timeout_ms,
+        operation=operation,
+    )
+
+
 def _measure_query(
     runner: _BackendRunner,
     query: CorpusQuery,
@@ -556,6 +632,7 @@ def _measure_query(
     warmup: int,
     progress_label: str = "",
     iteration_progress: bool = False,
+    timeout_ms: float | None = None,
 ) -> dict[str, object]:
     for warmup_index in range(1, warmup + 1):
         if iteration_progress:
@@ -565,7 +642,49 @@ def _measure_query(
                 current=warmup_index,
                 total=warmup,
             )
-        _run_iteration(runner, query)
+        try:
+            _run_iteration_with_timeout(
+                runner,
+                query,
+                timeout_ms=timeout_ms,
+                operation=f"{runner.backend}:{query.name}:warmup",
+            )
+        except BenchmarkQueryTimeoutError:
+            return {
+                "name": query.name,
+                "workload": query.workload,
+                "category": query.category,
+                "backend": runner.backend,
+                "index_mode": runner.index_mode,
+                "mode": query.mode,
+                "mutation": query.mutation,
+                "status": "timed_out",
+                "query_timeout": {
+                    "phase": "warmup",
+                    "timeout_ms": timeout_ms,
+                    "iteration": warmup_index,
+                },
+            }
+        except Exception as exc:
+            if runner.backend == "postgresql" and _postgresql_error_is_query_timeout(
+                exc
+            ):
+                return {
+                    "name": query.name,
+                    "workload": query.workload,
+                    "category": query.category,
+                    "backend": runner.backend,
+                    "index_mode": runner.index_mode,
+                    "mode": query.mode,
+                    "mutation": query.mutation,
+                    "status": "timed_out",
+                    "query_timeout": {
+                        "phase": "warmup",
+                        "timeout_ms": timeout_ms,
+                        "iteration": warmup_index,
+                    },
+                }
+            raise
 
     compile_latencies: list[int] = []
     execute_latencies: list[int] = []
@@ -589,7 +708,49 @@ def _measure_query(
                     current=iteration_index,
                     total=iterations,
                 )
-            metrics = _run_iteration(runner, query)
+            try:
+                metrics = _run_iteration_with_timeout(
+                    runner,
+                    query,
+                    timeout_ms=timeout_ms,
+                    operation=f"{runner.backend}:{query.name}:iteration",
+                )
+            except BenchmarkQueryTimeoutError:
+                return {
+                    "name": query.name,
+                    "workload": query.workload,
+                    "category": query.category,
+                    "backend": runner.backend,
+                    "index_mode": runner.index_mode,
+                    "mode": query.mode,
+                    "mutation": query.mutation,
+                    "status": "timed_out",
+                    "query_timeout": {
+                        "phase": "iteration",
+                        "timeout_ms": timeout_ms,
+                        "iteration": iteration_index,
+                    },
+                }
+            except Exception as exc:
+                if runner.backend == "postgresql" and _postgresql_error_is_query_timeout(
+                    exc
+                ):
+                    return {
+                        "name": query.name,
+                        "workload": query.workload,
+                        "category": query.category,
+                        "backend": runner.backend,
+                        "index_mode": runner.index_mode,
+                        "mode": query.mode,
+                        "mutation": query.mutation,
+                        "status": "timed_out",
+                        "query_timeout": {
+                            "phase": "iteration",
+                            "timeout_ms": timeout_ms,
+                            "iteration": iteration_index,
+                        },
+                    }
+                raise
             compile_latencies.append(metrics["compile_ns"])
             execute_latencies.append(metrics["execute_ns"])
             end_to_end_latencies.append(metrics["end_to_end_ns"])
@@ -608,6 +769,7 @@ def _measure_query(
         "index_mode": runner.index_mode,
         "mode": query.mode,
         "mutation": query.mutation,
+        "status": "passed",
         "compile": _summarize(compile_latencies),
         "execute": _summarize(execute_latencies),
         "end_to_end": _summarize(end_to_end_latencies),
@@ -623,7 +785,10 @@ def _pool_summaries(
     query_results: list[dict[str, object]],
     key: str,
 ) -> dict[str, float]:
-    if not query_results:
+    completed_results = [
+        result for result in query_results if result.get("status", "passed") == "passed"
+    ]
+    if not completed_results:
         return {
             "mean_of_mean_ms": 0.0,
             "mean_of_p50_ms": 0.0,
@@ -631,14 +796,14 @@ def _pool_summaries(
             "mean_of_p99_ms": 0.0,
         }
     return {
-        "mean_of_mean_ms": sum(result[key]["mean_ms"] for result in query_results)
-        / len(query_results),
-        "mean_of_p50_ms": sum(result[key]["p50_ms"] for result in query_results)
-        / len(query_results),
-        "mean_of_p95_ms": sum(result[key]["p95_ms"] for result in query_results)
-        / len(query_results),
-        "mean_of_p99_ms": sum(result[key]["p99_ms"] for result in query_results)
-        / len(query_results),
+        "mean_of_mean_ms": sum(result[key]["mean_ms"] for result in completed_results)
+        / len(completed_results),
+        "mean_of_p50_ms": sum(result[key]["p50_ms"] for result in completed_results)
+        / len(completed_results),
+        "mean_of_p95_ms": sum(result[key]["p95_ms"] for result in completed_results)
+        / len(completed_results),
+        "mean_of_p99_ms": sum(result[key]["p99_ms"] for result in completed_results)
+        / len(completed_results),
     }
 
 
@@ -655,6 +820,7 @@ def _run_backend_suite(
     postgres_dsn: str | None = None,
     db_root_dir: Path | None = None,
     iteration_progress: bool = False,
+    timeout_ms: float | None = None,
 ) -> dict[str, object]:
     backend_index_mode = sqlite_source.index_mode
     suite_progress_name = f"{workload}/{backend}_{backend_index_mode}"
@@ -692,16 +858,26 @@ def _run_backend_suite(
                     warmup=warmup,
                     progress_label=query_progress_label,
                     iteration_progress=iteration_progress,
+                    timeout_ms=timeout_ms,
                 )
             )
         runner.rss_snapshots_mib["suite_complete"] = runner.capture_rss_snapshot()
         _progress(f"{suite_progress_name}: suite complete")
+        pass_count = sum(
+            result.get("status", "passed") == "passed" for result in query_results
+        )
+        timeout_count = sum(
+            result.get("status") == "timed_out" for result in query_results
+        )
         return {
             "backend": backend,
             "index_mode": runner.index_mode,
             "iterations": iterations,
             "warmup": warmup,
             "query_count": len(queries),
+            "pass_count": pass_count,
+            "timeout_count": timeout_count,
+            "fail_count": 0,
             "setup": {
                 f"{metric[:-3]}_ms": value / 1_000_000.0
                 for metric, value in runner.setup_metrics.items()
@@ -744,6 +920,8 @@ def _build_payload(
     db_root_dir: Path | None,
     result: dict[str, object],
     status: str,
+    oltp_timeout_ms: float | None = None,
+    olap_timeout_ms: float | None = None,
     completed_at: datetime | None = None,
 ) -> dict[str, object]:
     payload: dict[str, object] = {
@@ -804,8 +982,10 @@ def _build_payload(
             "default_warmup": default_warmup,
             "oltp_iterations": oltp_iterations,
             "oltp_warmup": oltp_warmup,
+            "oltp_timeout_ms": oltp_timeout_ms,
             "olap_iterations": olap_iterations,
             "olap_warmup": olap_warmup,
+            "olap_timeout_ms": olap_timeout_ms,
         },
         "db_root_dir": str(db_root_dir) if db_root_dir is not None else None,
         "results": result,
@@ -933,6 +1113,8 @@ def _benchmark_result(
     index_mode: str,
     db_root_dir: Path | None = None,
     iteration_progress: bool = False,
+    oltp_timeout_ms: float | None = None,
+    olap_timeout_ms: float | None = None,
     progress_callback: RuntimeProgressCallback | None = None,
 ) -> dict[str, object]:
     graph_schema, edge_plans = _build_graph_schema(scale)
@@ -950,6 +1132,19 @@ def _benchmark_result(
     enabled_backends = set(entrypoint.enabled_backends)
 
     index_modes = [index_mode] if index_mode != "both" else ["indexed", "unindexed"]
+
+    def backend_suite_kwargs(
+        *,
+        workload: str,
+        timeout_ms: float | None,
+    ) -> dict[str, object]:
+        kwargs: dict[str, object] = {
+            "workload": workload,
+            "iteration_progress": iteration_progress,
+        }
+        if timeout_ms is not None:
+            kwargs["timeout_ms"] = timeout_ms
+        return kwargs
 
     workloads: dict[str, object] = {}
     if progress_callback is not None:
@@ -982,14 +1177,16 @@ def _benchmark_result(
                     workloads["oltp"][f"sqlite_{mode}"] = _run_backend_suite(
                         "sqlite",
                         sqlite_oltp_queries,
-                        workload="oltp",
                         iterations=oltp_iterations_value,
                         warmup=oltp_warmup_value,
                         graph_schema=graph_schema,
                         schema_context=schema_context,
                         sqlite_source=fixture,
                         db_root_dir=db_root_dir,
-                        iteration_progress=iteration_progress,
+                        **backend_suite_kwargs(
+                            workload="oltp",
+                            timeout_ms=oltp_timeout_ms,
+                        ),
                     )
                     if progress_callback is not None:
                         progress_callback(
@@ -999,7 +1196,6 @@ def _benchmark_result(
                     workloads["oltp"][f"postgresql_{mode}"] = _run_backend_suite(
                         "postgresql",
                         postgresql_oltp_queries,
-                        workload="oltp",
                         iterations=oltp_iterations_value,
                         warmup=oltp_warmup_value,
                         graph_schema=graph_schema,
@@ -1007,7 +1203,10 @@ def _benchmark_result(
                         sqlite_source=fixture,
                         postgres_dsn=postgres_dsn,
                         db_root_dir=db_root_dir,
-                        iteration_progress=iteration_progress,
+                        **backend_suite_kwargs(
+                            workload="oltp",
+                            timeout_ms=oltp_timeout_ms,
+                        ),
                     )
                     if progress_callback is not None:
                         progress_callback(
@@ -1020,14 +1219,16 @@ def _benchmark_result(
                 workloads["oltp"]["duckdb"] = _run_backend_suite(
                     "duckdb",
                     duckdb_oltp_queries,
-                    workload="oltp",
                     iterations=oltp_iterations_value,
                     warmup=oltp_warmup_value,
                     graph_schema=graph_schema,
                     schema_context=schema_context,
                     sqlite_source=duckdb_source,
                     db_root_dir=db_root_dir,
-                    iteration_progress=iteration_progress,
+                    **backend_suite_kwargs(
+                        workload="oltp",
+                        timeout_ms=oltp_timeout_ms,
+                    ),
                 )
                 if progress_callback is not None:
                     progress_callback(
@@ -1051,14 +1252,16 @@ def _benchmark_result(
                     workloads["olap"][f"sqlite_{mode}"] = _run_backend_suite(
                         "sqlite",
                         sqlite_olap_queries,
-                        workload="olap",
                         iterations=olap_iterations_value,
                         warmup=olap_warmup_value,
                         graph_schema=graph_schema,
                         schema_context=schema_context,
                         sqlite_source=fixture,
                         db_root_dir=db_root_dir,
-                        iteration_progress=iteration_progress,
+                        **backend_suite_kwargs(
+                            workload="olap",
+                            timeout_ms=olap_timeout_ms,
+                        ),
                     )
                     if progress_callback is not None:
                         progress_callback(
@@ -1068,7 +1271,6 @@ def _benchmark_result(
                     workloads["olap"][f"postgresql_{mode}"] = _run_backend_suite(
                         "postgresql",
                         postgresql_olap_queries,
-                        workload="olap",
                         iterations=olap_iterations_value,
                         warmup=olap_warmup_value,
                         graph_schema=graph_schema,
@@ -1076,7 +1278,10 @@ def _benchmark_result(
                         sqlite_source=fixture,
                         postgres_dsn=postgres_dsn,
                         db_root_dir=db_root_dir,
-                        iteration_progress=iteration_progress,
+                        **backend_suite_kwargs(
+                            workload="olap",
+                            timeout_ms=olap_timeout_ms,
+                        ),
                     )
                     if progress_callback is not None:
                         progress_callback(
@@ -1089,14 +1294,16 @@ def _benchmark_result(
                 workloads["olap"]["duckdb"] = _run_backend_suite(
                     "duckdb",
                     duckdb_olap_queries,
-                    workload="olap",
                     iterations=olap_iterations_value,
                     warmup=olap_warmup_value,
                     graph_schema=graph_schema,
                     schema_context=schema_context,
                     sqlite_source=duckdb_source,
                     db_root_dir=db_root_dir,
-                    iteration_progress=iteration_progress,
+                    **backend_suite_kwargs(
+                        workload="olap",
+                        timeout_ms=olap_timeout_ms,
+                    ),
                 )
                 if progress_callback is not None:
                     progress_callback({"workloads": workloads, "token_map": token_map})
@@ -1118,6 +1325,32 @@ def _print_suite(name: str, suite: dict[str, object]) -> None:
         if snapshot["combined_mib"] is not None:
             parts.append(f"combined={snapshot['combined_mib']:.2f} MiB")
         return ", ".join(parts)
+
+    query_results = suite["queries"]
+    pass_count = int(
+        suite.get(
+            "pass_count",
+            sum(result.get("status", "passed") == "passed" for result in query_results),
+        )
+    )
+    skip_count = int(
+        suite.get(
+            "skip_count",
+            sum(result.get("status") == "skipped" for result in query_results),
+        )
+    )
+    timeout_count = int(
+        suite.get(
+            "timeout_count",
+            sum(result.get("status") == "timed_out" for result in query_results),
+        )
+    )
+    fail_count = int(
+        suite.get(
+            "fail_count",
+            sum(result.get("status") == "failed" for result in query_results),
+        )
+    )
 
     print(name)
     setup_parts = [
@@ -1142,34 +1375,51 @@ def _print_suite(name: str, suite: dict[str, object]) -> None:
         f"wal={suite['storage']['wal_size_mib']:.2f} MiB"
     )
     print(
+        "  status: "
+        f"passed={pass_count}, skipped={skip_count}, "
+        f"timed_out={timeout_count}, failed={fail_count}"
+    )
+    if pass_count:
+        print(
         "  pooled compile: "
         f"mean={suite['compile']['mean_of_mean_ms']:.2f} ms, "
         f"p50={suite['compile']['mean_of_p50_ms']:.2f} ms, "
         f"p95={suite['compile']['mean_of_p95_ms']:.2f} ms, "
         f"p99={suite['compile']['mean_of_p99_ms']:.2f} ms"
     )
-    print(
-        "  pooled execute: "
-        f"mean={suite['execute']['mean_of_mean_ms']:.2f} ms, "
-        f"p50={suite['execute']['mean_of_p50_ms']:.2f} ms, "
-        f"p95={suite['execute']['mean_of_p95_ms']:.2f} ms, "
-        f"p99={suite['execute']['mean_of_p99_ms']:.2f} ms"
-    )
-    print(
-        "  pooled reset: "
-        f"mean={suite['reset']['mean_of_mean_ms']:.2f} ms, "
-        f"p50={suite['reset']['mean_of_p50_ms']:.2f} ms, "
-        f"p95={suite['reset']['mean_of_p95_ms']:.2f} ms, "
-        f"p99={suite['reset']['mean_of_p99_ms']:.2f} ms"
-    )
-    print(
-        "  pooled end-to-end: "
-        f"mean={suite['end_to_end']['mean_of_mean_ms']:.2f} ms, "
-        f"p50={suite['end_to_end']['mean_of_p50_ms']:.2f} ms, "
-        f"p95={suite['end_to_end']['mean_of_p95_ms']:.2f} ms, "
-        f"p99={suite['end_to_end']['mean_of_p99_ms']:.2f} ms"
-    )
-    for query_result in suite["queries"]:
+        print(
+            "  pooled execute: "
+            f"mean={suite['execute']['mean_of_mean_ms']:.2f} ms, "
+            f"p50={suite['execute']['mean_of_p50_ms']:.2f} ms, "
+            f"p95={suite['execute']['mean_of_p95_ms']:.2f} ms, "
+            f"p99={suite['execute']['mean_of_p99_ms']:.2f} ms"
+        )
+        print(
+            "  pooled reset: "
+            f"mean={suite['reset']['mean_of_mean_ms']:.2f} ms, "
+            f"p50={suite['reset']['mean_of_p50_ms']:.2f} ms, "
+            f"p95={suite['reset']['mean_of_p95_ms']:.2f} ms, "
+            f"p99={suite['reset']['mean_of_p99_ms']:.2f} ms"
+        )
+        print(
+            "  pooled end-to-end: "
+            f"mean={suite['end_to_end']['mean_of_mean_ms']:.2f} ms, "
+            f"p50={suite['end_to_end']['mean_of_p50_ms']:.2f} ms, "
+            f"p95={suite['end_to_end']['mean_of_p95_ms']:.2f} ms, "
+            f"p99={suite['end_to_end']['mean_of_p99_ms']:.2f} ms"
+        )
+    for query_result in query_results:
+        if query_result.get("status") == "timed_out":
+            timeout = query_result["query_timeout"]
+            print(
+                "    - "
+                f"{query_result['name']} [{query_result['category']}]: "
+                "TIMED OUT "
+                f"(phase={timeout['phase']}, "
+                f"iteration={timeout['iteration']}, "
+                f"timeout={timeout['timeout_ms']:.2f} ms)"
+            )
+            continue
         print(
             "    - "
             f"{query_result['name']} [{query_result['category']}]: "
@@ -1206,6 +1456,9 @@ def _parse_args(entrypoint: SQLRuntimeBenchmarkEntrypoint) -> argparse.Namespace
 def main(entrypoint: SQLRuntimeBenchmarkEntrypoint = SQLITE_ENTRYPOINT) -> int:
     args = _parse_args(entrypoint)
     started_at = datetime.now(UTC)
+    args_dict = vars(args)
+    oltp_timeout_ms = args_dict.get("oltp_timeout_ms", None)
+    olap_timeout_ms = args_dict.get("olap_timeout_ms", None)
     if args.iterations <= 0:
         raise ValueError("--iterations must be positive.")
     if args.warmup < 0:
@@ -1230,6 +1483,10 @@ def main(entrypoint: SQLRuntimeBenchmarkEntrypoint = SQLITE_ENTRYPOINT) -> int:
         raise ValueError("--olap-iterations must be positive.")
     if args.olap_warmup is not None and args.olap_warmup < 0:
         raise ValueError("--olap-warmup must be non-negative.")
+    if oltp_timeout_ms is not None and oltp_timeout_ms <= 0:
+        raise ValueError("--oltp-timeout-ms must be positive.")
+    if olap_timeout_ms is not None and olap_timeout_ms <= 0:
+        raise ValueError("--olap-timeout-ms must be positive.")
 
     include_duckdb = "duckdb" in entrypoint.enabled_backends
     if include_duckdb and not _duckdb_available():
@@ -1292,6 +1549,7 @@ def main(entrypoint: SQLRuntimeBenchmarkEntrypoint = SQLITE_ENTRYPOINT) -> int:
             oltp_warmup=(
                 args.oltp_warmup if args.oltp_warmup is not None else args.warmup
             ),
+            oltp_timeout_ms=oltp_timeout_ms,
             olap_iterations=(
                 args.olap_iterations
                 if args.olap_iterations is not None
@@ -1300,6 +1558,7 @@ def main(entrypoint: SQLRuntimeBenchmarkEntrypoint = SQLITE_ENTRYPOINT) -> int:
             olap_warmup=(
                 args.olap_warmup if args.olap_warmup is not None else args.warmup
             ),
+            olap_timeout_ms=olap_timeout_ms,
             db_root_dir=db_root_dir,
             result=result,
             status=status,
@@ -1348,6 +1607,8 @@ def main(entrypoint: SQLRuntimeBenchmarkEntrypoint = SQLITE_ENTRYPOINT) -> int:
             index_mode=args.index_mode,
             db_root_dir=db_root_dir,
             iteration_progress=args.iteration_progress,
+            oltp_timeout_ms=oltp_timeout_ms,
+            olap_timeout_ms=olap_timeout_ms,
             progress_callback=lambda partial_result: write_checkpoint(
                 partial_result,
                 status="running",
@@ -1368,7 +1629,16 @@ def main(entrypoint: SQLRuntimeBenchmarkEntrypoint = SQLITE_ENTRYPOINT) -> int:
                 if suite_name == "description":
                     continue
                 _print_suite(f"olap/{suite_name}", suite)
-        return 0
+        failure_count = 0
+        for workload_name in ("oltp", "olap"):
+            if workload_name not in workloads:
+                continue
+            for suite_name, suite in workloads[workload_name].items():
+                if suite_name == "description":
+                    continue
+                failure_count += int(suite.get("fail_count", 0))
+                failure_count += int(suite.get("timeout_count", 0))
+        return 1 if failure_count else 0
     finally:
         if acquired_postgresql_runtime:
             release_postgresql_benchmark_dsn()

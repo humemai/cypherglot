@@ -10,19 +10,22 @@ from __future__ import annotations
 import json
 import platform
 import resource
+import signal
 import sys
+import threading
 import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, TypeVar
 
 import cypherglot
 
 
 RuntimeProgressCallback = Callable[[dict[str, object]], None]
 SKEWED_EDGE_DEGREE_CYCLE = 1_000
+_TimedCallResult = TypeVar("_TimedCallResult")
 
 
 def _progress(message: str) -> None:
@@ -72,6 +75,52 @@ class CorpusQuery:
     backends: tuple[str, ...]
     mode: str = "statement"
     mutation: bool = False
+
+
+class BenchmarkQueryTimeoutError(TimeoutError):
+    def __init__(self, *, operation: str, timeout_ms: float) -> None:
+        self.operation = operation
+        self.timeout_ms = timeout_ms
+        super().__init__(f"{operation} exceeded {timeout_ms:.2f} ms")
+
+
+def _call_with_timeout(
+    callback: Callable[[], _TimedCallResult],
+    *,
+    timeout_ms: float | None,
+    operation: str,
+) -> _TimedCallResult:
+    if timeout_ms is None:
+        return callback()
+    if timeout_ms <= 0:
+        raise ValueError("timeout_ms must be positive when provided.")
+    if not hasattr(signal, "setitimer") or not hasattr(signal, "getitimer"):
+        raise RuntimeError("Query timeouts require signal.setitimer support.")
+    if threading.current_thread() is not threading.main_thread():
+        raise RuntimeError("Query timeouts must run on the main thread.")
+
+    previous_handler = signal.getsignal(signal.SIGALRM)
+    previous_timer = signal.getitimer(signal.ITIMER_REAL)
+
+    def _handle_timeout(_signum: int, _frame: object) -> None:
+        raise BenchmarkQueryTimeoutError(
+            operation=operation,
+            timeout_ms=timeout_ms,
+        )
+
+    signal.signal(signal.SIGALRM, _handle_timeout)
+    signal.setitimer(signal.ITIMER_REAL, timeout_ms / 1_000.0)
+    try:
+        return callback()
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0.0)
+        signal.signal(signal.SIGALRM, previous_handler)
+        if previous_timer[0] > 0:
+            signal.setitimer(
+                signal.ITIMER_REAL,
+                previous_timer[0],
+                previous_timer[1],
+            )
 
 
 def _node_type_name(type_index: int) -> str:

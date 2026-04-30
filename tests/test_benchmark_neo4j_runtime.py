@@ -90,6 +90,75 @@ class BenchmarkNeo4jRuntimeScriptTests(unittest.TestCase):
 
         self.assertEqual(payload["database_versions"], {"neo4j": "5.26.0"})
 
+    def test_run_query_once_uses_native_neo4j_transaction_timeout(self) -> None:
+        run_query_once = getattr(benchmark_neo4j_runtime, "_run_query_once")
+        query = benchmark_neo4j_runtime.CorpusQuery(
+            name="oltp_type1_point_lookup",
+            workload="oltp",
+            category="read-point",
+            query="MATCH (n) RETURN n",
+            backends=("neo4j",),
+        )
+        transaction = mock.MagicMock()
+        transaction.run.return_value = [object()]
+        session = mock.MagicMock()
+        session.begin_transaction.return_value = transaction
+        session.__enter__.return_value = session
+        session.__exit__.return_value = None
+        driver = mock.MagicMock()
+        driver.session.return_value = session
+
+        run_query_once(
+            driver,
+            database="neo4j",
+            query=query,
+            timeout_ms=2500.0,
+        )
+
+        driver.session.assert_called_once_with(database="neo4j")
+        session.begin_transaction.assert_called_once_with(timeout=2.5)
+        self.assertEqual(transaction.run.call_args.args[0], query.query)
+
+    def test_measure_query_classifies_neo4j_timeout_errors(self) -> None:
+        measure_query = getattr(benchmark_neo4j_runtime, "_measure_query")
+        class TimeoutNeo4jError(benchmark_neo4j_runtime.Neo4jError):
+            @property
+            def code(self) -> str:
+                return (
+                    "Neo.ClientError.Transaction."
+                    "TransactionTimedOutClientConfiguration"
+                )
+
+        timeout_exc = TimeoutNeo4jError("transaction timed out")
+        query = benchmark_neo4j_runtime.CorpusQuery(
+            name="olap_variable_length_grouped_rollup",
+            workload="olap",
+            category="path-rollup",
+            query="MATCH (n) RETURN n",
+            backends=("neo4j",),
+        )
+
+        with mock.patch.object(
+            benchmark_neo4j_runtime,
+            "_run_query_once",
+            side_effect=timeout_exc,
+        ):
+            result = measure_query(
+                object(),
+                database="neo4j",
+                index_mode="indexed",
+                query=query,
+                iterations=5,
+                warmup=1,
+                progress_label="neo4j/olap",
+                iteration_progress=False,
+                timeout_ms=10000.0,
+            )
+
+        self.assertEqual(result["status"], "timed_out")
+        self.assertEqual(result["query_timeout"]["phase"], "warmup")
+        self.assertEqual(result["query_timeout"]["iteration"], 1)
+
     def test_benchmark_result_reports_incremental_progress(self) -> None:
         benchmark_result = getattr(benchmark_neo4j_runtime, "_benchmark_result")
         load_corpus = getattr(benchmark_neo4j_runtime, "_load_corpus")
