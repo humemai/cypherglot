@@ -227,6 +227,7 @@ Supporting files:
 - `scripts/benchmarks/corpora/compiler_benchmark_corpus.json`
 - `scripts/benchmarks/corpora/compiler_sqlglot_benchmark_corpus.json`
 - `scripts/benchmarks/results/compiler_benchmark.json`
+- `scripts/benchmarks/compiler/summarize_results.py`
 
 ### Compiler scope
 
@@ -278,6 +279,8 @@ From the repo root:
 
 ```bash
 python -m scripts.benchmarks.compiler.benchmark --iterations 10000 --warmup 200
+python -m scripts.benchmarks.compiler.summarize_results
+python -m scripts.benchmarks.compiler.summarize_results --output scripts/benchmarks/results/compiler-results.md
 ```
 
 The default compiler run uses:
@@ -321,6 +324,24 @@ Shared compiler entrypoint summary from the current checked-in run:
 | `parse_cypher_text(...)` | `0.55 ms` | `0.91 ms` | `0.95 ms` |
 | `validate_cypher_text(...)` | `0.64 ms` | `1.00 ms` | `1.05 ms` |
 | `normalize_cypher_text(...)` | `0.71 ms` | `1.15 ms` | `1.26 ms` |
+
+### Compiler result summarizer
+
+Script:
+
+- `scripts/benchmarks/compiler/summarize_results.py`
+
+This summarizer reads one or more compiler benchmark JSON files and renders a
+Markdown report. By default it consumes the checked-in single-run baseline at
+`scripts/benchmarks/results/compiler_benchmark.json` and emits:
+
+- an overview block with schema and environment metadata
+- a shared-entrypoint summary table
+- a backend-entrypoint summary table
+- a backend-lowering summary table
+- SQLGlot comparison tables when `sqlglot_suites` are present in the input
+
+Use `--output` to write the Markdown to a file; otherwise it prints to stdout.
 
 Backend-dependent public entrypoint summary from the same run:
 
