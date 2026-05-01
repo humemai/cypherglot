@@ -41,6 +41,7 @@ format_relayed_progress_line = getattr(
     "_format_relayed_progress_line",
 )
 relay_process_output = getattr(run_runtime_matrix, "_relay_process_output")
+cleanup_job_db_root_dir = getattr(run_runtime_matrix, "_cleanup_job_db_root_dir")
 
 
 class RunRuntimeMatrixTests(unittest.TestCase):
@@ -437,3 +438,40 @@ class RunRuntimeMatrixTests(unittest.TestCase):
             )
 
         self.assertNotIn("--iteration-progress", command)
+
+    def test_cleanup_job_db_root_dir_removes_existing_job_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            db_root_dir = temp_path / "db"
+            db_root_dir.mkdir()
+            (db_root_dir / "artifact.txt").write_text("ok", encoding="utf-8")
+            job = run_runtime_matrix.MatrixJob(
+                sequence=1,
+                variant=run_runtime_matrix.VARIANT_BY_NAME["sqlite-indexed"],
+                repeat=1,
+                output_path=temp_path / "result.json",
+                log_path=temp_path / "job.log",
+                db_root_dir=db_root_dir,
+            )
+
+            cleanup_error = cleanup_job_db_root_dir(job)
+
+        self.assertIsNone(cleanup_error)
+        self.assertFalse(db_root_dir.exists())
+
+    def test_cleanup_job_db_root_dir_keeps_missing_directory_as_noop(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            db_root_dir = temp_path / "missing-db"
+            job = run_runtime_matrix.MatrixJob(
+                sequence=1,
+                variant=run_runtime_matrix.VARIANT_BY_NAME["sqlite-indexed"],
+                repeat=1,
+                output_path=temp_path / "result.json",
+                log_path=temp_path / "job.log",
+                db_root_dir=db_root_dir,
+            )
+
+            cleanup_error = cleanup_job_db_root_dir(job)
+
+        self.assertIsNone(cleanup_error)
