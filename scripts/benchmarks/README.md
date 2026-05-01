@@ -6,7 +6,7 @@ schema design, compiler behavior, and backend runtime behavior.
 The benchmark area is now organized by domain:
 
 - `common/`: shared helpers used by the benchmark entrypoints
-- `compiler/`: compiler-only benchmark entrypoint
+- `compiler/`: compiler-only benchmark entrypoint and summarizer
 - `runtime/`: backend runtime benchmarks, repeated-run matrix runner, and
   runtime summarizer
 - `schema/`: schema-shape benchmark, repeated-run matrix runner, and schema
@@ -17,6 +17,7 @@ The benchmark area is now organized by domain:
 Important current entrypoints:
 
 - `compiler/benchmark.py`: compiler-only latency benchmark
+- `compiler/summarize_results.py`: compiler benchmark Markdown summarizer
 - `schema/sqlite_shapes.py`: schema-shape benchmark used to justify the
   default graph-to-table layout
 - `runtime/sqlite.py`, `runtime/duckdb.py`, `runtime/postgresql.py`:
@@ -31,6 +32,8 @@ Important current entrypoints:
 Typical workflow:
 
 - run a single benchmark entrypoint when you need one JSON result
+- use the compiler summarizer to turn compiler JSON output into Markdown when
+  you want a human-readable report
 - use the matrix runners for repeated fresh-process runs
 - feed repeated JSON outputs into the matching summarizer to produce Markdown
   tables
