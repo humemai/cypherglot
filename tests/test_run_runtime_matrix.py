@@ -3,8 +3,10 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import io
+import queue
 import sys
 import tempfile
+import threading
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -42,6 +44,7 @@ format_relayed_progress_line = getattr(
 )
 relay_process_output = getattr(run_runtime_matrix, "_relay_process_output")
 cleanup_job_db_root_dir = getattr(run_runtime_matrix, "_cleanup_job_db_root_dir")
+worker_loop = getattr(run_runtime_matrix, "_worker_loop")
 
 
 class RunRuntimeMatrixTests(unittest.TestCase):
@@ -475,3 +478,85 @@ class RunRuntimeMatrixTests(unittest.TestCase):
             cleanup_error = cleanup_job_db_root_dir(job)
 
         self.assertIsNone(cleanup_error)
+
+    def test_worker_loop_removes_db_root_dir_after_failed_job(self) -> None:
+        args = argparse.Namespace(
+            scale="small",
+            fail_fast=False,
+            iterations=1000,
+            warmup=10,
+            oltp_iterations=None,
+            oltp_warmup=None,
+            olap_iterations=None,
+            olap_warmup=None,
+            oltp_timeout_ms=1000.0,
+            olap_timeout_ms=10000.0,
+            iteration_progress=True,
+            postgres_dsn=None,
+            neo4j_user="neo4j",
+            neo4j_database="neo4j",
+            neo4j_password="secret",
+            neo4j_docker_image="neo4j:5.26.24-community",
+            neo4j_docker_startup_timeout=120,
+            neo4j_keep_container=False,
+            arcadedb_jvm_args=None,
+        )
+
+        class _FakeProcess:
+            def __init__(self) -> None:
+                self.stdout = io.StringIO("")
+
+            def wait(self) -> int:
+                return 1
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            db_root_dir = temp_path / "db"
+            db_root_dir.mkdir()
+            (db_root_dir / "artifact.txt").write_text("ok", encoding="utf-8")
+            job = run_runtime_matrix.MatrixJob(
+                sequence=1,
+                variant=run_runtime_matrix.VARIANT_BY_NAME["sqlite-indexed"],
+                repeat=1,
+                output_path=temp_path / "result.json",
+                log_path=temp_path / "job.log",
+                db_root_dir=db_root_dir,
+            )
+            status = run_runtime_matrix.JobStatus(job=job)
+            job_queue: queue.Queue[run_runtime_matrix.JobStatus] = queue.Queue()
+            job_queue.put(status)
+            statuses = [status]
+            manifest_path = temp_path / "manifest.json"
+            base_manifest = {"jobs": []}
+            port_pool = run_runtime_matrix.PortReservationPool(
+                bolt_base=8788,
+                http_base=8575,
+                scan_limit=10,
+            )
+
+            with patch.object(
+                run_runtime_matrix,
+                "_build_command",
+                return_value=([sys.executable, "-c", "raise SystemExit(1)"], {}),
+            ), patch.object(
+                run_runtime_matrix.subprocess,
+                "Popen",
+                return_value=_FakeProcess(),
+            ):
+                worker_loop(
+                    worker_id=1,
+                    job_queue=job_queue,
+                    args=args,
+                    scale_preset=run_runtime_matrix.SCALE_PRESETS["small"],
+                    run_stamp="20260501T000000Z",
+                    port_pool=port_pool,
+                    manifest_path=manifest_path,
+                    base_manifest=base_manifest,
+                    statuses=statuses,
+                    manifest_lock=threading.Lock(),
+                    stop_event=threading.Event(),
+                )
+
+        self.assertEqual(status.status, "failed")
+        self.assertEqual(status.exit_code, 1)
+        self.assertFalse(db_root_dir.exists())

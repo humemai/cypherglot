@@ -797,6 +797,19 @@ def _render_campaign(
     lead = summaries[0]
     graph_scale = lead.graph_scale
     controls = lead.controls
+    node_property_fields = (
+        4
+        + int(graph_scale.get("node_extra_text_property_count", 0))
+        + int(graph_scale.get("node_extra_numeric_property_count", 0))
+        + int(graph_scale.get("node_extra_boolean_property_count", 0))
+    )
+    edge_property_fields = (
+        5
+        + int(graph_scale.get("edge_extra_text_property_count", 0))
+        + int(graph_scale.get("edge_extra_numeric_property_count", 0))
+        + int(graph_scale.get("edge_extra_boolean_property_count", 0))
+    )
+    total_property_fields = node_property_fields + edge_property_fields
     results_dir_label = _results_dir_label(
         [path for summary in summaries for path in summary.files]
     )
@@ -819,6 +832,12 @@ def _render_campaign(
         "",
         f"- `{graph_scale.get('total_nodes'):,}` total nodes",
         f"- `{graph_scale.get('total_edges'):,}` total edges",
+        f"- `{graph_scale.get('node_type_count', 0)}` node types",
+        f"- `{graph_scale.get('edge_type_count', 0)}` edge types",
+        (
+            f"- `{total_property_fields}` property fields across the schema "
+            f"(`{node_property_fields}` per node, `{edge_property_fields}` per edge)"
+        ),
         (
             f"- `{len(summaries)}` backend/index combinations across SQLite, "
             "DuckDB, PostgreSQL, Neo4j, ArcadeDB, and LadybugDB"

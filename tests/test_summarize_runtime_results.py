@@ -353,6 +353,12 @@ class SummarizeRuntimeResultsTests(unittest.TestCase):
         self.assertIn("Runtime result artifacts for this run now live under", markdown)
         self.assertIn("Versions used for this summarized run:", markdown)
         self.assertIn("`database_versions` object inside each JSON payload", markdown)
+        self.assertIn("- `4` node types", markdown)
+        self.assertIn("- `4` edge types", markdown)
+        self.assertIn(
+            "- `24` property fields across the schema (`14` per node, `10` per edge)",
+            markdown,
+        )
         self.assertIn("OLTP summary:", markdown)
         self.assertIn("| SQLite Indexed | `10.00 ms +- 0.00` |", markdown)
         self.assertIn("| SQLite Indexed | `100.00 MiB +- 0.00` |", markdown)

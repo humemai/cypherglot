@@ -933,20 +933,14 @@ def _worker_loop(
             status.duration_s = round(time.monotonic() - start, 2)
             status.exit_code = completed_returncode
             status.completed_at = datetime.now(UTC).isoformat()
+            cleanup_error = _cleanup_job_db_root_dir(status.job)
             if completed_returncode == 0:
                 status.status = "completed"
-                cleanup_error = _cleanup_job_db_root_dir(status.job)
                 print(
                     f"[worker {worker_id}] completed {status.job.slug} "
                     f"in {status.duration_s:.2f}s | "
                     f"{_format_progress_snapshot(statuses)}"
                 )
-                if cleanup_error is not None:
-                    print(
-                        f"[worker {worker_id}] warning {status.job.slug} "
-                        f"could not remove db artifacts at {status.job.db_root_dir}: "
-                        f"{cleanup_error}"
-                    )
             else:
                 status.status = "failed"
                 status.error = f"process exited with code {completed_returncode}"
@@ -958,6 +952,12 @@ def _worker_loop(
                 )
                 if args.fail_fast:
                     stop_event.set()
+            if cleanup_error is not None:
+                print(
+                    f"[worker {worker_id}] warning {status.job.slug} "
+                    f"could not remove db artifacts at {status.job.db_root_dir}: "
+                    f"{cleanup_error}"
+                )
         except (OSError, RuntimeError, subprocess.SubprocessError, ValueError) as exc:
             status.status = "failed"
             status.completed_at = datetime.now(UTC).isoformat()
