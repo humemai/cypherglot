@@ -7,6 +7,7 @@ import json
 import os
 import queue
 import random
+import shutil
 import socket
 import statistics
 import subprocess
@@ -757,6 +758,16 @@ def _job_status_to_manifest_entries(statuses: list[JobStatus]) -> list[dict[str,
     return entries
 
 
+def _cleanup_job_db_root_dir(job: MatrixJob) -> str | None:
+    if job.db_root_dir is None or not job.db_root_dir.exists():
+        return None
+    try:
+        shutil.rmtree(job.db_root_dir)
+    except OSError as exc:
+        return str(exc)
+    return None
+
+
 def _update_manifest(
     manifest_path: Path,
     base_manifest: dict[str, Any],
@@ -924,11 +935,18 @@ def _worker_loop(
             status.completed_at = datetime.now(UTC).isoformat()
             if completed_returncode == 0:
                 status.status = "completed"
+                cleanup_error = _cleanup_job_db_root_dir(status.job)
                 print(
                     f"[worker {worker_id}] completed {status.job.slug} "
                     f"in {status.duration_s:.2f}s | "
                     f"{_format_progress_snapshot(statuses)}"
                 )
+                if cleanup_error is not None:
+                    print(
+                        f"[worker {worker_id}] warning {status.job.slug} "
+                        f"could not remove db artifacts at {status.job.db_root_dir}: "
+                        f"{cleanup_error}"
+                    )
             else:
                 status.status = "failed"
                 status.error = f"process exited with code {completed_returncode}"
