@@ -37,7 +37,9 @@ def _payload(
     query_p50: float,
     query_p95: float,
     query_p99: float,
+    worker_startup: dict[str, float] | None = None,
     run_status: str = "completed",
+    workload_controls: dict[str, int | float] | None = None,
 ) -> dict[str, object]:
     if backend == "neo4j":
         database_versions = {"neo4j": "5.28.2"}
@@ -152,7 +154,8 @@ def _payload(
             "variable_hop_max": 2,
         },
         "index_mode": "indexed",
-        "workload_controls": {
+        "workload_controls": workload_controls
+        or {
             "default_iterations": 1000,
             "default_warmup": 10,
             "oltp_iterations": 1000,
@@ -184,6 +187,11 @@ def _payload(
                         "queries": [
                             {
                                 "name": "oltp_type1_point_lookup",
+                                **(
+                                    {"worker_startup": dict(worker_startup)}
+                                    if worker_startup is not None
+                                    else {}
+                                ),
                                 "end_to_end": {
                                     "p50_ms": query_p50,
                                     "p95_ms": query_p95,
@@ -213,6 +221,11 @@ def _payload(
                         "queries": [
                             {
                                 "name": "olap_type1_scan",
+                                **(
+                                    {"worker_startup": dict(worker_startup)}
+                                    if worker_startup is not None
+                                    else {}
+                                ),
                                 "end_to_end": {
                                     "p50_ms": query_p50 * 10,
                                     "p95_ms": query_p95 * 10,
@@ -258,6 +271,57 @@ def _payload_with_non_passing_query(
     return payload
 
 
+def _payload_with_excluded_oltp_queries(
+    *,
+    generated_at: str,
+    suite_name: str,
+) -> dict[str, object]:
+    payload = _payload(
+        generated_at=generated_at,
+        suite_name=suite_name,
+        p50=10.0,
+        p95=20.0,
+        p99=30.0,
+        query_p50=1.0,
+        query_p95=2.0,
+        query_p99=3.0,
+    )
+    payload["results"]["workloads"]["oltp"][suite_name]["query_count"] = 3
+    payload["results"]["workloads"]["oltp"][suite_name]["queries"] = [
+        {
+            "name": "oltp_type1_point_lookup",
+            "end_to_end": {
+                "p50_ms": 1.0,
+                "p95_ms": 2.0,
+                "p99_ms": 3.0,
+            },
+        },
+        {
+            "name": "oltp_optional_type1_lookup",
+            "end_to_end": {
+                "p50_ms": 100.0,
+                "p95_ms": 110.0,
+                "p99_ms": 120.0,
+            },
+        },
+        {
+            "name": "oltp_optional_missing_type1_lookup",
+            "end_to_end": {
+                "p50_ms": 200.0,
+                "p95_ms": 210.0,
+                "p99_ms": 220.0,
+            },
+        },
+    ]
+    payload["results"]["workloads"]["oltp"][suite_name]["end_to_end"] = {
+        "mean_of_mean_ms": 100.0,
+        "mean_of_p50_ms": 100.0,
+        "mean_of_p95_ms": 110.0,
+        "mean_of_p99_ms": 120.0,
+    }
+    return payload
+
+
 class SummarizeRuntimeResultsTests(unittest.TestCase):
     def test_parse_args_defaults_to_benchmark_results_runtime_dir(self) -> None:
         with patch.object(sys, "argv", ["runtime/summarize_results.py"]):
@@ -291,6 +355,7 @@ class SummarizeRuntimeResultsTests(unittest.TestCase):
             first = temp_path / "sqlite-indexed-small-r01.json"
             second = temp_path / "sqlite-indexed-small-r02.json"
             running = temp_path / "sqlite-indexed-small-r03.json"
+            malformed = temp_path / "sqlite-indexed-small-r04.json"
             first.write_text(
                 json.dumps(
                     _payload(
@@ -337,6 +402,7 @@ class SummarizeRuntimeResultsTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
+            malformed.write_text('{"run_status": "completed"', encoding="utf-8")
 
             discovered = discover_json_files([temp_path])
             completed, skipped = load_completed_runs(discovered)
@@ -347,7 +413,7 @@ class SummarizeRuntimeResultsTests(unittest.TestCase):
             )
 
         self.assertIn("Completed runs: 2", markdown)
-        self.assertIn("Skipped non-completed runs: 1", markdown)
+        self.assertIn("Skipped unreadable or non-completed runs: 2", markdown)
         self.assertIn("Grouped benchmark campaigns: 1", markdown)
         self.assertIn("### Small runtime dataset", markdown)
         self.assertIn("Runtime result artifacts for this run now live under", markdown)
@@ -360,11 +426,11 @@ class SummarizeRuntimeResultsTests(unittest.TestCase):
             markdown,
         )
         self.assertIn("OLTP summary:", markdown)
-        self.assertIn("| SQLite Indexed | `10.00 ms +- 0.00` |", markdown)
-        self.assertIn("| SQLite Indexed | `100.00 MiB +- 0.00` |", markdown)
+        self.assertIn("| SQLite Indexed (2) | `10.00 ms +- 0.00` |", markdown)
+        self.assertIn("| SQLite Indexed (2) | `100.00 MiB +- 0.00` |", markdown)
         self.assertIn("#### Small runtime suite comparison", markdown)
         self.assertIn("Read these tables with a couple of caveats:", markdown)
-        self.assertIn("| `oltp/sqlite_indexed` | `12.00 ms +- 2.83` |", markdown)
+        self.assertIn("| `oltp/sqlite_indexed` | `3.00 ms +- 0.00` |", markdown)
 
     def test_render_summary_includes_query_tables_when_requested(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -399,6 +465,84 @@ class SummarizeRuntimeResultsTests(unittest.TestCase):
         self.assertIn("oltp_type1_point_lookup", markdown)
         self.assertIn("`1.00 ms +- 0.00`", markdown)
 
+    def test_render_summary_merges_same_scale_campaigns_with_different_controls(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            first = temp_path / "sqlite-indexed-small-r01.json"
+            second = temp_path / "arcadedb-indexed-small-r01.json"
+            first.write_text(
+                json.dumps(
+                    _payload(
+                        generated_at="2026-04-21T13:00:00+00:00",
+                        suite_name="sqlite_indexed",
+                        backend="sqlite",
+                        p50=10.0,
+                        p95=20.0,
+                        p99=30.0,
+                        query_p50=1.0,
+                        query_p95=2.0,
+                        query_p99=3.0,
+                        workload_controls={
+                            "default_iterations": 1000,
+                            "default_warmup": 10,
+                            "oltp_iterations": 1000,
+                            "oltp_warmup": 10,
+                            "olap_iterations": 25,
+                            "olap_warmup": 5,
+                        },
+                    )
+                ),
+                encoding="utf-8",
+            )
+            second.write_text(
+                json.dumps(
+                    _payload(
+                        generated_at="2026-04-21T13:10:00+00:00",
+                        suite_name="arcadedb_embedded_indexed",
+                        backend="arcadedb_embedded",
+                        p50=12.0,
+                        p95=22.0,
+                        p99=32.0,
+                        query_p50=4.0,
+                        query_p95=5.0,
+                        query_p99=6.0,
+                        workload_controls={
+                            "default_iterations": 1000,
+                            "default_warmup": 10,
+                            "oltp_iterations": 5000,
+                            "oltp_warmup": 100,
+                            "olap_iterations": 100,
+                            "olap_warmup": 10,
+                        },
+                    )
+                ),
+                encoding="utf-8",
+            )
+
+            discovered = discover_json_files([temp_path])
+            completed, skipped = load_completed_runs(discovered)
+            markdown = summarize_runtime_results.render_summary(
+                completed,
+                skipped=skipped,
+                include_queries=False,
+            )
+
+        self.assertIn("Grouped benchmark campaigns: 1", markdown)
+        self.assertIn("### Small runtime dataset", markdown)
+        self.assertIn(
+            "This section combines runs from the same scale and graph shape even when workload controls differ.",
+            markdown,
+        )
+        self.assertIn("Included workload-control profiles:", markdown)
+        self.assertIn(
+            "- `1000` OLTP iterations / `10` OLTP warmup; `25` OLAP iterations / `5` OLAP warmup",
+            markdown,
+        )
+        self.assertIn(
+            "- `5000` OLTP iterations / `100` OLTP warmup; `100` OLAP iterations / `10` OLAP warmup",
+            markdown,
+        )
+
     def test_render_summary_skips_non_passing_query_rows_without_metrics(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -424,6 +568,79 @@ class SummarizeRuntimeResultsTests(unittest.TestCase):
         self.assertIn("#### Small runtime query breakdowns", markdown)
         self.assertIn("oltp_type1_point_lookup", markdown)
         self.assertIn("| `oltp_type1_point_lookup` | - |", markdown)
+
+    def test_render_summary_omits_excluded_oltp_queries_from_markdown(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            result_path = temp_path / "sqlite-indexed-small-r01.json"
+            result_path.write_text(
+                json.dumps(
+                    _payload_with_excluded_oltp_queries(
+                        generated_at="2026-04-21T13:00:00+00:00",
+                        suite_name="sqlite_indexed",
+                    )
+                ),
+                encoding="utf-8",
+            )
+
+            discovered = discover_json_files([temp_path])
+            completed, skipped = load_completed_runs(discovered)
+            markdown = summarize_runtime_results.render_summary(
+                completed,
+                skipped=skipped,
+                include_queries=True,
+            )
+
+        self.assertIn("| `oltp/sqlite_indexed` | `1.00 ms +- 0.00` |", markdown)
+        self.assertIn("oltp_type1_point_lookup", markdown)
+        self.assertNotIn("oltp_optional_type1_lookup", markdown)
+        self.assertNotIn("oltp_optional_missing_type1_lookup", markdown)
+
+    def test_render_summary_includes_arcadedb_worker_startup_tables(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            result_path = temp_path / "arcadedb-indexed-small-r01.json"
+            result_path.write_text(
+                json.dumps(
+                    _payload(
+                        generated_at="2026-04-21T13:00:00+00:00",
+                        suite_name="arcadedb_embedded_indexed",
+                        backend="arcadedb-embedded",
+                        p50=10.0,
+                        p95=20.0,
+                        p99=30.0,
+                        query_p50=1.0,
+                        query_p95=2.0,
+                        query_p99=3.0,
+                        worker_startup={
+                            "open_ms": 12.0,
+                            "ready_ms": 12.0,
+                            "startup_probe_execute_ms": 3.0,
+                            "startup_probe_end_to_end_ms": 3.5,
+                            "startup_probe_reset_ms": 0.5,
+                        },
+                    )
+                ),
+                encoding="utf-8",
+            )
+
+            discovered = discover_json_files([temp_path])
+            completed, skipped = load_completed_runs(discovered)
+            markdown = summarize_runtime_results.render_summary(
+                completed,
+                skipped=skipped,
+                include_queries=True,
+            )
+
+        self.assertIn("ArcadeDB worker startup breakdown", markdown)
+        self.assertIn("OLTP ArcadeDB worker startup breakdown, `open`", markdown)
+        self.assertIn("ArcadeDB Indexed (1)", markdown)
+        self.assertIn("`12.00 ms +- 0.00`", markdown)
+        self.assertIn(
+            "OLTP ArcadeDB worker startup breakdown, `startup probe execute`",
+            markdown,
+        )
+        self.assertIn("`3.00 ms +- 0.00`", markdown)
 
     def test_render_summary_handles_empty_completed_set(self) -> None:
         markdown = summarize_runtime_results.render_summary(

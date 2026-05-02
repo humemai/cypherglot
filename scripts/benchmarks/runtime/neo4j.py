@@ -153,7 +153,7 @@ def _stop_docker_neo4j(config: DockerNeo4jConfig) -> None:
     _progress(
         f"neo4j runtime benchmark: stopping Docker container {config.container_name}"
     )
-    _run_command(["docker", "rm", "-f", config.container_name])
+    _run_command(["docker", "rm", "-f", "-v", config.container_name])
 
 
 def _docker_logs(config: DockerNeo4jConfig) -> str:

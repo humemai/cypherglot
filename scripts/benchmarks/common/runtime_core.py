@@ -40,6 +40,7 @@ from scripts.benchmarks.common.postgres_runtime_support import (
 )
 from scripts.benchmarks.common.runtime_duckdb_backend import (
     _analyze_duckdb,
+    _configure_duckdb_indexes,
     _create_duckdb_connection,
     _create_duckdb_schema,
     _duckdb_file_size_mib,
@@ -196,8 +197,8 @@ DUCKDB_ENTRYPOINT = SQLRuntimeBenchmarkEntrypoint(
     ),
     default_output_path=DEFAULT_DUCKDB_OUTPUT_PATH,
     enabled_backends=("duckdb",),
-    default_index_mode="unindexed",
-    index_mode_choices=("unindexed",),
+    default_index_mode="both",
+    index_mode_choices=("indexed", "unindexed", "both"),
 )
 
 POSTGRESQL_ENTRYPOINT = SQLRuntimeBenchmarkEntrypoint(
@@ -306,7 +307,13 @@ class _BackendRunner:
                 )
             )
             self.rss_snapshots_mib["after_ingest"] = self.capture_rss_snapshot()
-            self.setup_metrics["index_ns"] = 0
+            _, self.setup_metrics["index_ns"] = _measure_ns(
+                lambda: _configure_duckdb_indexes(
+                    self.duck,
+                    self.graph_schema,
+                    index_mode=self.index_mode,
+                )
+            )
             self.rss_snapshots_mib["after_index"] = self.capture_rss_snapshot()
             _, self.setup_metrics["analyze_ns"] = _measure_ns(
                 lambda: _analyze_duckdb(self.duck)
@@ -1213,27 +1220,25 @@ def _benchmark_result(
                             {"workloads": workloads, "token_map": token_map}
                         )
             if "duckdb" in enabled_backends and duckdb_oltp_queries:
-                duckdb_source = generated_fixtures.get("unindexed")
-                if duckdb_source is None:
-                    duckdb_source = next(iter(generated_fixtures.values()))
-                workloads["oltp"]["duckdb"] = _run_backend_suite(
-                    "duckdb",
-                    duckdb_oltp_queries,
-                    iterations=oltp_iterations_value,
-                    warmup=oltp_warmup_value,
-                    graph_schema=graph_schema,
-                    schema_context=schema_context,
-                    sqlite_source=duckdb_source,
-                    db_root_dir=db_root_dir,
-                    **backend_suite_kwargs(
-                        workload="oltp",
-                        timeout_ms=oltp_timeout_ms,
-                    ),
-                )
-                if progress_callback is not None:
-                    progress_callback(
-                        {"workloads": workloads, "token_map": token_map}
+                for mode, fixture in generated_fixtures.items():
+                    workloads["oltp"][f"duckdb_{mode}"] = _run_backend_suite(
+                        "duckdb",
+                        duckdb_oltp_queries,
+                        iterations=oltp_iterations_value,
+                        warmup=oltp_warmup_value,
+                        graph_schema=graph_schema,
+                        schema_context=schema_context,
+                        sqlite_source=fixture,
+                        db_root_dir=db_root_dir,
+                        **backend_suite_kwargs(
+                            workload="oltp",
+                            timeout_ms=oltp_timeout_ms,
+                        ),
                     )
+                    if progress_callback is not None:
+                        progress_callback(
+                            {"workloads": workloads, "token_map": token_map}
+                        )
 
         if olap_queries:
             workloads["olap"] = {
@@ -1288,25 +1293,25 @@ def _benchmark_result(
                             {"workloads": workloads, "token_map": token_map}
                         )
             if "duckdb" in enabled_backends and duckdb_olap_queries:
-                duckdb_source = generated_fixtures.get("unindexed")
-                if duckdb_source is None:
-                    duckdb_source = next(iter(generated_fixtures.values()))
-                workloads["olap"]["duckdb"] = _run_backend_suite(
-                    "duckdb",
-                    duckdb_olap_queries,
-                    iterations=olap_iterations_value,
-                    warmup=olap_warmup_value,
-                    graph_schema=graph_schema,
-                    schema_context=schema_context,
-                    sqlite_source=duckdb_source,
-                    db_root_dir=db_root_dir,
-                    **backend_suite_kwargs(
-                        workload="olap",
-                        timeout_ms=olap_timeout_ms,
-                    ),
-                )
-                if progress_callback is not None:
-                    progress_callback({"workloads": workloads, "token_map": token_map})
+                for mode, fixture in generated_fixtures.items():
+                    workloads["olap"][f"duckdb_{mode}"] = _run_backend_suite(
+                        "duckdb",
+                        duckdb_olap_queries,
+                        iterations=olap_iterations_value,
+                        warmup=olap_warmup_value,
+                        graph_schema=graph_schema,
+                        schema_context=schema_context,
+                        sqlite_source=fixture,
+                        db_root_dir=db_root_dir,
+                        **backend_suite_kwargs(
+                            workload="olap",
+                            timeout_ms=olap_timeout_ms,
+                        ),
+                    )
+                    if progress_callback is not None:
+                        progress_callback(
+                            {"workloads": workloads, "token_map": token_map}
+                        )
     finally:
         for fixture in generated_fixtures.values():
             fixture.close()

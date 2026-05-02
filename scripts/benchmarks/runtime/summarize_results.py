@@ -18,17 +18,22 @@ DEFAULT_RESULTS_DIR = Path(__file__).resolve().parents[1] / "results" / "runtime
 DISPLAY_ORDER = {
     "sqlite_indexed": 0,
     "sqlite_unindexed": 1,
-    "duckdb": 2,
-    "postgresql_indexed": 3,
-    "postgresql_unindexed": 4,
-    "neo4j_indexed": 5,
-    "neo4j_unindexed": 6,
-    "arcadedb_embedded_indexed": 7,
-    "arcadedb_embedded_unindexed": 8,
-    "ladybug_unindexed": 9,
+    "duckdb_indexed": 2,
+    "duckdb_unindexed": 3,
+    "postgresql_indexed": 4,
+    "postgresql_unindexed": 5,
+    "neo4j_indexed": 6,
+    "neo4j_unindexed": 7,
+    "arcadedb_embedded_indexed": 8,
+    "arcadedb_embedded_unindexed": 9,
+    "ladybug_unindexed": 10,
 }
 
 WORKLOAD_ORDER = {"oltp": 0, "olap": 1}
+EXCLUDED_OLTP_QUERY_NAMES = {
+    "oltp_optional_missing_type1_lookup",
+    "oltp_optional_type1_lookup",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,7 +117,11 @@ def _load_completed_runs(paths: list[Path]) -> tuple[list[RunRecord], list[Path]
     completed: list[RunRecord] = []
     skipped: list[Path] = []
     for path in paths:
-        payload = json.loads(path.read_text(encoding="utf-8"))
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            skipped.append(path)
+            continue
         if payload.get("run_status") != "completed":
             skipped.append(path)
             continue
@@ -306,8 +315,8 @@ def _to_float(value: Any) -> float:
 def _display_suite_name(suite_name: str) -> str:
     if suite_name.startswith("sqlite_"):
         return f"SQLite {suite_name.split('_', 1)[1].capitalize()}"
-    if suite_name == "duckdb":
-        return "DuckDB Unindexed"
+    if suite_name.startswith("duckdb_"):
+        return f"DuckDB {suite_name.split('_', 1)[1].capitalize()}"
     if suite_name.startswith("postgresql_"):
         suffix = suite_name.split("_", 1)[1]
         return f"PostgreSQL {suffix.capitalize()}"
@@ -387,6 +396,8 @@ def _normalized_rss(payload: dict[str, Any], suite: dict[str, Any]) -> dict[str,
 
 
 def _query_metric_lists(
+    *,
+    workload_name: str,
     suites: list[dict[str, Any]],
 ) -> dict[str, dict[str, list[float]]]:
     metrics: dict[str, dict[str, list[float]]] = defaultdict(
@@ -397,6 +408,11 @@ def _query_metric_lists(
             query_name = query.get("name")
             if not isinstance(query_name, str) or not query_name:
                 continue
+            if (
+                workload_name == "oltp"
+                and query_name in EXCLUDED_OLTP_QUERY_NAMES
+            ):
+                continue
             query_metrics = metrics[query_name]
             end_to_end = query.get("end_to_end")
             if not isinstance(end_to_end, dict):
@@ -405,6 +421,73 @@ def _query_metric_lists(
             query_metrics["p95_ms"].append(end_to_end["p95_ms"])
             query_metrics["p99_ms"].append(end_to_end["p99_ms"])
     return metrics
+
+
+def _query_worker_startup_lists(
+    *,
+    suites: list[dict[str, Any]],
+) -> dict[str, dict[str, list[float]]]:
+    metrics: dict[str, dict[str, list[float]]] = defaultdict(
+        lambda: {
+            "open_ms": [],
+            "ready_ms": [],
+            "startup_probe_execute_ms": [],
+            "startup_probe_end_to_end_ms": [],
+            "startup_probe_reset_ms": [],
+        }
+    )
+    for suite in suites:
+        for query in suite.get("queries", []):
+            query_name = query.get("name")
+            if not isinstance(query_name, str) or not query_name:
+                continue
+            worker_startup = query.get("worker_startup")
+            if not isinstance(worker_startup, dict):
+                continue
+            query_metrics = metrics[query_name]
+            for metric_key in query_metrics:
+                value = worker_startup.get(metric_key)
+                if value is None:
+                    continue
+                query_metrics[metric_key].append(float(value))
+    return metrics
+
+
+def _suite_end_to_end_metric_lists(
+    *,
+    workload_name: str,
+    suites: list[dict[str, Any]],
+) -> dict[str, list[float]]:
+    if workload_name != "oltp":
+        return {
+            "p50_ms": [suite["end_to_end"]["mean_of_p50_ms"] for suite in suites],
+            "p95_ms": [suite["end_to_end"]["mean_of_p95_ms"] for suite in suites],
+            "p99_ms": [suite["end_to_end"]["mean_of_p99_ms"] for suite in suites],
+        }
+
+    query_metrics = _query_metric_lists(workload_name=workload_name, suites=suites)
+
+    def values_for(percentile_key: str) -> list[float]:
+        values: list[float] = []
+        for query_name in sorted(query_metrics):
+            metrics = query_metrics[query_name].get(percentile_key, [])
+            if metrics:
+                values.append(statistics.mean(metrics))
+        return values
+
+    filtered = {
+        "p50_ms": values_for("p50_ms"),
+        "p95_ms": values_for("p95_ms"),
+        "p99_ms": values_for("p99_ms"),
+    }
+    if any(filtered.values()):
+        return filtered
+
+    return {
+        "p50_ms": [suite["end_to_end"]["mean_of_p50_ms"] for suite in suites],
+        "p95_ms": [suite["end_to_end"]["mean_of_p95_ms"] for suite in suites],
+        "p99_ms": [suite["end_to_end"]["mean_of_p99_ms"] for suite in suites],
+    }
 
 
 def _build_config_summary(group: list[RunRecord]) -> ConfigSummary:
@@ -427,12 +510,12 @@ def _build_config_summary(group: list[RunRecord]) -> ConfigSummary:
             _normalized_rss(record.payload, suite)
             for record, suite in zip(group, suites, strict=False)
         ]
+        end_to_end_metrics = _suite_end_to_end_metric_lists(
+            workload_name=workload_name,
+            suites=suites,
+        )
         workload_summaries[workload_name] = {
-            "end_to_end": {
-                "p50_ms": [suite["end_to_end"]["mean_of_p50_ms"] for suite in suites],
-                "p95_ms": [suite["end_to_end"]["mean_of_p95_ms"] for suite in suites],
-                "p99_ms": [suite["end_to_end"]["mean_of_p99_ms"] for suite in suites],
-            },
+            "end_to_end": end_to_end_metrics,
             "setup": {
                 key: [row[key] for row in setup_rows]
                 for key in (
@@ -454,7 +537,11 @@ def _build_config_summary(group: list[RunRecord]) -> ConfigSummary:
                     "suite_complete_mib",
                 )
             },
-            "queries": _query_metric_lists(suites),
+            "queries": _query_metric_lists(
+                workload_name=workload_name,
+                suites=suites,
+            ),
+            "worker_startup": _query_worker_startup_lists(suites=suites),
         }
     return ConfigSummary(
         suite_name=suite_name,
@@ -474,9 +561,58 @@ def _campaign_key(summary: ConfigSummary) -> tuple[Any, ...]:
     return (
         summary.scale_name,
         _normalize_for_key(summary.graph_scale),
-        _normalize_for_key(summary.controls),
         summary.corpus_path,
     )
+
+
+def _controls_key(summary: ConfigSummary) -> tuple[Any, ...]:
+    return _normalize_for_key(summary.controls)
+
+
+def _render_campaign_controls(summaries: list[ConfigSummary]) -> list[str]:
+    unique_controls: list[dict[str, Any]] = []
+    seen: set[tuple[Any, ...]] = set()
+    for summary in summaries:
+        key = _controls_key(summary)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique_controls.append(summary.controls)
+
+    if not unique_controls:
+        return []
+
+    if len(unique_controls) == 1:
+        controls = unique_controls[0]
+        return [
+            (
+                f"The current {summaries[0].scale_name} runtime matrix used the "
+                f"`{summaries[0].scale_name}` preset with "
+                f"`{controls.get('oltp_iterations')}` OLTP iterations / "
+                f"`{controls.get('oltp_warmup')}` OLTP warmup and "
+                f"`{controls.get('olap_iterations')}` OLAP iterations / "
+                f"`{controls.get('olap_warmup')}` OLAP warmup."
+            )
+        ]
+
+    lines = [
+        (
+            "This section combines runs from the same scale and graph shape even "
+            "when workload controls differ."
+        ),
+        "Included workload-control profiles:",
+        "",
+    ]
+    for controls in unique_controls:
+        lines.append(
+            (
+                f"- `{controls.get('oltp_iterations')}` OLTP iterations / "
+                f"`{controls.get('oltp_warmup')}` OLTP warmup; "
+                f"`{controls.get('olap_iterations')}` OLAP iterations / "
+                f"`{controls.get('olap_warmup')}` OLAP warmup"
+            )
+        )
+    return lines
 
 
 def _campaigns(groups: list[list[RunRecord]]) -> list[list[ConfigSummary]]:
@@ -525,6 +661,10 @@ def _render_database_versions(summaries: list[ConfigSummary]) -> list[str]:
     ]
 
 
+def _display_label(summary: ConfigSummary) -> str:
+    return f"{summary.display_name} ({summary.repeat_count})"
+
+
 def _render_workload_summary_table(
     summaries: list[ConfigSummary],
     *,
@@ -537,7 +677,7 @@ def _render_workload_summary_table(
             continue
         rows.append(
             [
-                summary.display_name,
+                _display_label(summary),
                 _stat_cell(workload["setup"]["connect_reset_ms"]),
                 _stat_cell(workload["setup"]["schema_constraints_ms"]),
                 _stat_cell(workload["setup"]["ingest_ms"]),
@@ -576,7 +716,7 @@ def _render_rss_table(
             continue
         rows.append(
             [
-                summary.display_name,
+                _display_label(summary),
                 _stat_cell(workload["rss"]["connect_reset_mib"], unit="MiB"),
                 _stat_cell(
                     workload["rss"]["schema_constraints_mib"],
@@ -652,7 +792,48 @@ def _render_query_breakdown_table(
             row.append(_stat_cell(values) if values else "-")
         rows.append(row)
     return _table(
-        ["Query", *[summary.display_name for summary in summaries]],
+        ["Query", *[_display_label(summary) for summary in summaries]],
+        rows,
+    )
+
+
+def _render_worker_startup_breakdown_table(
+    summaries: list[ConfigSummary],
+    *,
+    workload_name: str,
+    metric_key: str,
+) -> str:
+    eligible_summaries = [
+        summary
+        for summary in summaries
+        if summary.workload_summaries.get(workload_name, {}).get("worker_startup")
+    ]
+    if not eligible_summaries:
+        return ""
+
+    query_names = sorted(
+        {
+            query_name
+            for summary in eligible_summaries
+            for query_name in summary.workload_summaries.get(workload_name, {}).get(
+                "worker_startup",
+                {},
+            )
+        }
+    )
+    rows: list[list[str]] = []
+    for query_name in query_names:
+        row = [f"`{query_name}`"]
+        for summary in eligible_summaries:
+            workload = summary.workload_summaries.get(workload_name)
+            if workload is None:
+                row.append("-")
+                continue
+            values = workload["worker_startup"].get(query_name, {}).get(metric_key)
+            row.append(_stat_cell(values) if values else "-")
+        rows.append(row)
+    return _table(
+        ["Query", *[_display_label(summary) for summary in eligible_summaries]],
         rows,
     )
 
@@ -663,7 +844,7 @@ def _sql_setup_note(summaries: list[ConfigSummary]) -> list[str]:
         for summary in summaries
         if summary.suite_name.startswith("sqlite_")
         or summary.suite_name.startswith("postgresql_")
-        or summary.suite_name == "duckdb"
+        or summary.suite_name.startswith("duckdb_")
     }
     if not sql_suites:
         return []
@@ -747,11 +928,12 @@ def _caveats(summaries: list[ConfigSummary]) -> list[str]:
         "  compile-plus-execute SQL",
         "  paths.",
     ]
-    if "duckdb" in suite_names:
+    if "duckdb_indexed" in suite_names or "duckdb_unindexed" in suite_names:
         lines.extend(
             [
-                "- DuckDB is a single-path run here, and that path is intentionally",
-                "  `unindexed`.",
+                "- DuckDB can appear in indexed and unindexed modes here; each",
+                "  table includes whichever DuckDB runs are present in the current",
+                "  matrix.",
             ]
         )
     if (
@@ -796,7 +978,6 @@ def _render_campaign(
 ) -> str:
     lead = summaries[0]
     graph_scale = lead.graph_scale
-    controls = lead.controls
     node_property_fields = (
         4
         + int(graph_scale.get("node_extra_text_property_count", 0))
@@ -813,20 +994,14 @@ def _render_campaign(
     results_dir_label = _results_dir_label(
         [path for summary in summaries for path in summary.files]
     )
+    campaign_controls = _render_campaign_controls(summaries)
     sql_setup_note = _sql_setup_note(summaries)
     direct_runner_notes = _direct_runner_notes(summaries)
 
     lines = [
         f"### {lead.scale_name.capitalize()} runtime dataset",
         "",
-        (
-            f"The current {lead.scale_name} runtime matrix used the "
-            f"`{lead.scale_name}` preset with "
-            f"`{controls.get('oltp_iterations')}` OLTP iterations / "
-            f"`{controls.get('oltp_warmup')}` OLTP warmup and "
-            f"`{controls.get('olap_iterations')}` OLAP iterations / "
-            f"`{controls.get('olap_warmup')}` OLAP warmup."
-        ),
+        *campaign_controls,
         "",
         "That corresponds to roughly:",
         "",
@@ -907,6 +1082,13 @@ def _render_campaign(
             "p95_ms": "p95",
             "p99_ms": "p99",
         }
+        worker_startup_label = {
+            "open_ms": "open",
+            "ready_ms": "ready",
+            "startup_probe_execute_ms": "startup probe execute",
+            "startup_probe_end_to_end_ms": "startup probe end-to-end",
+            "startup_probe_reset_ms": "startup probe reset",
+        }
         lines.extend(
             [
                 "",
@@ -917,6 +1099,44 @@ def _render_campaign(
                 "repeated runs.",
             ]
         )
+        if any(
+            summary.workload_summaries.get(workload_name, {}).get("worker_startup")
+            for summary in summaries
+            for workload_name in ("oltp", "olap")
+        ):
+            lines.extend(
+                [
+                    "",
+                    "These ArcadeDB-only tables also show worker startup timing",
+                    "separately from query execution, using the worker-side",
+                    "`worker_startup` metrics recorded in the raw JSON.",
+                ]
+            )
+            for workload_name in ("oltp", "olap"):
+                for metric_key in (
+                    "open_ms",
+                    "startup_probe_execute_ms",
+                    "startup_probe_end_to_end_ms",
+                    "startup_probe_reset_ms",
+                ):
+                    table = _render_worker_startup_breakdown_table(
+                        summaries,
+                        workload_name=workload_name,
+                        metric_key=metric_key,
+                    )
+                    if not table:
+                        continue
+                    lines.extend(
+                        [
+                            "",
+                            (
+                                f"##### {workload_label[workload_name]} ArcadeDB worker "
+                                f"startup breakdown, `{worker_startup_label[metric_key]}`"
+                            ),
+                            "",
+                            table,
+                        ]
+                    )
         for workload_name in ("oltp", "olap"):
             for percentile_key in ("p50_ms", "p95_ms", "p99_ms"):
                 lines.extend(
@@ -957,7 +1177,7 @@ def render_summary(
         "",
         f"- Scanned JSON files: {len(records) + len(skipped)}",
         f"- Completed runs: {len(records)}",
-        f"- Skipped non-completed runs: {len(skipped)}",
+        f"- Skipped unreadable or non-completed runs: {len(skipped)}",
         f"- Grouped configurations: {len(groups)}",
         f"- Grouped benchmark campaigns: {len(campaigns)}",
     ]

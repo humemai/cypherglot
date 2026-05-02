@@ -50,6 +50,32 @@ def _create_duckdb_query_indexes(
         conn.execute(statement)
 
 
+def _drop_all_duckdb_indexes(conn: DuckDBConnection) -> None:
+    index_names = [
+        row[0]
+        for row in conn.execute(
+            "SELECT index_name FROM duckdb_indexes()"
+        ).fetchall()
+    ]
+    for index_name in index_names:
+        conn.execute(f'DROP INDEX "{index_name}"')
+
+
+def _configure_duckdb_indexes(
+    conn: DuckDBConnection,
+    graph_schema: cypherglot.GraphSchema,
+    *,
+    index_mode: str,
+) -> None:
+    if index_mode == "indexed":
+        _create_duckdb_query_indexes(conn, graph_schema)
+        return
+    if index_mode == "unindexed":
+        _drop_all_duckdb_indexes(conn)
+        return
+    raise ValueError(f"Unsupported index_mode {index_mode!r}.")
+
+
 def _duckdb_csv_type_name(type_name: str) -> str:
     if type_name == "boolean":
         return "BOOLEAN"

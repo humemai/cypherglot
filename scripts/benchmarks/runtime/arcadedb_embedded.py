@@ -93,6 +93,8 @@ ARCADEDB_GAV_EDGE_PROPERTIES = ("rank", "active", "score")
 INDEX_MODE_CHOICES = ("indexed", "unindexed", "both")
 ARCADEDB_WORKER_STARTUP_TIMEOUT_S = 5.0
 ARCADEDB_WORKER_SHUTDOWN_TIMEOUT_S = 1.0
+ARCADEDB_ITERATIVE_EXECUTION_MODE = "iterative"
+ARCADEDB_SKIPPED_AFTER_PROBE_EXECUTION_MODE = "skipped-after-probe"
 RuntimeProgressCallback = Callable[[dict[str, object], int], None]
 
 
@@ -100,7 +102,7 @@ RuntimeProgressCallback = Callable[[dict[str, object], int], None]
 class ArcadeDBFixture:
     work_dir: ManagedDirectory
     db_path: Path
-    database: Any
+    database: Any | None
     setup_metrics: dict[str, int]
     row_counts: dict[str, int]
     rss_snapshots_mib: dict[str, dict[str, float | None]]
@@ -109,7 +111,9 @@ class ArcadeDBFixture:
     index_mode: str
 
     def close(self) -> None:
-        self.database.close()
+        if self.database is not None:
+            self.database.close()
+            self.database = None
         self.work_dir.close()
 
 
@@ -704,21 +708,87 @@ def _arcadedb_worker_fixture(
     )
 
 
+def _close_arcadedb_fixture_database(fixture: ArcadeDBFixture) -> None:
+    if fixture.database is None:
+        return
+    fixture.database.close()
+    fixture.database = None
+
+
+def _ensure_arcadedb_fixture_database_open(fixture: ArcadeDBFixture) -> None:
+    if fixture.database is not None:
+        return
+    fixture.database = _open_arcadedb(fixture.db_path)
+
+
+def _with_execution_mode(
+    result: dict[str, object],
+    *,
+    execution_mode: str,
+) -> dict[str, object]:
+    enriched = dict(result)
+    enriched["execution_mode"] = execution_mode
+    return enriched
+
+
+def _with_worker_startup(
+    result: dict[str, object],
+    *,
+    worker_startup: dict[str, object] | None,
+) -> dict[str, object]:
+    if worker_startup is None:
+        return result
+    enriched = dict(result)
+    enriched["worker_startup"] = dict(worker_startup)
+    return enriched
+
+
+def _classify_arcadedb_query_execution_mode(
+    fixture: ArcadeDBFixture,
+    *,
+    query: CorpusQuery,
+    iterations: int,
+    warmup: int,
+    timeout_ms: float,
+    worker_startup_timeout_s: float,
+) -> tuple[str, dict[str, object] | None]:
+    probe_result = _measure_query_in_arcadedb_worker(
+        fixture,
+        query=query,
+        iterations=1 if iterations > 0 else 0,
+        warmup=1 if warmup > 0 else 0,
+        timeout_ms=timeout_ms,
+        worker_startup_timeout_s=worker_startup_timeout_s,
+    )
+    if probe_result.get("status") == "passed":
+        return ARCADEDB_ITERATIVE_EXECUTION_MODE, probe_result
+    return (
+        ARCADEDB_SKIPPED_AFTER_PROBE_EXECUTION_MODE,
+        _with_execution_mode(
+            probe_result,
+            execution_mode=ARCADEDB_SKIPPED_AFTER_PROBE_EXECUTION_MODE,
+        ),
+    )
+
+
 def _append_arcadedb_worker_progress(
     progress_path: Path,
     *,
     phase: str,
     iteration: int,
+    step_phase: str | None = None,
+    step_iteration: int | None = None,
 ) -> None:
+    payload: dict[str, object] = {
+        "phase": phase,
+        "iteration": iteration,
+    }
+    if step_phase is not None:
+        payload["step_phase"] = step_phase
+    if step_iteration is not None:
+        payload["step_iteration"] = step_iteration
     with progress_path.open("a", encoding="utf-8") as handle:
-        handle.write(
-            json.dumps(
-                {
-                    "phase": phase,
-                    "iteration": iteration,
-                }
-            )
-        )
+        handle.write(json.dumps(payload))
         handle.write("\n")
 
 
@@ -748,10 +818,14 @@ def _arcadedb_timeout_result(
     last_progress_event: dict[str, object] | None,
     warmup: int,
 ) -> dict[str, object]:
-    phase, iteration = _next_arcadedb_worker_step(
-        last_progress_event,
-        warmup=warmup,
-    )
+    if last_progress_event is not None and last_progress_event.get("phase") == "execute-start":
+        phase = str(last_progress_event.get("step_phase", "iteration"))
+        iteration = int(last_progress_event.get("step_iteration", 1))
+    else:
+        phase, iteration = _next_arcadedb_worker_step(
+            last_progress_event,
+            warmup=warmup,
+        )
     return {
         "name": query.name,
         "workload": query.workload,
@@ -803,6 +877,13 @@ def _run_arcadedb_query_worker(spec_path: Path) -> int:
     progress_path = Path(spec["progress_path"])
     result_path = Path(spec["result_path"])
     index_mode = str(spec["index_mode"])
+    worker_startup_timeout_s = float(
+        spec.get("worker_startup_timeout_s", ARCADEDB_WORKER_STARTUP_TIMEOUT_S)
+    )
+    worker_started_at_ns = time.perf_counter_ns()
+    startup_probe_execute_ns = 0
+    startup_probe_end_to_end_ns = 0
+    startup_probe_reset_ns = 0
 
     fixture = _arcadedb_worker_fixture(
         db_path=Path(spec["db_path"]),
@@ -811,16 +892,61 @@ def _run_arcadedb_query_worker(spec_path: Path) -> int:
         },
         index_mode=index_mode,
     )
+    worker_ready_at_ns = time.perf_counter_ns()
     try:
-        if warmup > 0 or iterations > 0:
-            _run_query_once(fixture, query=query)
         _append_arcadedb_worker_progress(
             progress_path,
             phase="ready",
             iteration=0,
         )
+        if warmup > 0 or iterations > 0:
+            _append_arcadedb_worker_progress(
+                progress_path,
+                phase="execute-start",
+                iteration=0,
+                step_phase="startup_probe",
+                step_iteration=0,
+            )
+            (
+                startup_probe_execute_ns,
+                startup_probe_end_to_end_ns,
+                transaction_started,
+            ) = _execute_query_once(fixture, query=query)
+            _append_arcadedb_worker_progress(
+                progress_path,
+                phase="execute-end",
+                iteration=0,
+                step_phase="startup_probe",
+                step_iteration=0,
+            )
+            startup_probe_reset_ns = _reset_query_once(
+                fixture,
+                transaction_started=transaction_started,
+            )
+        worker_startup = {
+            "open_ms": (worker_ready_at_ns - worker_started_at_ns) / 1_000_000.0,
+            "ready_ms": (worker_ready_at_ns - worker_started_at_ns) / 1_000_000.0,
+            "startup_probe_execute_ms": startup_probe_execute_ns / 1_000_000.0,
+            "startup_probe_end_to_end_ms": startup_probe_end_to_end_ns / 1_000_000.0,
+            "startup_probe_reset_ms": startup_probe_reset_ns / 1_000_000.0,
+        }
         for warmup_index in range(1, warmup + 1):
-            _run_query_once(fixture, query=query)
+            _append_arcadedb_worker_progress(
+                progress_path,
+                phase="execute-start",
+                iteration=warmup_index,
+                step_phase="warmup",
+                step_iteration=warmup_index,
+            )
+            _, _, transaction_started = _execute_query_once(fixture, query=query)
+            _append_arcadedb_worker_progress(
+                progress_path,
+                phase="execute-end",
+                iteration=warmup_index,
+                step_phase="warmup",
+                step_iteration=warmup_index,
+            )
+            _reset_query_once(fixture, transaction_started=transaction_started)
             _append_arcadedb_worker_progress(
                 progress_path,
                 phase="warmup",
@@ -831,10 +957,31 @@ def _run_arcadedb_query_worker(spec_path: Path) -> int:
         end_to_end_latencies: list[int] = []
         reset_latencies: list[int] = []
         for iteration_index in range(1, iterations + 1):
-            metrics = _run_query_once(fixture, query=query)
-            execute_latencies.append(metrics["execute_ns"])
-            end_to_end_latencies.append(metrics["end_to_end_ns"])
-            reset_latencies.append(metrics["reset_ns"])
+            _append_arcadedb_worker_progress(
+                progress_path,
+                phase="execute-start",
+                iteration=iteration_index,
+                step_phase="iteration",
+                step_iteration=iteration_index,
+            )
+            execute_ns, end_to_end_ns, transaction_started = _execute_query_once(
+                fixture,
+                query=query,
+            )
+            _append_arcadedb_worker_progress(
+                progress_path,
+                phase="execute-end",
+                iteration=iteration_index,
+                step_phase="iteration",
+                step_iteration=iteration_index,
+            )
+            reset_ns = _reset_query_once(
+                fixture,
+                transaction_started=transaction_started,
+            )
+            execute_latencies.append(execute_ns)
+            end_to_end_latencies.append(end_to_end_ns)
+            reset_latencies.append(reset_ns)
             _append_arcadedb_worker_progress(
                 progress_path,
                 phase="iteration",
@@ -852,6 +999,7 @@ def _run_arcadedb_query_worker(spec_path: Path) -> int:
                     "mode": query.mode,
                     "mutation": query.mutation,
                     "status": "passed",
+                    "worker_startup": worker_startup,
                     "execute": _summarize(execute_latencies),
                     "end_to_end": _summarize(end_to_end_latencies),
                     "reset": _summarize(reset_latencies),
@@ -874,6 +1022,17 @@ def _run_arcadedb_query_worker(spec_path: Path) -> int:
                     "status": "failed",
                     "error_type": type(exc).__name__,
                     "error_message": str(exc),
+                    "worker_startup": {
+                        "open_ms": (worker_ready_at_ns - worker_started_at_ns)
+                        / 1_000_000.0,
+                        "ready_ms": (worker_ready_at_ns - worker_started_at_ns)
+                        / 1_000_000.0,
+                        "startup_probe_execute_ms": startup_probe_execute_ns
+                        / 1_000_000.0,
+                        "startup_probe_end_to_end_ms": startup_probe_end_to_end_ns
+                        / 1_000_000.0,
+                        "startup_probe_reset_ms": startup_probe_reset_ns / 1_000_000.0,
+                    },
                 }
             ),
             encoding="utf-8",
@@ -890,6 +1049,7 @@ def _measure_query_in_arcadedb_worker(
     iterations: int,
     warmup: int,
     timeout_ms: float,
+    worker_startup_timeout_s: float,
 ) -> dict[str, object]:
     query_slug = query.name.replace("/", "_")
     spec_path = fixture.work_dir.path / f"{query_slug}.worker-spec.json"
@@ -902,6 +1062,7 @@ def _measure_query_in_arcadedb_worker(
         "query": _corpus_query_payload(query),
         "warmup": warmup,
         "iterations": iterations,
+        "worker_startup_timeout_s": worker_startup_timeout_s,
         "progress_path": str(progress_path),
         "result_path": str(result_path),
     }
@@ -924,7 +1085,7 @@ def _measure_query_in_arcadedb_worker(
 
     timeout_s = timeout_ms / 1_000.0
     started_at = time.monotonic()
-    last_progress_at = started_at
+    active_query_started_at: float | None = None
     last_progress_event: dict[str, object] | None = None
     progress_offset = 0
     stderr_output = ""
@@ -938,9 +1099,14 @@ def _measure_query_in_arcadedb_worker(
             )
             if events:
                 last_progress_event = events[-1]
-                last_progress_at = time.monotonic()
                 if any(str(event["phase"]) == "ready" for event in events):
                     worker_ready = True
+                for event in events:
+                    phase = str(event["phase"])
+                    if phase == "execute-start":
+                        active_query_started_at = time.monotonic()
+                    elif phase == "execute-end":
+                        active_query_started_at = None
 
             if result_path.exists():
                 result = json.loads(result_path.read_text(encoding="utf-8"))
@@ -958,7 +1124,7 @@ def _measure_query_in_arcadedb_worker(
 
             now = time.monotonic()
             if not worker_ready:
-                if now - started_at > ARCADEDB_WORKER_STARTUP_TIMEOUT_S:
+                if now - started_at > worker_startup_timeout_s:
                     process.kill()
                     _, stderr_output = process.communicate()
                     return {
@@ -973,13 +1139,13 @@ def _measure_query_in_arcadedb_worker(
                         "error_type": "WorkerStartupTimeout",
                         "error_message": (
                             "ArcadeDB worker did not become ready within "
-                            f"{ARCADEDB_WORKER_STARTUP_TIMEOUT_S:.1f}s."
+                            f"{worker_startup_timeout_s:.1f}s."
                         ),
                     }
                 time.sleep(0.05)
                 continue
 
-            if now - last_progress_at > timeout_s:
+            if active_query_started_at is not None and now - active_query_started_at > timeout_s:
                 process.kill()
                 _, stderr_output = process.communicate()
                 return _arcadedb_timeout_result(
@@ -1027,7 +1193,27 @@ def _run_query_once(
     *,
     query: CorpusQuery,
 ) -> dict[str, int]:
-    reset_ns = 0
+    execute_ns, end_to_end_ns, transaction_started = _execute_query_once(
+        fixture,
+        query=query,
+    )
+    reset_ns = _reset_query_once(
+        fixture,
+        transaction_started=transaction_started,
+    )
+
+    return {
+        "execute_ns": execute_ns,
+        "end_to_end_ns": end_to_end_ns,
+        "reset_ns": reset_ns,
+    }
+
+
+def _execute_query_once(
+    fixture: ArcadeDBFixture,
+    *,
+    query: CorpusQuery,
+) -> tuple[int, int, bool]:
     transaction_started = False
     query_text = _rewrite_arcadedb_query(fixture, query)
 
@@ -1052,16 +1238,19 @@ def _run_query_once(
             _rollback_arcadedb_transaction(fixture.database)
         raise
 
-    if transaction_started:
-        _, reset_ns = _measure_ns(
-            lambda: _rollback_arcadedb_transaction(fixture.database)
-        )
+    return execute_ns, end_to_end_ns, transaction_started
 
-    return {
-        "execute_ns": execute_ns,
-        "end_to_end_ns": end_to_end_ns,
-        "reset_ns": reset_ns,
-    }
+
+def _reset_query_once(
+    fixture: ArcadeDBFixture,
+    *,
+    transaction_started: bool,
+) -> int:
+    if not transaction_started:
+        return 0
+
+    _, reset_ns = _measure_ns(lambda: _rollback_arcadedb_transaction(fixture.database))
+    return reset_ns
 
 
 def _measure_query(
@@ -1073,15 +1262,16 @@ def _measure_query(
     progress_label: str,
     iteration_progress: bool,
     timeout_ms: float | None = None,
+    execution_mode: str | None = None,
 ) -> dict[str, object]:
     if timeout_ms is not None:
-        return _measure_query_in_arcadedb_worker(
-            fixture,
-            query=query,
-            iterations=iterations,
-            warmup=warmup,
-            timeout_ms=timeout_ms,
-        )
+        if execution_mode == ARCADEDB_ITERATIVE_EXECUTION_MODE:
+            timeout_ms = None
+        else:
+            raise ValueError(
+                "Non-iterative ArcadeDB queries should be handled by preflight "
+                "classification before _measure_query is called."
+            )
 
     warmup_iteration = 0
     try:
@@ -1114,6 +1304,7 @@ def _measure_query(
                 "timeout_ms": timeout_ms,
                 "iteration": warmup_iteration,
             },
+            "execution_mode": ARCADEDB_ITERATIVE_EXECUTION_MODE,
         }
     except ARCADEDB_QUERY_EXCEPTIONS as exc:
         return {
@@ -1127,6 +1318,7 @@ def _measure_query(
             "status": "failed",
             "error_type": type(exc).__name__,
             "error_message": str(exc),
+            "execution_mode": ARCADEDB_ITERATIVE_EXECUTION_MODE,
         }
 
     execute_latencies: list[int] = []
@@ -1167,6 +1359,7 @@ def _measure_query(
                 "timeout_ms": timeout_ms,
                 "iteration": len(execute_latencies) + 1,
             },
+            "execution_mode": ARCADEDB_ITERATIVE_EXECUTION_MODE,
         }
     except ARCADEDB_QUERY_EXCEPTIONS as exc:
         return {
@@ -1180,6 +1373,7 @@ def _measure_query(
             "status": "failed",
             "error_type": type(exc).__name__,
             "error_message": str(exc),
+            "execution_mode": ARCADEDB_ITERATIVE_EXECUTION_MODE,
         }
     finally:
         if gc_was_enabled:
@@ -1194,6 +1388,7 @@ def _measure_query(
         "mode": query.mode,
         "mutation": query.mutation,
         "status": "passed",
+        "execution_mode": ARCADEDB_ITERATIVE_EXECUTION_MODE,
         "execute": _summarize(execute_latencies),
         "end_to_end": _summarize(end_to_end_latencies),
         "reset": _summarize(reset_latencies),
@@ -1213,6 +1408,7 @@ def _run_workload_suite(
     db_root_dir: Path | None,
     iteration_progress: bool,
     timeout_ms: float | None = None,
+    worker_startup_timeout_s: float = ARCADEDB_WORKER_STARTUP_TIMEOUT_S,
 ) -> dict[str, object]:
     suite_name = f"{workload}/{_suite_key(index_mode)}"
     fixture = _prepare_arcadedb_fixture(
@@ -1228,8 +1424,42 @@ def _run_workload_suite(
             key: dict(value)
             for key, value in fixture.rss_snapshots_mib.items()
         }
+        query_execution_modes: dict[str, str] = {}
+        skipped_query_results: dict[str, dict[str, object]] = {}
+        startup_probe_metrics: dict[str, dict[str, object]] = {}
         if timeout_ms is not None:
-            fixture.database.close()
+            _progress(
+                f"{suite_name}: probing {len(queries)} queries for iterative execution"
+            )
+            _close_arcadedb_fixture_database(fixture)
+            for query in queries:
+                execution_mode, skipped_result = _classify_arcadedb_query_execution_mode(
+                    fixture,
+                    query=query,
+                    iterations=iterations,
+                    warmup=warmup,
+                    timeout_ms=timeout_ms,
+                    worker_startup_timeout_s=worker_startup_timeout_s,
+                )
+                query_execution_modes[query.name] = execution_mode
+                if skipped_result is not None and "worker_startup" in skipped_result:
+                    startup_probe_metrics[query.name] = dict(
+                        skipped_result["worker_startup"]
+                    )
+                if (
+                    execution_mode
+                    == ARCADEDB_SKIPPED_AFTER_PROBE_EXECUTION_MODE
+                    and skipped_result is not None
+                ):
+                    skipped_query_results[query.name] = skipped_result
+            iterative_count = sum(
+                1
+                for mode in query_execution_modes.values()
+                if mode == ARCADEDB_ITERATIVE_EXECUTION_MODE
+            )
+            _progress(
+                f"{suite_name}: iterative-safe queries={iterative_count}/{len(queries)}"
+            )
         rss_snapshots_mib["suite_start"] = _capture_rss_snapshot(
             backend=ARCADEDB_BACKEND_NAME
         )
@@ -1243,17 +1473,30 @@ def _run_workload_suite(
                 f"{suite_name}: query {query_index}/{len(queries)} {query.name}"
             )
             _progress(query_progress_label)
-            query_results.append(
-                _measure_query(
-                    fixture,
-                    query=query,
-                    iterations=iterations,
-                    warmup=warmup,
-                    progress_label=query_progress_label,
-                    iteration_progress=iteration_progress,
-                    timeout_ms=timeout_ms,
-                )
+            execution_mode = query_execution_modes.get(
+                query.name,
+                ARCADEDB_ITERATIVE_EXECUTION_MODE,
             )
+            if execution_mode == ARCADEDB_ITERATIVE_EXECUTION_MODE:
+                _ensure_arcadedb_fixture_database_open(fixture)
+                query_results.append(
+                    _with_worker_startup(
+                        _measure_query(
+                        fixture,
+                        query=query,
+                        iterations=iterations,
+                        warmup=warmup,
+                        progress_label=query_progress_label,
+                        iteration_progress=iteration_progress,
+                        timeout_ms=timeout_ms,
+                        execution_mode=execution_mode,
+                        ),
+                        worker_startup=startup_probe_metrics.get(query.name),
+                    )
+                )
+                continue
+            _close_arcadedb_fixture_database(fixture)
+            query_results.append(skipped_query_results[query.name])
         rss_snapshots_mib["suite_complete"] = _capture_rss_snapshot(
             backend=ARCADEDB_BACKEND_NAME
         )
@@ -1288,6 +1531,7 @@ def _run_workload_suite(
             "execute": _pool_summaries(query_results, "execute"),
             "end_to_end": _pool_summaries(query_results, "end_to_end"),
             "reset": _pool_summaries(query_results, "reset"),
+            "query_execution_modes": query_execution_modes,
             "queries": query_results,
         }
     finally:
@@ -1315,6 +1559,7 @@ def _benchmark_result(
     iteration_progress: bool,
     oltp_timeout_ms: float | None = None,
     olap_timeout_ms: float | None = None,
+    worker_startup_timeout_s: float = ARCADEDB_WORKER_STARTUP_TIMEOUT_S,
     progress_callback: RuntimeProgressCallback | None = None,
 ) -> tuple[dict[str, object], int]:
     graph_schema, edge_plans = _build_graph_schema(scale)
@@ -1372,6 +1617,7 @@ def _benchmark_result(
                     sqlite_source=sqlite_source,
                     ingest_batch_size=scale.ingest_batch_size,
                     db_root_dir=db_root_dir,
+                    worker_startup_timeout_s=worker_startup_timeout_s,
                     **suite_kwargs(oltp_timeout_ms),
                 )
                 workloads["oltp"][_suite_key(current_index_mode)] = suite
@@ -1405,6 +1651,7 @@ def _benchmark_result(
                     sqlite_source=sqlite_source,
                     ingest_batch_size=scale.ingest_batch_size,
                     db_root_dir=db_root_dir,
+                    worker_startup_timeout_s=worker_startup_timeout_s,
                     **suite_kwargs(olap_timeout_ms),
                 )
                 workloads["olap"][_suite_key(current_index_mode)] = suite
@@ -1595,6 +1842,15 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--oltp-timeout-ms", type=float)
     parser.add_argument("--olap-timeout-ms", type=float)
     parser.add_argument(
+        "--worker-startup-timeout-s",
+        type=float,
+        default=ARCADEDB_WORKER_STARTUP_TIMEOUT_S,
+        help=(
+            "Maximum seconds to allow a probe worker to open the ArcadeDB "
+            "database and signal readiness before it is killed."
+        ),
+    )
+    parser.add_argument(
         "--index-mode",
         choices=INDEX_MODE_CHOICES,
         default="both",
@@ -1665,6 +1921,8 @@ def main() -> int:
         raise ValueError("--oltp-timeout-ms must be positive.")
     if olap_timeout_ms is not None and olap_timeout_ms <= 0:
         raise ValueError("--olap-timeout-ms must be positive.")
+    if args.worker_startup_timeout_s <= 0:
+        raise ValueError("--worker-startup-timeout-s must be positive.")
     if args.node_type_count <= 0:
         raise ValueError("--node-type-count must be positive.")
     if args.edge_type_count <= 0:
@@ -1776,6 +2034,7 @@ def main() -> int:
         iteration_progress=args.iteration_progress,
         oltp_timeout_ms=oltp_timeout_ms,
         olap_timeout_ms=olap_timeout_ms,
+        worker_startup_timeout_s=args.worker_startup_timeout_s,
         progress_callback=(
             lambda partial_result, partial_failure_count: write_checkpoint(
                 partial_result,

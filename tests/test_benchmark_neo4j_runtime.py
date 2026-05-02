@@ -39,6 +39,23 @@ SMALL_SCALE = benchmark_neo4j_runtime.RuntimeScale(
 
 
 class BenchmarkNeo4jRuntimeScriptTests(unittest.TestCase):
+    def test_stop_docker_neo4j_removes_attached_volumes(self) -> None:
+        stop_docker_neo4j = getattr(benchmark_neo4j_runtime, "_stop_docker_neo4j")
+        config = benchmark_neo4j_runtime.DockerNeo4jConfig(
+            image="neo4j:5.26.24-community",
+            container_name="cypherglot-neo4j-test",
+            bolt_port=8788,
+            http_port=8575,
+            startup_timeout_s=120,
+            keep_container=False,
+        )
+
+        with mock.patch.object(benchmark_neo4j_runtime, "_run_command") as run_command:
+            stop_docker_neo4j(config)
+
+        run_command.assert_called_once_with(
+            ["docker", "rm", "-f", "-v", "cypherglot-neo4j-test"]
+        )
     def test_write_json_atomic_replaces_destination(self) -> None:
         write_json_atomic = getattr(benchmark_neo4j_runtime, "_write_json_atomic")
 

@@ -44,6 +44,20 @@ SMALL_SCALE = benchmark_arcadedb_embedded_runtime.RuntimeScale(
 
 
 class BenchmarkArcadeDBEmbeddedRuntimeScriptTests(unittest.TestCase):
+    def test_parse_args_accepts_worker_startup_timeout_override(self) -> None:
+        with mock.patch.object(
+            sys,
+            "argv",
+            [
+                "runtime/arcadedb_embedded.py",
+                "--worker-startup-timeout-s",
+                "60",
+            ],
+        ):
+            args = benchmark_arcadedb_embedded_runtime._parse_args()
+
+        self.assertEqual(args.worker_startup_timeout_s, 60.0)
+
     def test_write_json_atomic_replaces_destination(self) -> None:
         write_json_atomic = getattr(
             benchmark_arcadedb_embedded_runtime,
@@ -244,6 +258,36 @@ class BenchmarkArcadeDBEmbeddedRuntimeScriptTests(unittest.TestCase):
         self.assertEqual(result["query_timeout"]["phase"], "iteration")
         self.assertEqual(result["query_timeout"]["iteration"], 1)
 
+    def test_arcadedb_timeout_result_uses_active_execute_step_when_available(self) -> None:
+        timeout_result = getattr(
+            benchmark_arcadedb_embedded_runtime,
+            "_arcadedb_timeout_result",
+        )
+        query = benchmark_arcadedb_embedded_runtime.CorpusQuery(
+            name="oltp_type1_point_lookup",
+            workload="oltp",
+            category="read-point",
+            query="MATCH (n) RETURN n",
+            backends=("arcadedb-embedded",),
+        )
+
+        result = timeout_result(
+            query=query,
+            index_mode="indexed",
+            timeout_ms=100.0,
+            last_progress_event={
+                "phase": "execute-start",
+                "iteration": 0,
+                "step_phase": "iteration",
+                "step_iteration": 4,
+            },
+            warmup=2,
+        )
+
+        self.assertEqual(result["status"], "timed_out")
+        self.assertEqual(result["query_timeout"]["phase"], "iteration")
+        self.assertEqual(result["query_timeout"]["iteration"], 4)
+
     def test_arcadedb_timeout_result_treats_ready_as_before_warmup(self) -> None:
         timeout_result = getattr(
             benchmark_arcadedb_embedded_runtime,
@@ -304,6 +348,7 @@ class BenchmarkArcadeDBEmbeddedRuntimeScriptTests(unittest.TestCase):
                         },
                         "warmup": 2,
                         "iterations": 3,
+                        "worker_startup_timeout_s": 12.5,
                         "progress_path": str(progress_path),
                         "result_path": str(result_path),
                     }
@@ -318,12 +363,8 @@ class BenchmarkArcadeDBEmbeddedRuntimeScriptTests(unittest.TestCase):
                 return_value=fixture,
             ), mock.patch.object(
                 benchmark_arcadedb_embedded_runtime,
-                "_run_query_once",
-                return_value={
-                    "execute_ns": 1_000_000,
-                    "end_to_end_ns": 1_000_000,
-                    "reset_ns": 0,
-                },
+                "_execute_query_once",
+                return_value=(1_000_000, 1_000_000, False),
             ):
                 exit_code = run_worker(spec_path)
 
@@ -337,16 +378,104 @@ class BenchmarkArcadeDBEmbeddedRuntimeScriptTests(unittest.TestCase):
                 events,
                 [
                     {"phase": "ready", "iteration": 0},
+                    {"phase": "execute-start", "iteration": 0, "step_phase": "startup_probe", "step_iteration": 0},
+                    {"phase": "execute-end", "iteration": 0, "step_phase": "startup_probe", "step_iteration": 0},
+                    {"phase": "execute-start", "iteration": 1, "step_phase": "warmup", "step_iteration": 1},
+                    {"phase": "execute-end", "iteration": 1, "step_phase": "warmup", "step_iteration": 1},
                     {"phase": "warmup", "iteration": 1},
+                    {"phase": "execute-start", "iteration": 2, "step_phase": "warmup", "step_iteration": 2},
+                    {"phase": "execute-end", "iteration": 2, "step_phase": "warmup", "step_iteration": 2},
                     {"phase": "warmup", "iteration": 2},
+                    {"phase": "execute-start", "iteration": 1, "step_phase": "iteration", "step_iteration": 1},
+                    {"phase": "execute-end", "iteration": 1, "step_phase": "iteration", "step_iteration": 1},
                     {"phase": "iteration", "iteration": 1},
+                    {"phase": "execute-start", "iteration": 2, "step_phase": "iteration", "step_iteration": 2},
+                    {"phase": "execute-end", "iteration": 2, "step_phase": "iteration", "step_iteration": 2},
                     {"phase": "iteration", "iteration": 2},
+                    {"phase": "execute-start", "iteration": 3, "step_phase": "iteration", "step_iteration": 3},
+                    {"phase": "execute-end", "iteration": 3, "step_phase": "iteration", "step_iteration": 3},
                     {"phase": "iteration", "iteration": 3},
                 ],
             )
             result = json.loads(result_path.read_text(encoding="utf-8"))
             self.assertEqual(result["status"], "passed")
+            self.assertEqual(result["worker_startup"]["startup_probe_execute_ms"], 1.0)
+            self.assertEqual(result["worker_startup"]["startup_probe_end_to_end_ms"], 1.0)
+            self.assertEqual(result["worker_startup"]["startup_probe_reset_ms"], 0.0)
             self.assertEqual(result["execute"]["p50_ms"], 1.0)
+
+    def test_measure_query_in_arcadedb_worker_uses_specified_startup_timeout(self) -> None:
+        measure_query_in_worker = getattr(
+            benchmark_arcadedb_embedded_runtime,
+            "_measure_query_in_arcadedb_worker",
+        )
+        query = benchmark_arcadedb_embedded_runtime.CorpusQuery(
+            name="oltp_type1_point_lookup",
+            workload="oltp",
+            category="read-point",
+            query="MATCH (n) RETURN n",
+            backends=("arcadedb-embedded",),
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            fixture = benchmark_arcadedb_embedded_runtime.ArcadeDBFixture(
+                work_dir=mock.Mock(path=temp_path),
+                db_path=temp_path / "runtime.arcadedb",
+                database=mock.Mock(),
+                setup_metrics={},
+                row_counts={"node_count": 60, "edge_count": 120},
+                rss_snapshots_mib={},
+                db_size_mib=0.0,
+                wal_size_mib=0.0,
+                index_mode="indexed",
+            )
+
+            class _FakeProcess:
+                def __init__(self) -> None:
+                    self.stderr = mock.Mock()
+
+                def poll(self) -> None:
+                    return None
+
+                def kill(self) -> None:
+                    return None
+
+                def communicate(self) -> tuple[str, str]:
+                    return "", ""
+
+            fake_process = _FakeProcess()
+            with mock.patch.object(
+                benchmark_arcadedb_embedded_runtime.subprocess,
+                "Popen",
+                return_value=fake_process,
+            ), mock.patch.object(
+                benchmark_arcadedb_embedded_runtime,
+                "_read_arcadedb_worker_progress",
+                return_value=([], 0),
+            ), mock.patch.object(
+                benchmark_arcadedb_embedded_runtime.time,
+                "monotonic",
+                side_effect=[0.0, 12.6],
+            ), mock.patch.object(
+                benchmark_arcadedb_embedded_runtime.time,
+                "sleep",
+            ):
+                result = measure_query_in_worker(
+                    fixture,
+                    query=query,
+                    iterations=1,
+                    warmup=1,
+                    timeout_ms=1000.0,
+                    worker_startup_timeout_s=12.5,
+                )
+
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(result["error_type"], "WorkerStartupTimeout")
+        self.assertEqual(
+            result["error_message"],
+            "ArcadeDB worker did not become ready within 12.5s.",
+        )
 
     def test_read_arcadedb_worker_progress_ignores_partial_trailing_line(self) -> None:
         read_progress = getattr(
@@ -441,6 +570,7 @@ class BenchmarkArcadeDBEmbeddedRuntimeScriptTests(unittest.TestCase):
                     iterations=1,
                     warmup=0,
                     timeout_ms=1000.0,
+                    worker_startup_timeout_s=5.0,
                 )
 
             self.assertEqual(result["status"], "passed")
@@ -520,6 +650,7 @@ class BenchmarkArcadeDBEmbeddedRuntimeScriptTests(unittest.TestCase):
                     iterations=1,
                     warmup=0,
                     timeout_ms=1000.0,
+                    worker_startup_timeout_s=5.0,
                 )
 
             self.assertEqual(result["status"], "passed")
@@ -574,12 +705,14 @@ class BenchmarkArcadeDBEmbeddedRuntimeScriptTests(unittest.TestCase):
             ingest_batch_size: int,
             db_root_dir: Path | None,
             iteration_progress: bool,
+            worker_startup_timeout_s: float,
         ) -> dict[str, object]:
             self.assertIsNotNone(graph_schema)
             self.assertIs(sqlite_source, sqlite_source_mock)
             self.assertEqual(ingest_batch_size, SMALL_SCALE.ingest_batch_size)
             self.assertFalse(iteration_progress)
             self.assertIsNone(db_root_dir)
+            self.assertEqual(worker_startup_timeout_s, 5.0)
             suite_calls.append((workload, index_mode))
             return {
                 "backend": "arcadedb-embedded",
@@ -844,6 +977,224 @@ class BenchmarkArcadeDBEmbeddedRuntimeScriptTests(unittest.TestCase):
             {"client_mib": 12.0, "server_mib": None, "combined_mib": 12.0},
         )
         self.assertEqual(result["setup"]["gav_ms"], 5.0)
+
+    def test_run_workload_suite_preclassifies_timeout_queries_and_mixes_modes(self) -> None:
+        run_workload_suite = getattr(
+            benchmark_arcadedb_embedded_runtime,
+            "_run_workload_suite",
+        )
+
+        iterative_query = benchmark_arcadedb_embedded_runtime.CorpusQuery(
+            name="iterative_query",
+            workload="oltp",
+            category="point_lookup",
+            query="MATCH (n) RETURN n LIMIT 1",
+            backends=("arcadedb-embedded",),
+        )
+        skipped_query = benchmark_arcadedb_embedded_runtime.CorpusQuery(
+            name="skipped_query",
+            workload="oltp",
+            category="point_lookup",
+            query="MATCH (n) RETURN n LIMIT 1",
+            backends=("arcadedb-embedded",),
+        )
+        initial_database = mock.Mock()
+        reopened_database = mock.Mock()
+        fixture = mock.Mock(
+            setup_metrics={
+                "connect_ns": 1_000_000,
+                "schema_ns": 2_000_000,
+                "ingest_ns": 3_000_000,
+                "index_ns": 4_000_000,
+                "gav_ns": 0,
+                "checkpoint_ns": 0,
+            },
+            row_counts={
+                "node_count": 1,
+                "edge_count": 0,
+                "node_type_count": 1,
+                "edge_type_count": 0,
+            },
+            rss_snapshots_mib={},
+            db_size_mib=5.0,
+            wal_size_mib=0.0,
+            db_path=Path("/tmp/runtime.arcadedb"),
+            index_mode="indexed",
+            database=initial_database,
+        )
+        measure_calls: list[tuple[str, float | None, str | None]] = []
+
+        def fake_measure_query(_fixture: object, **kwargs: object) -> dict[str, object]:
+            query = kwargs["query"]
+            timeout_ms = kwargs["timeout_ms"]
+            execution_mode = kwargs.get("execution_mode")
+            measure_calls.append((query.name, timeout_ms, execution_mode))
+            return {
+                "name": query.name,
+                "workload": query.workload,
+                "category": query.category,
+                "backend": "arcadedb-embedded",
+                "index_mode": "indexed",
+                "mode": query.mode,
+                "mutation": query.mutation,
+                "status": "passed",
+                "execution_mode": execution_mode,
+                "execute": {
+                    "min_ms": 1.0,
+                    "mean_ms": 1.0,
+                    "p50_ms": 1.0,
+                    "p95_ms": 1.0,
+                    "p99_ms": 1.0,
+                    "max_ms": 1.0,
+                },
+                "end_to_end": {
+                    "min_ms": 2.0,
+                    "mean_ms": 2.0,
+                    "p50_ms": 2.0,
+                    "p95_ms": 2.0,
+                    "p99_ms": 2.0,
+                    "max_ms": 2.0,
+                },
+                "reset": {
+                    "min_ms": 0.0,
+                    "mean_ms": 0.0,
+                    "p50_ms": 0.0,
+                    "p95_ms": 0.0,
+                    "p99_ms": 0.0,
+                    "max_ms": 0.0,
+                },
+            }
+
+        with mock.patch.object(
+            benchmark_arcadedb_embedded_runtime,
+            "_prepare_arcadedb_fixture",
+            return_value=fixture,
+        ), mock.patch.object(
+            benchmark_arcadedb_embedded_runtime,
+            "_classify_arcadedb_query_execution_mode",
+            side_effect=[
+                (
+                    benchmark_arcadedb_embedded_runtime.ARCADEDB_ITERATIVE_EXECUTION_MODE,
+                    {
+                        "name": iterative_query.name,
+                        "workload": iterative_query.workload,
+                        "category": iterative_query.category,
+                        "backend": "arcadedb-embedded",
+                        "index_mode": "indexed",
+                        "mode": iterative_query.mode,
+                        "mutation": iterative_query.mutation,
+                        "status": "passed",
+                        "worker_startup": {
+                            "open_ms": 12.0,
+                            "ready_ms": 12.0,
+                            "startup_probe_execute_ms": 3.0,
+                            "startup_probe_end_to_end_ms": 3.5,
+                            "startup_probe_reset_ms": 0.5,
+                        },
+                    },
+                ),
+                (
+                    benchmark_arcadedb_embedded_runtime.ARCADEDB_SKIPPED_AFTER_PROBE_EXECUTION_MODE,
+                    {
+                        "name": skipped_query.name,
+                        "workload": skipped_query.workload,
+                        "category": skipped_query.category,
+                        "backend": "arcadedb-embedded",
+                        "index_mode": "indexed",
+                        "mode": skipped_query.mode,
+                        "mutation": skipped_query.mutation,
+                        "status": "timed_out",
+                        "execution_mode": benchmark_arcadedb_embedded_runtime.ARCADEDB_SKIPPED_AFTER_PROBE_EXECUTION_MODE,
+                        "worker_startup": {
+                            "open_ms": 20.0,
+                            "ready_ms": 20.0,
+                            "startup_probe_execute_ms": 5.0,
+                            "startup_probe_end_to_end_ms": 5.5,
+                            "startup_probe_reset_ms": 0.5,
+                        },
+                        "query_timeout": {
+                            "phase": "iteration",
+                            "timeout_ms": 1000.0,
+                            "iteration": 1,
+                        },
+                    },
+                ),
+            ],
+        ), mock.patch.object(
+            benchmark_arcadedb_embedded_runtime,
+            "_measure_query",
+            side_effect=fake_measure_query,
+        ), mock.patch.object(
+            benchmark_arcadedb_embedded_runtime,
+            "_open_arcadedb",
+            return_value=reopened_database,
+        ), mock.patch.object(
+            benchmark_arcadedb_embedded_runtime,
+            "_capture_rss_snapshot",
+            side_effect=[
+                {"client_mib": 11.0, "server_mib": None, "combined_mib": 11.0},
+                {"client_mib": 12.0, "server_mib": None, "combined_mib": 12.0},
+            ],
+        ):
+            result = run_workload_suite(
+                workload="oltp",
+                index_mode="indexed",
+                queries=[iterative_query, skipped_query],
+                iterations=3,
+                warmup=1,
+                graph_schema=mock.Mock(),
+                sqlite_source=mock.Mock(),
+                ingest_batch_size=10,
+                db_root_dir=None,
+                iteration_progress=False,
+                timeout_ms=1000.0,
+            )
+
+        initial_database.close.assert_called_once_with()
+        reopened_database.close.assert_called_once_with()
+        fixture.close.assert_called_once_with()
+        self.assertEqual(
+            measure_calls,
+            [
+                (
+                    "iterative_query",
+                    1000.0,
+                    benchmark_arcadedb_embedded_runtime.ARCADEDB_ITERATIVE_EXECUTION_MODE,
+                ),
+            ],
+        )
+        self.assertEqual(
+            result["query_execution_modes"],
+            {
+                "iterative_query": benchmark_arcadedb_embedded_runtime.ARCADEDB_ITERATIVE_EXECUTION_MODE,
+                "skipped_query": benchmark_arcadedb_embedded_runtime.ARCADEDB_SKIPPED_AFTER_PROBE_EXECUTION_MODE,
+            },
+        )
+        iterative_result = next(
+            result_item
+            for result_item in result["queries"]
+            if result_item["name"] == "iterative_query"
+        )
+        self.assertEqual(
+            iterative_result["worker_startup"],
+            {
+                "open_ms": 12.0,
+                "ready_ms": 12.0,
+                "startup_probe_execute_ms": 3.0,
+                "startup_probe_end_to_end_ms": 3.5,
+                "startup_probe_reset_ms": 0.5,
+            },
+        )
+        skipped_result = next(
+            result_item
+            for result_item in result["queries"]
+            if result_item["name"] == "skipped_query"
+        )
+        self.assertEqual(skipped_result["status"], "timed_out")
+        self.assertEqual(
+            skipped_result["execution_mode"],
+            benchmark_arcadedb_embedded_runtime.ARCADEDB_SKIPPED_AFTER_PROBE_EXECUTION_MODE,
+        )
 
 
 if __name__ == "__main__":

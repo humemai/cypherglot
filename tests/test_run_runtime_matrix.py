@@ -150,7 +150,7 @@ class RunRuntimeMatrixTests(unittest.TestCase):
             )
             pending_job = run_runtime_matrix.MatrixJob(
                 sequence=3,
-                variant=run_runtime_matrix.VARIANT_BY_NAME["duckdb-unindexed"],
+                variant=run_runtime_matrix.VARIANT_BY_NAME["duckdb-indexed"],
                 repeat=1,
                 output_path=temp_path / "pending.json",
                 log_path=temp_path / "pending.log",
@@ -221,7 +221,7 @@ class RunRuntimeMatrixTests(unittest.TestCase):
     def test_build_jobs_expands_repeats_and_shuffles_deterministically(self) -> None:
         variants = [
             run_runtime_matrix.VARIANT_BY_NAME["sqlite-indexed"],
-            run_runtime_matrix.VARIANT_BY_NAME["duckdb-unindexed"],
+            run_runtime_matrix.VARIANT_BY_NAME["duckdb-indexed"],
         ]
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -241,8 +241,8 @@ class RunRuntimeMatrixTests(unittest.TestCase):
         self.assertEqual(
             [job.slug for job in jobs],
             [
-                "duckdb-unindexed-r02",
-                "duckdb-unindexed-r01",
+                "duckdb-indexed-r02",
+                "duckdb-indexed-r01",
                 "sqlite-indexed-r01",
                 "sqlite-indexed-r02",
             ],
@@ -266,6 +266,7 @@ class RunRuntimeMatrixTests(unittest.TestCase):
             neo4j_docker_startup_timeout=120,
             neo4j_keep_container=False,
             arcadedb_jvm_args=None,
+            arcadedb_worker_startup_timeout_s=60.0,
         )
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -290,6 +291,8 @@ class RunRuntimeMatrixTests(unittest.TestCase):
         self.assertIn("250", command)
         self.assertIn("--olap-iterations", command)
         self.assertIn("50", command)
+        self.assertIn("--worker-startup-timeout-s", command)
+        self.assertIn("60.0", command)
         self.assertEqual(env["ARCADEDB_JVM_ARGS"], "-Xmx16g")
 
     def test_build_command_for_neo4j_adds_docker_isolation(self) -> None:
@@ -310,6 +313,7 @@ class RunRuntimeMatrixTests(unittest.TestCase):
             neo4j_docker_startup_timeout=180,
             neo4j_keep_container=True,
             arcadedb_jvm_args=None,
+            arcadedb_worker_startup_timeout_s=None,
         )
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -362,6 +366,7 @@ class RunRuntimeMatrixTests(unittest.TestCase):
             neo4j_docker_startup_timeout=120,
             neo4j_keep_container=False,
             arcadedb_jvm_args=None,
+            arcadedb_worker_startup_timeout_s=None,
         )
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -397,6 +402,7 @@ class RunRuntimeMatrixTests(unittest.TestCase):
             neo4j_docker_startup_timeout=120,
             neo4j_port_scan_limit=10,
             neo4j_password="",
+            arcadedb_worker_startup_timeout_s=None,
         )
 
         with self.assertRaisesRegex(ValueError, "Neo4j variants require"):
@@ -423,6 +429,7 @@ class RunRuntimeMatrixTests(unittest.TestCase):
             neo4j_docker_startup_timeout=120,
             neo4j_keep_container=False,
             arcadedb_jvm_args=None,
+            arcadedb_worker_startup_timeout_s=None,
         )
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -500,6 +507,7 @@ class RunRuntimeMatrixTests(unittest.TestCase):
             neo4j_docker_startup_timeout=120,
             neo4j_keep_container=False,
             arcadedb_jvm_args=None,
+            arcadedb_worker_startup_timeout_s=None,
         )
 
         class _FakeProcess:

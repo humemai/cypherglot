@@ -239,6 +239,13 @@ VARIANTS: tuple[VariantSpec, ...] = (
         uses_db_root_dir=True,
     ),
     VariantSpec(
+        name="duckdb-indexed",
+        module_name="scripts.benchmarks.runtime.duckdb",
+        backend="duckdb",
+        index_mode="indexed",
+        uses_db_root_dir=True,
+    ),
+    VariantSpec(
         name="duckdb-unindexed",
         module_name="scripts.benchmarks.runtime.duckdb",
         backend="duckdb",
@@ -401,6 +408,14 @@ def _parse_args() -> argparse.Namespace:
         help=(
             "Override ARCADEDB_JVM_ARGS for ArcadeDB jobs. Defaults to -Xmx4g, "
             "-Xmx16g, or -Xmx32g for small, medium, and large respectively."
+        ),
+    )
+    parser.add_argument(
+        "--arcadedb-worker-startup-timeout-s",
+        type=float,
+        help=(
+            "Override the ArcadeDB probe worker startup timeout in seconds for "
+            "ArcadeDB variants."
         ),
     )
     parser.add_argument("--postgres-dsn", help="Optional PostgreSQL DSN override.")
@@ -625,6 +640,16 @@ def _build_command(
         )
         if args.neo4j_keep_container:
             command.append("--docker-keep-container")
+    if (
+        job.variant.backend == "arcadedb_embedded"
+        and args.arcadedb_worker_startup_timeout_s is not None
+    ):
+        command.extend(
+            [
+                "--worker-startup-timeout-s",
+                str(args.arcadedb_worker_startup_timeout_s),
+            ]
+        )
 
     env = os.environ.copy()
     if job.variant.uses_arcadedb_env:
@@ -824,6 +849,11 @@ def _validate_args(args: argparse.Namespace, variants: list[VariantSpec]) -> Non
         raise ValueError("--neo4j-docker-startup-timeout must be positive.")
     if args.neo4j_port_scan_limit <= 0:
         raise ValueError("--neo4j-port-scan-limit must be positive.")
+    if (
+        args.arcadedb_worker_startup_timeout_s is not None
+        and args.arcadedb_worker_startup_timeout_s <= 0
+    ):
+        raise ValueError("--arcadedb-worker-startup-timeout-s must be positive.")
     requires_neo4j_password = any(
         variant.uses_neo4j_docker for variant in variants
     )

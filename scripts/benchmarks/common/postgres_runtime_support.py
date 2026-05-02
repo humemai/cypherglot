@@ -243,7 +243,7 @@ def _stop_runtime(runtime: _ManagedPostgresRuntime) -> None:
         return
 
     subprocess.run(
-        [docker, "rm", "-f", runtime.container_name],
+        [docker, "rm", "-f", "-v", runtime.container_name],
         capture_output=True,
         text=True,
         check=False,

@@ -124,7 +124,7 @@ class BenchmarkSQLRuntimeCoreTests(unittest.TestCase):
         )
         try:
             self.assertGreater(runner.setup_metrics["schema_ns"], 0)
-            self.assertEqual(runner.setup_metrics["index_ns"], 0)
+            self.assertGreater(runner.setup_metrics["index_ns"], 0)
             self.assertGreater(runner.setup_metrics["ingest_ns"], 0)
             self.assertGreater(runner.setup_metrics["analyze_ns"], 0)
             self.assertEqual(runner.row_counts, fixture.row_counts)
@@ -148,6 +148,47 @@ class BenchmarkSQLRuntimeCoreTests(unittest.TestCase):
         self.assertIsNotNone(edge_count)
         self.assertGreater(user_count[0], 0)
         self.assertGreater(edge_count[0], 0)
+
+    @unittest.skipIf(
+        not DUCKDB_AVAILABLE,
+        "duckdb is not installed",
+    )
+    def test_duckdb_unindexed_backend_runner_drops_schema_indexes(self) -> None:
+        build_graph_schema = getattr(benchmark_sql_runtime_core, "_build_graph_schema")
+        prepare_fixture = getattr(
+            benchmark_sql_runtime_core,
+            "_prepare_generated_graph_fixture",
+        )
+        backend_runner = getattr(benchmark_sql_runtime_core, "_BackendRunner")
+        managed_directory = getattr(benchmark_sql_runtime_core, "ManagedDirectory")
+
+        graph_schema, edge_plans = build_graph_schema(SMALL_SCALE)
+        schema_context = cypherglot.CompilerSchemaContext.type_aware(graph_schema)
+        fixture = prepare_fixture(
+            scale=SMALL_SCALE,
+            graph_schema=graph_schema,
+            edge_plans=edge_plans,
+            index_mode="unindexed",
+        )
+        temp_dir: tempfile.TemporaryDirectory[str] = tempfile.TemporaryDirectory(
+            prefix="duckdb-bench-unindexed-test-"
+        )
+        runner = backend_runner(
+            "duckdb",
+            managed_directory(path=Path(temp_dir.name), temp_dir=temp_dir),
+            graph_schema=graph_schema,
+            schema_context=schema_context,
+            sqlite_source=fixture,
+        )
+        try:
+            index_names = runner.duck.execute(
+                "SELECT index_name FROM duckdb_indexes()"
+            ).fetchall()
+        finally:
+            runner.close()
+            fixture.close()
+
+        self.assertEqual(index_names, [])
 
     @unittest.skipIf(
         not DUCKDB_AVAILABLE,
