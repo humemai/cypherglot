@@ -458,6 +458,7 @@ The current runtime matrix variants are:
 
 - `sqlite-indexed`
 - `sqlite-unindexed`
+- `duckdb-indexed`
 - `duckdb-unindexed`
 - `postgresql-indexed`
 - `postgresql-unindexed`
@@ -488,6 +489,7 @@ python -m scripts.benchmarks.runtime.matrix \
   --olap-iterations 500 \
   --olap-warmup 20 \
   --olap-timeout-ms 10000 \
+  --arcadedb-worker-startup-timeout-s 60 \
   --neo4j-password cypherglot1
 ```
 
@@ -504,6 +506,7 @@ python -m scripts.benchmarks.runtime.matrix \
   --olap-iterations 100 \
   --olap-warmup 10 \
   --olap-timeout-ms 100000 \
+  --arcadedb-worker-startup-timeout-s 120 \
   --neo4j-password cypherglot1
 ```
 
@@ -512,7 +515,7 @@ Recommended `large` run:
 ```bash
 python -m scripts.benchmarks.runtime.matrix \
   --scale large \
-  --workers 6 \
+  --workers 3 \
   --repeats 3 \
   --oltp-iterations 2000 \
   --oltp-warmup 20 \
@@ -520,22 +523,25 @@ python -m scripts.benchmarks.runtime.matrix \
   --olap-iterations 50 \
   --olap-warmup 5 \
   --olap-timeout-ms 200000 \
+  --arcadedb-worker-startup-timeout-s 600 \
   --neo4j-password cypherglot1
 ```
 
 For runtime runs, keep `repeats=3` across all scales and scale down worker
 parallelism plus per-run inner-loop sampling as datasets grow, but not so far
 that medium and large OLAP suites become too noisy. The current recommended
-methodology is to run the full ten-variant matrix at each scale:
-`sqlite-indexed`, `sqlite-unindexed`, `duckdb-unindexed`,
+methodology is to run the full eleven-variant matrix at each scale:
+`sqlite-indexed`, `sqlite-unindexed`, `duckdb-indexed`, `duckdb-unindexed`,
 `postgresql-indexed`, `postgresql-unindexed`, `neo4j-indexed`,
 `neo4j-unindexed`, `arcadedb-indexed`, `arcadedb-unindexed`, and
 `ladybug-unindexed`. The commands above now rely on the matrix runner's default
-behavior, which is to queue all ten variants unless you explicitly narrow the
+behavior, which is to queue all eleven variants unless you explicitly narrow the
 run with repeated `--variant` flags. They also pin the current runtime
-guardrails explicitly: hard query timeouts of `1000 ms` for OLTP and
-`20000 ms` for OLAP. The timeout limits are the emergency brake for queries
-that stop making progress.
+guardrails explicitly: scale-specific OLTP and OLAP query timeouts plus a
+separate ArcadeDB worker startup budget so larger ArcadeDB datasets have time
+to open before query timing begins. The query timeout limits are the emergency
+brake for queries that stop making progress; the ArcadeDB startup timeout only
+covers worker readiness and database open time.
 
 Per-iteration progress output from the underlying benchmark scripts is enabled
 by default. Use `--no-iteration-progress` when you want quieter worker logs.
