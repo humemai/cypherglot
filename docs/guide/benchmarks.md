@@ -266,7 +266,10 @@ single read shape. It currently includes ordinary reads, optional reads, `WITH`
 queries, grouped aggregation, bounded variable-length reads including zero-hop
 coverage, fixed-length multi-hop reads, graph-introspection projections,
 metadata projections, `UNWIND`, standalone writes, traversal-backed program
-shapes, and vector-aware normalization queries.
+shapes, and vector-aware normalization queries. In the runtime matrix, the
+general variable-hop cap is scale-dependent (`2`/`5`/`8` for
+small/medium/large), while grouped-rollup variable-hop OLAP queries stay
+capped at `min(variable_hop_max, 3)`.
 
 Vector-aware queries are benchmarked only through parse, validate, and
 normalize. That matches the current product contract: CypherGlot carries vector
@@ -481,16 +484,17 @@ Recommended `small` run:
 ```bash
 python -m scripts.benchmarks.runtime.matrix \
   --scale small \
-  --workers 6 \
+  --workers 4 \
   --repeats 3 \
   --oltp-iterations 10000 \
   --oltp-warmup 200 \
-  --oltp-timeout-ms 200 \
+  --oltp-timeout-ms 400 \
   --olap-iterations 500 \
   --olap-warmup 20 \
   --olap-timeout-ms 10000 \
   --arcadedb-worker-startup-timeout-s 60 \
-  --neo4j-password cypherglot1
+  --neo4j-password cypherglot1 \
+  --container-cpus 4
 ```
 
 Recommended `medium` run:
@@ -498,16 +502,17 @@ Recommended `medium` run:
 ```bash
 python -m scripts.benchmarks.runtime.matrix \
   --scale medium \
-  --workers 6 \
+  --workers 4 \
   --repeats 3 \
   --oltp-iterations 5000 \
   --oltp-warmup 100 \
-  --oltp-timeout-ms 500 \
+  --oltp-timeout-ms 1000 \
   --olap-iterations 100 \
   --olap-warmup 10 \
   --olap-timeout-ms 100000 \
   --arcadedb-worker-startup-timeout-s 120 \
-  --neo4j-password cypherglot1
+  --neo4j-password cypherglot1 \
+  --container-cpus 4
 ```
 
 Recommended `large` run:
@@ -515,16 +520,17 @@ Recommended `large` run:
 ```bash
 python -m scripts.benchmarks.runtime.matrix \
   --scale large \
-  --workers 3 \
+  --workers 4 \
   --repeats 3 \
   --oltp-iterations 2000 \
   --oltp-warmup 20 \
-  --oltp-timeout-ms 1000 \
+  --oltp-timeout-ms 2000 \
   --olap-iterations 50 \
   --olap-warmup 5 \
   --olap-timeout-ms 200000 \
   --arcadedb-worker-startup-timeout-s 600 \
-  --neo4j-password cypherglot1
+  --neo4j-password cypherglot1 \
+  --container-cpus 4
 ```
 
 For runtime runs, keep `repeats=3` across all scales and scale down worker
@@ -541,7 +547,9 @@ guardrails explicitly: scale-specific OLTP and OLAP query timeouts plus a
 separate ArcadeDB worker startup budget so larger ArcadeDB datasets have time
 to open before query timing begins. The query timeout limits are the emergency
 brake for queries that stop making progress; the ArcadeDB startup timeout only
-covers worker readiness and database open time.
+covers worker readiness and database open time. In practice, ArcadeDB first
+waits for worker readiness, then runs the startup probe, and only then can the
+OLTP or OLAP query timeout window begin.
 
 Per-iteration progress output from the underlying benchmark scripts is enabled
 by default. Use `--no-iteration-progress` when you want quieter worker logs.
