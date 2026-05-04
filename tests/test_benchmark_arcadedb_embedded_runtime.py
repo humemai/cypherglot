@@ -978,6 +978,102 @@ class BenchmarkArcadeDBEmbeddedRuntimeScriptTests(unittest.TestCase):
         )
         self.assertEqual(result["setup"]["gav_ms"], 5.0)
 
+    def test_run_workload_suite_returns_failed_suite_when_fixture_setup_fails(self) -> None:
+        run_workload_suite = getattr(
+            benchmark_arcadedb_embedded_runtime,
+            "_run_workload_suite",
+        )
+        fixture_setup_error = benchmark_arcadedb_embedded_runtime.ArcadeDBFixtureSetupError(
+            db_path=Path("/tmp/runtime.arcadedb"),
+            index_mode="unindexed",
+            setup_metrics={
+                "connect_ns": 1_000_000,
+                "schema_ns": 2_000_000,
+                "ingest_ns": 3_000_000,
+                "index_ns": 0,
+                "gav_ns": 4_000_000,
+                "checkpoint_ns": 0,
+            },
+            row_counts={
+                "node_count": 60,
+                "edge_count": 120,
+                "node_type_count": 3,
+                "edge_type_count": 3,
+            },
+            rss_snapshots_mib={
+                "after_connect": {
+                    "client_mib": 10.0,
+                    "server_mib": None,
+                    "combined_mib": 10.0,
+                }
+            },
+            db_size_mib=5.0,
+            wal_size_mib=0.0,
+            error_type="RuntimeError",
+            error_message="Timed out waiting for GAV cypherglot_olap to reach ['READY']",
+        )
+        query = benchmark_arcadedb_embedded_runtime.CorpusQuery(
+            name="q",
+            workload="olap",
+            category="aggregation",
+            query="MATCH (n) RETURN count(n)",
+            backends=("arcadedb-embedded",),
+            mode="statement",
+            mutation=False,
+        )
+
+        with mock.patch.object(
+            benchmark_arcadedb_embedded_runtime,
+            "_prepare_arcadedb_fixture",
+            side_effect=fixture_setup_error,
+        ):
+            result = run_workload_suite(
+                workload="olap",
+                index_mode="unindexed",
+                queries=[query],
+                iterations=3,
+                warmup=1,
+                graph_schema=mock.Mock(),
+                sqlite_source=mock.Mock(),
+                ingest_batch_size=10,
+                db_root_dir=None,
+                iteration_progress=False,
+            )
+
+        self.assertEqual(result["fail_count"], 1)
+        self.assertEqual(result["pass_count"], 0)
+        self.assertEqual(result["timeout_count"], 0)
+        self.assertEqual(result["setup"]["gav_ms"], 4.0)
+        self.assertEqual(result["setup_failure"]["error_type"], "RuntimeError")
+        self.assertEqual(result["queries"][0]["status"], "failed")
+        self.assertEqual(result["queries"][0]["error_type"], "RuntimeError")
+        self.assertIn("Timed out waiting for GAV", result["queries"][0]["error_message"])
+
+    def test_wait_for_arcadedb_gav_status_fails_fast_on_failed_status(self) -> None:
+        wait_for_arcadedb_gav_status = getattr(
+            benchmark_arcadedb_embedded_runtime,
+            "_wait_for_arcadedb_gav_status",
+        )
+
+        with mock.patch.object(
+            benchmark_arcadedb_embedded_runtime,
+            "_fetch_arcadedb_gav_metadata",
+            return_value={
+                "name": "cypherglot_olap",
+                "status": "FAILED",
+                "updateMode": "OFF",
+                "nodeCount": 0,
+                "edgeCount": 0,
+                "buildDurationMs": 0,
+            },
+        ):
+            with self.assertRaisesRegex(RuntimeError, "entered FAILED status"):
+                wait_for_arcadedb_gav_status(
+                    mock.Mock(),
+                    "cypherglot_olap",
+                    {"READY"},
+                )
+
     def test_run_workload_suite_preclassifies_timeout_queries_and_mixes_modes(self) -> None:
         run_workload_suite = getattr(
             benchmark_arcadedb_embedded_runtime,

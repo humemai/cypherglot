@@ -117,6 +117,32 @@ class ArcadeDBFixture:
         self.work_dir.close()
 
 
+class ArcadeDBFixtureSetupError(RuntimeError):
+    def __init__(
+        self,
+        *,
+        db_path: Path,
+        index_mode: str,
+        setup_metrics: dict[str, int],
+        row_counts: dict[str, int],
+        rss_snapshots_mib: dict[str, dict[str, float | None]],
+        db_size_mib: float,
+        wal_size_mib: float,
+        error_type: str,
+        error_message: str,
+    ) -> None:
+        super().__init__(error_message)
+        self.db_path = db_path
+        self.index_mode = index_mode
+        self.setup_metrics = setup_metrics
+        self.row_counts = row_counts
+        self.rss_snapshots_mib = rss_snapshots_mib
+        self.db_size_mib = db_size_mib
+        self.wal_size_mib = wal_size_mib
+        self.error_type = error_type
+        self.error_message = error_message
+
+
 def _arcadedb_available() -> bool:
     return arcadedb is not None
 
@@ -428,6 +454,10 @@ def _wait_for_arcadedb_gav_status(
             last_metadata = metadata
             if metadata["status"] in expected_statuses:
                 return metadata
+            if metadata["status"] == "FAILED":
+                raise RuntimeError(
+                    f"GAV {name} entered FAILED status. Metadata: {metadata}"
+                )
 
         if time.perf_counter() - start > timeout_sec:
             raise RuntimeError(
@@ -493,6 +523,20 @@ def _prepare_arcadedb_fixture(
     )
     db_path = work_dir.path / "runtime.arcadedb"
     rss_snapshots_mib: dict[str, dict[str, float | None]] = {}
+    setup_metrics = {
+        "connect_ns": 0,
+        "schema_ns": 0,
+        "ingest_ns": 0,
+        "index_ns": 0,
+        "gav_ns": 0,
+        "checkpoint_ns": 0,
+    }
+    row_counts = {
+        "node_count": sqlite_source.row_counts["node_count"],
+        "edge_count": sqlite_source.row_counts["edge_count"],
+        "node_type_count": len(graph_schema.node_types),
+        "edge_type_count": len(graph_schema.edge_types),
+    }
 
     _progress(
         f"{progress_label}: creating fixture "
@@ -500,6 +544,7 @@ def _prepare_arcadedb_fixture(
         f"{sqlite_source.row_counts['edge_count']} edges)"
     )
     database, connect_ns = _measure_ns(lambda: _open_arcadedb(db_path))
+    setup_metrics["connect_ns"] = connect_ns
     rss_snapshots_mib["after_connect"] = _capture_rss_snapshot(
         backend=ARCADEDB_BACKEND_NAME
     )
@@ -508,6 +553,7 @@ def _prepare_arcadedb_fixture(
         _, schema_ns = _measure_ns(
             lambda: _create_arcadedb_schema(database, graph_schema)
         )
+        setup_metrics["schema_ns"] = schema_ns
         rss_snapshots_mib["after_schema"] = _capture_rss_snapshot(
             backend=ARCADEDB_BACKEND_NAME
         )
@@ -524,6 +570,7 @@ def _prepare_arcadedb_fixture(
                 ingest_batch_size=ingest_batch_size,
             )
         )
+        setup_metrics["ingest_ns"] = ingest_ns
         rss_snapshots_mib["after_ingest"] = _capture_rss_snapshot(
             backend=ARCADEDB_BACKEND_NAME
         )
@@ -535,6 +582,7 @@ def _prepare_arcadedb_fixture(
             )
         else:
             index_ns = 0
+        setup_metrics["index_ns"] = index_ns
         rss_snapshots_mib["after_index"] = _capture_rss_snapshot(
             backend=ARCADEDB_BACKEND_NAME
         )
@@ -546,18 +594,31 @@ def _prepare_arcadedb_fixture(
             )
         else:
             gav_ns = 0
+        setup_metrics["gav_ns"] = gav_ns
         rss_snapshots_mib["after_gav"] = _capture_rss_snapshot(
             backend=ARCADEDB_BACKEND_NAME
         )
 
         _, checkpoint_ns = _measure_ns(lambda: None)
+        setup_metrics["checkpoint_ns"] = checkpoint_ns
         rss_snapshots_mib["after_checkpoint"] = _capture_rss_snapshot(
             backend=ARCADEDB_BACKEND_NAME
         )
-    except Exception:
+    except Exception as exc:
+        db_size_mib, wal_size_mib = _arcadedb_storage_sizes(db_path)
         database.close()
         work_dir.close()
-        raise
+        raise ArcadeDBFixtureSetupError(
+            db_path=db_path,
+            index_mode=index_mode,
+            setup_metrics=setup_metrics,
+            row_counts=row_counts,
+            rss_snapshots_mib=rss_snapshots_mib,
+            db_size_mib=db_size_mib,
+            wal_size_mib=wal_size_mib,
+            error_type=type(exc).__name__,
+            error_message=str(exc),
+        ) from exc
 
     db_size_mib, wal_size_mib = _arcadedb_storage_sizes(db_path)
     _progress(
@@ -568,20 +629,34 @@ def _prepare_arcadedb_fixture(
         work_dir=work_dir,
         db_path=db_path,
         database=database,
-        setup_metrics={
-            "connect_ns": connect_ns,
-            "schema_ns": schema_ns,
-            "ingest_ns": ingest_ns,
-            "index_ns": index_ns,
-            "gav_ns": gav_ns,
-            "checkpoint_ns": checkpoint_ns,
-        },
+        setup_metrics=setup_metrics,
         row_counts=row_counts,
         rss_snapshots_mib=rss_snapshots_mib,
         db_size_mib=db_size_mib,
         wal_size_mib=wal_size_mib,
         index_mode=index_mode,
     )
+
+
+def _fixture_setup_failure_result(
+    *,
+    query: CorpusQuery,
+    index_mode: str,
+    error_type: str,
+    error_message: str,
+) -> dict[str, object]:
+    return {
+        "name": query.name,
+        "workload": query.workload,
+        "category": query.category,
+        "backend": ARCADEDB_BACKEND_NAME,
+        "index_mode": index_mode,
+        "mode": query.mode,
+        "mutation": query.mutation,
+        "status": "failed",
+        "error_type": error_type,
+        "error_message": error_message,
+    }
 
 
 def _pool_summaries(
@@ -1411,14 +1486,61 @@ def _run_workload_suite(
     worker_startup_timeout_s: float = ARCADEDB_WORKER_STARTUP_TIMEOUT_S,
 ) -> dict[str, object]:
     suite_name = f"{workload}/{_suite_key(index_mode)}"
-    fixture = _prepare_arcadedb_fixture(
-        workload=workload,
-        index_mode=index_mode,
-        graph_schema=graph_schema,
-        sqlite_source=sqlite_source,
-        ingest_batch_size=ingest_batch_size,
-        db_root_dir=db_root_dir,
-    )
+    try:
+        fixture = _prepare_arcadedb_fixture(
+            workload=workload,
+            index_mode=index_mode,
+            graph_schema=graph_schema,
+            sqlite_source=sqlite_source,
+            ingest_batch_size=ingest_batch_size,
+            db_root_dir=db_root_dir,
+        )
+    except ArcadeDBFixtureSetupError as exc:
+        _progress(
+            f"{suite_name}: setup failed ({exc.error_type}: {exc.error_message})"
+        )
+        query_results = [
+            _fixture_setup_failure_result(
+                query=query,
+                index_mode=index_mode,
+                error_type=exc.error_type,
+                error_message=exc.error_message,
+            )
+            for query in queries
+        ]
+        return {
+            "backend": ARCADEDB_BACKEND_NAME,
+            "index_mode": index_mode,
+            "iterations": iterations,
+            "warmup": warmup,
+            "query_count": len(queries),
+            "pass_count": 0,
+            "timeout_count": 0,
+            "fail_count": len(query_results),
+            "setup": {
+                "connect_ms": exc.setup_metrics["connect_ns"] / 1_000_000.0,
+                "schema_ms": exc.setup_metrics["schema_ns"] / 1_000_000.0,
+                "ingest_ms": exc.setup_metrics["ingest_ns"] / 1_000_000.0,
+                "index_ms": exc.setup_metrics["index_ns"] / 1_000_000.0,
+                "gav_ms": exc.setup_metrics["gav_ns"] / 1_000_000.0,
+                "checkpoint_ms": exc.setup_metrics["checkpoint_ns"] / 1_000_000.0,
+            },
+            "row_counts": exc.row_counts,
+            "rss_snapshots_mib": exc.rss_snapshots_mib,
+            "storage": {
+                "db_size_mib": exc.db_size_mib,
+                "wal_size_mib": exc.wal_size_mib,
+            },
+            "db_path": str(exc.db_path),
+            "setup_failure": {
+                "error_type": exc.error_type,
+                "error_message": exc.error_message,
+            },
+            "execute": _pool_summaries(query_results, "execute"),
+            "end_to_end": _pool_summaries(query_results, "end_to_end"),
+            "reset": _pool_summaries(query_results, "reset"),
+            "queries": query_results,
+        }
     try:
         rss_snapshots_mib = {
             key: dict(value)

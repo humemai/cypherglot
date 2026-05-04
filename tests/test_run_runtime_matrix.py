@@ -118,6 +118,8 @@ class RunRuntimeMatrixTests(unittest.TestCase):
         self.assertTrue(args.iteration_progress)
         self.assertEqual(args.oltp_timeout_ms, 1000.0)
         self.assertEqual(args.olap_timeout_ms, 10000.0)
+        self.assertIsNone(args.container_cpus)
+        self.assertEqual(args.container_image, "python:3.12-bookworm")
 
     def test_parse_args_supports_no_iteration_progress_opt_out(self) -> None:
         with patch.object(
@@ -267,6 +269,8 @@ class RunRuntimeMatrixTests(unittest.TestCase):
             neo4j_keep_container=False,
             arcadedb_jvm_args=None,
             arcadedb_worker_startup_timeout_s=60.0,
+            container_cpus=None,
+            container_image="python:3.12-bookworm",
         )
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -314,6 +318,8 @@ class RunRuntimeMatrixTests(unittest.TestCase):
             neo4j_keep_container=True,
             arcadedb_jvm_args=None,
             arcadedb_worker_startup_timeout_s=None,
+            container_cpus=None,
+            container_image="python:3.12-bookworm",
         )
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -367,6 +373,8 @@ class RunRuntimeMatrixTests(unittest.TestCase):
             neo4j_keep_container=False,
             arcadedb_jvm_args=None,
             arcadedb_worker_startup_timeout_s=None,
+            container_cpus=None,
+            container_image="python:3.12-bookworm",
         )
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -402,6 +410,9 @@ class RunRuntimeMatrixTests(unittest.TestCase):
             neo4j_docker_startup_timeout=120,
             neo4j_port_scan_limit=10,
             neo4j_password="",
+            postgres_dsn=None,
+            container_cpus=None,
+            container_image="python:3.12-bookworm",
             arcadedb_worker_startup_timeout_s=None,
         )
 
@@ -430,6 +441,8 @@ class RunRuntimeMatrixTests(unittest.TestCase):
             neo4j_keep_container=False,
             arcadedb_jvm_args=None,
             arcadedb_worker_startup_timeout_s=None,
+            container_cpus=None,
+            container_image="python:3.12-bookworm",
         )
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -508,6 +521,8 @@ class RunRuntimeMatrixTests(unittest.TestCase):
             neo4j_keep_container=False,
             arcadedb_jvm_args=None,
             arcadedb_worker_startup_timeout_s=None,
+            container_cpus=None,
+            container_image="python:3.12-bookworm",
         )
 
         class _FakeProcess:
@@ -531,7 +546,7 @@ class RunRuntimeMatrixTests(unittest.TestCase):
                 db_root_dir=db_root_dir,
             )
             status = run_runtime_matrix.JobStatus(job=job)
-            job_queue: queue.Queue[run_runtime_matrix.JobStatus] = queue.Queue()
+            job_queue = queue.Queue()
             job_queue.put(status)
             statuses = [status]
             manifest_path = temp_path / "manifest.json"
@@ -568,3 +583,101 @@ class RunRuntimeMatrixTests(unittest.TestCase):
         self.assertEqual(status.status, "failed")
         self.assertEqual(status.exit_code, 1)
         self.assertFalse(db_root_dir.exists())
+
+    def test_build_command_wraps_job_in_container_when_container_cpus_enabled(
+        self,
+    ) -> None:
+        args = argparse.Namespace(
+            scale="medium",
+            iterations=1000,
+            warmup=10,
+            oltp_iterations=250,
+            oltp_warmup=5,
+            olap_iterations=50,
+            olap_warmup=2,
+            oltp_timeout_ms=750.0,
+            olap_timeout_ms=9000.0,
+            iteration_progress=True,
+            postgres_dsn=None,
+            neo4j_user="neo4j",
+            neo4j_database="neo4j",
+            neo4j_password="secret",
+            neo4j_docker_image="neo4j:5.26.24-community",
+            neo4j_docker_startup_timeout=120,
+            neo4j_keep_container=False,
+            arcadedb_jvm_args=None,
+            arcadedb_worker_startup_timeout_s=60.0,
+            container_cpus=2.0,
+            container_image="python:3.12-bookworm",
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            job = run_runtime_matrix.MatrixJob(
+                sequence=1,
+                variant=run_runtime_matrix.VARIANT_BY_NAME["arcadedb-indexed"],
+                repeat=1,
+                output_path=temp_path / "result.json",
+                log_path=temp_path / "job.log",
+                db_root_dir=temp_path / "db",
+            )
+            command, env = build_command(
+                args,
+                job=job,
+                scale_preset=run_runtime_matrix.SCALE_PRESETS["medium"],
+            )
+
+        self.assertEqual(command[:2], ["docker", "run"])
+        self.assertIn("--cpus", command)
+        self.assertIn("2.0", command)
+        self.assertIn("--network", command)
+        self.assertIn("host", command)
+        self.assertIn("python:3.12-bookworm", command)
+        self.assertIn("--env", command)
+        self.assertIn("ARCADEDB_JVM_ARGS=-Xmx16g", command)
+        self.assertIn("/bin/sh", command)
+        shell_command = command[-1]
+        self.assertIn("trap cleanup EXIT", shell_command)
+        self.assertIn(str(job.output_path), shell_command)
+        self.assertIn(str(job.db_root_dir), shell_command)
+        self.assertIn(
+            (
+                f"chown -R {run_runtime_matrix.os.getuid()}"
+                f":{run_runtime_matrix.os.getgid()}"
+            ),
+            shell_command,
+        )
+        self.assertIn("uv pip install --system --upgrade", shell_command)
+        self.assertIn(
+            "python -m scripts.benchmarks.runtime.arcadedb_embedded",
+            shell_command,
+        )
+        self.assertIn("--worker-startup-timeout-s 60.0", shell_command)
+        self.assertEqual(env["ARCADEDB_JVM_ARGS"], "-Xmx16g")
+
+    def test_validate_args_requires_docker_when_container_cpus_enabled(self) -> None:
+        args = argparse.Namespace(
+            workers=2,
+            repeats=1,
+            iterations=1000,
+            warmup=10,
+            oltp_iterations=None,
+            oltp_warmup=None,
+            olap_iterations=None,
+            olap_warmup=None,
+            oltp_timeout_ms=1000.0,
+            olap_timeout_ms=10000.0,
+            neo4j_docker_startup_timeout=120,
+            neo4j_port_scan_limit=10,
+            neo4j_password="secret",
+            postgres_dsn="postgresql://example",
+            container_cpus=2.0,
+            container_image="python:3.12-bookworm",
+            arcadedb_worker_startup_timeout_s=None,
+        )
+
+        with patch.object(run_runtime_matrix.shutil, "which", return_value=None):
+            with self.assertRaisesRegex(ValueError, "requires docker in PATH"):
+                validate_args(
+                    args,
+                    [run_runtime_matrix.VARIANT_BY_NAME["sqlite-indexed"]],
+                )

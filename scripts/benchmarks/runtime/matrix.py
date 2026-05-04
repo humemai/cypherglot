@@ -7,6 +7,7 @@ import json
 import os
 import queue
 import random
+import shlex
 import shutil
 import socket
 import statistics
@@ -30,6 +31,20 @@ DEFAULT_SESSION_ROOT = (
 DEFAULT_DB_ROOT = REPO_ROOT / "my_test_databases"
 DEFAULT_OLTP_TIMEOUT_MS = 1_000.0
 DEFAULT_OLAP_TIMEOUT_MS = 10_000.0
+DEFAULT_CONTAINER_IMAGE = "python:3.12-bookworm"
+DOCKER_SOCKET_PATH = Path("/var/run/docker.sock")
+CONTAINER_APT_PACKAGES = (
+    "docker.io",
+    "default-jre-headless",
+    "git",
+)
+CONTAINER_PYTHON_PACKAGES = (
+    "duckdb",
+    "psycopg2-binary",
+    "neo4j",
+    "arcadedb-embedded",
+    "ladybug",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -349,7 +364,7 @@ class PortReservationPool:
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Run the 10-variant runtime benchmark matrix through a shuffled "
+            "Run the 11-variant runtime benchmark matrix through a shuffled "
             "worker queue, with optional repeated runs per variant."
         )
     )
@@ -362,8 +377,16 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--oltp-warmup", type=int)
     parser.add_argument("--olap-iterations", type=int)
     parser.add_argument("--olap-warmup", type=int)
-    parser.add_argument("--oltp-timeout-ms", type=float, default=DEFAULT_OLTP_TIMEOUT_MS)
-    parser.add_argument("--olap-timeout-ms", type=float, default=DEFAULT_OLAP_TIMEOUT_MS)
+    parser.add_argument(
+        "--oltp-timeout-ms",
+        type=float,
+        default=DEFAULT_OLTP_TIMEOUT_MS,
+    )
+    parser.add_argument(
+        "--olap-timeout-ms",
+        type=float,
+        default=DEFAULT_OLAP_TIMEOUT_MS,
+    )
     parser.add_argument(
         "--variant",
         action="append",
@@ -416,6 +439,22 @@ def _parse_args() -> argparse.Namespace:
         help=(
             "Override the ArcadeDB probe worker startup timeout in seconds for "
             "ArcadeDB variants."
+        ),
+    )
+    parser.add_argument(
+        "--container-cpus",
+        type=float,
+        help=(
+            "Optional Docker CPU quota to apply to each queued job by running "
+            "that job inside its own container."
+        ),
+    )
+    parser.add_argument(
+        "--container-image",
+        default=DEFAULT_CONTAINER_IMAGE,
+        help=(
+            "Docker image to use for per-job container execution when "
+            "--container-cpus is set."
         ),
     )
     parser.add_argument("--postgres-dsn", help="Optional PostgreSQL DSN override.")
@@ -571,6 +610,97 @@ def _common_scale_args(scale: RuntimeScale) -> list[str]:
     ]
 
 
+def _containerized_jobs_enabled(args: argparse.Namespace) -> bool:
+    return getattr(args, "container_cpus", None) is not None
+
+
+def _build_container_cleanup(paths: list[Path]) -> str:
+    host_uid = os.getuid()
+    host_gid = os.getgid()
+    cleanup_lines = ["cleanup() {"]
+    for path in paths:
+        quoted = shlex.quote(str(path))
+        command = (
+            f"if [ -e {quoted} ]; then chown -R {host_uid}:{host_gid} "
+            f"{quoted} >/dev/null 2>&1 || true; fi"
+        )
+        cleanup_lines.append(f"  {command}")
+    cleanup_lines.append("}")
+    cleanup_lines.append("trap cleanup EXIT")
+    return "\n".join(cleanup_lines)
+
+
+def _build_container_bootstrap(
+    inner_command: list[str],
+    *,
+    cleanup_paths: list[Path],
+) -> str:
+    repo_path = shlex.quote(str(REPO_ROOT))
+    inner = " ".join(shlex.quote(part) for part in inner_command)
+    apt_packages = " ".join(CONTAINER_APT_PACKAGES)
+    python_packages = " ".join(
+        shlex.quote(package) for package in CONTAINER_PYTHON_PACKAGES
+    )
+    cleanup = _build_container_cleanup(cleanup_paths)
+    return (
+        f"{cleanup} && "
+        "apt-get update && "
+        f"apt-get install -y --no-install-recommends {apt_packages} && "
+        "rm -rf /var/lib/apt/lists/* && "
+        "python -m pip install --no-cache-dir --upgrade uv && "
+        "uv pip install --system --upgrade --no-cache-dir "
+        f"-e {repo_path} {python_packages} && "
+        f"status=0; {inner} || status=$?; exit $status"
+    )
+
+
+def _wrap_command_in_container(
+    args: argparse.Namespace,
+    *,
+    job: MatrixJob,
+    inner_command: list[str],
+    env: dict[str, str],
+) -> list[str]:
+    command = [
+        "docker",
+        "run",
+        "--rm",
+        "--network",
+        "host",
+        "--workdir",
+        str(REPO_ROOT),
+        "--volume",
+        f"{REPO_ROOT}:{REPO_ROOT}",
+        "--cpus",
+        str(args.container_cpus),
+    ]
+    if DOCKER_SOCKET_PATH.exists():
+        command.extend(
+            [
+                "--volume",
+                f"{DOCKER_SOCKET_PATH}:{DOCKER_SOCKET_PATH}",
+            ]
+        )
+    arcadedb_jvm_args = env.get("ARCADEDB_JVM_ARGS")
+    if arcadedb_jvm_args:
+        command.extend(["--env", f"ARCADEDB_JVM_ARGS={arcadedb_jvm_args}"])
+    command.extend(
+        [
+            args.container_image,
+            "/bin/sh",
+            "-lc",
+            _build_container_bootstrap(
+                inner_command,
+                cleanup_paths=[
+                    job.output_path,
+                    *([job.db_root_dir] if job.db_root_dir is not None else []),
+                ],
+            ),
+        ]
+    )
+    return command
+
+
 def _build_command(
     args: argparse.Namespace,
     *,
@@ -582,8 +712,9 @@ def _build_command(
     args_dict = vars(args)
     oltp_timeout_ms = args_dict.get("oltp_timeout_ms", DEFAULT_OLTP_TIMEOUT_MS)
     olap_timeout_ms = args_dict.get("olap_timeout_ms", DEFAULT_OLAP_TIMEOUT_MS)
+    inner_python = "python" if _containerized_jobs_enabled(args) else sys.executable
     command = [
-        sys.executable,
+        inner_python,
         "-m",
         job.variant.module_name,
         "--output",
@@ -657,6 +788,13 @@ def _build_command(
             args.scale,
             args.arcadedb_jvm_args,
         )
+    if _containerized_jobs_enabled(args):
+        command = _wrap_command_in_container(
+            args,
+            job=job,
+            inner_command=command,
+            env=env,
+        )
     return command, env
 
 
@@ -719,6 +857,12 @@ def _initial_manifest(
         "olap_warmup": args.olap_warmup,
         "oltp_timeout_ms": args_dict.get("oltp_timeout_ms", DEFAULT_OLTP_TIMEOUT_MS),
         "olap_timeout_ms": args_dict.get("olap_timeout_ms", DEFAULT_OLAP_TIMEOUT_MS),
+        "container_cpus": getattr(args, "container_cpus", None),
+        "container_image": getattr(
+            args,
+            "container_image",
+            DEFAULT_CONTAINER_IMAGE,
+        ),
         "shuffle": not args.no_shuffle,
         "shuffle_seed": args.shuffle_seed,
         "arcadedb_jvm_args": _resolve_arcadedb_jvm_args(
@@ -854,6 +998,15 @@ def _validate_args(args: argparse.Namespace, variants: list[VariantSpec]) -> Non
         and args.arcadedb_worker_startup_timeout_s <= 0
     ):
         raise ValueError("--arcadedb-worker-startup-timeout-s must be positive.")
+    container_cpus = getattr(args, "container_cpus", None)
+    if container_cpus is not None and container_cpus <= 0:
+        raise ValueError("--container-cpus must be positive.")
+    if container_cpus is not None and sys.platform != "linux":
+        raise ValueError("--container-cpus is currently only supported on Linux.")
+    if container_cpus is not None and shutil.which("docker") is None:
+        raise ValueError("--container-cpus requires docker in PATH.")
+    if not getattr(args, "container_image", "").strip():
+        raise ValueError("--container-image must not be empty.")
     requires_neo4j_password = any(
         variant.uses_neo4j_docker for variant in variants
     )
@@ -861,6 +1014,19 @@ def _validate_args(args: argparse.Namespace, variants: list[VariantSpec]) -> Non
         raise ValueError(
             "Neo4j variants require --neo4j-password or NEO4J_PASSWORD "
             "in the environment."
+        )
+    requires_nested_docker = requires_neo4j_password or (
+        any(variant.backend == "postgresql" for variant in variants)
+        and not getattr(args, "postgres_dsn", None)
+    )
+    if (
+        container_cpus is not None
+        and requires_nested_docker
+        and not DOCKER_SOCKET_PATH.exists()
+    ):
+        raise ValueError(
+            "--container-cpus requires /var/run/docker.sock when Neo4j or "
+            "auto-docker PostgreSQL variants are selected."
         )
 
 
@@ -1111,6 +1277,11 @@ def main() -> int:
         f"runtime matrix queue: scale={args.scale}, workers={args.workers}, "
         f"variants={len(selected_variants)}, repeats={args.repeats}, jobs={len(jobs)}"
     )
+    if _containerized_jobs_enabled(args):
+        print(
+            f"per-job containers: image={args.container_image}, "
+            f"cpus={args.container_cpus}"
+        )
     print(f"output root: {args.output_root}")
     print(f"session root: {session_dir}")
     print(
