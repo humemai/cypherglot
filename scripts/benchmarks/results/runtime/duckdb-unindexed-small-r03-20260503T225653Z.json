@@ -1,0 +1,2569 @@
+{
+  "benchmark_entrypoint": "duckdb",
+  "enabled_backends": [
+    "duckdb"
+  ],
+  "generated_at": "2026-05-03T23:26:38.982105+00:00",
+  "updated_at": "2026-05-03T23:34:11.739336+00:00",
+  "run_status": "completed",
+  "python_version": "3.12.13",
+  "platform": "Linux-6.17.9-76061709-generic-x86_64-with-glibc2.36",
+  "cypherglot_version": "0.0.1.dev27",
+  "database_versions": {
+    "duckdb": "1.5.2"
+  },
+  "corpus_path": "/mnt/ssd2/repos/cypherglot/scripts/benchmarks/corpora/sqlite_runtime_benchmark_corpus.json",
+  "workload_counts": {
+    "oltp": 14,
+    "olap": 16
+  },
+  "graph_scale": {
+    "node_type_count": 4,
+    "edge_type_count": 4,
+    "nodes_per_type": 1000,
+    "edges_per_source": 3,
+    "edge_degree_profile": "uniform",
+    "average_edges_per_source": 3.0,
+    "total_nodes": 4000,
+    "total_edges": 12000,
+    "node_extra_text_property_count": 2,
+    "node_extra_numeric_property_count": 6,
+    "node_extra_boolean_property_count": 2,
+    "edge_extra_text_property_count": 1,
+    "edge_extra_numeric_property_count": 3,
+    "edge_extra_boolean_property_count": 1,
+    "ingest_batch_size": 1000,
+    "variable_hop_max": 2
+  },
+  "schema_contract": {
+    "layout": "type-aware",
+    "node_tables": [
+      "cg_node_nodetype01",
+      "cg_node_nodetype02",
+      "cg_node_nodetype03",
+      "cg_node_nodetype04"
+    ],
+    "edge_tables": [
+      "cg_edge_edgetype01",
+      "cg_edge_edgetype02",
+      "cg_edge_edgetype03",
+      "cg_edge_edgetype04"
+    ]
+  },
+  "index_mode": "unindexed",
+  "workload_controls": {
+    "default_iterations": 1000,
+    "default_warmup": 10,
+    "oltp_iterations": 10000,
+    "oltp_warmup": 200,
+    "oltp_timeout_ms": 400.0,
+    "olap_iterations": 500,
+    "olap_warmup": 20,
+    "olap_timeout_ms": 10000.0
+  },
+  "db_root_dir": "/mnt/ssd2/repos/cypherglot/my_test_databases/runtime-small-20260503T225653Z/duckdb-unindexed/r03/benchmark-duckdb-runtime-20260503T232638Z",
+  "results": {
+    "workloads": {
+      "oltp": {
+        "description": "Transactional-style reads and mutations over the generated multi-type type-aware graph for the selected backend set.",
+        "duckdb_unindexed": {
+          "backend": "duckdb",
+          "index_mode": "unindexed",
+          "iterations": 10000,
+          "warmup": 200,
+          "query_count": 14,
+          "pass_count": 14,
+          "timeout_count": 0,
+          "fail_count": 0,
+          "setup": {
+            "connect_ms": 12.434919,
+            "schema_ms": 102.511001,
+            "ingest_ms": 170.870958,
+            "index_ms": 42.476776,
+            "analyze_ms": 0.107161
+          },
+          "row_counts": {
+            "node_count": 4000,
+            "edge_count": 12000,
+            "node_type_count": 4,
+            "edge_type_count": 4
+          },
+          "rss_snapshots_mib": {
+            "after_connect": {
+              "client_mib": 98.2734375,
+              "server_mib": null,
+              "combined_mib": 98.2734375
+            },
+            "after_schema": {
+              "client_mib": 101.546875,
+              "server_mib": null,
+              "combined_mib": 101.546875
+            },
+            "after_ingest": {
+              "client_mib": 152.26171875,
+              "server_mib": null,
+              "combined_mib": 152.26171875
+            },
+            "after_index": {
+              "client_mib": 152.328125,
+              "server_mib": null,
+              "combined_mib": 152.328125
+            },
+            "after_analyze": {
+              "client_mib": 152.328125,
+              "server_mib": null,
+              "combined_mib": 152.328125
+            },
+            "suite_start": {
+              "client_mib": 152.328125,
+              "server_mib": null,
+              "combined_mib": 152.328125
+            },
+            "suite_complete": {
+              "client_mib": 782.73828125,
+              "server_mib": null,
+              "combined_mib": 782.73828125
+            }
+          },
+          "storage": {
+            "db_size_mib": 0.01171875,
+            "wal_size_mib": 0.0
+          },
+          "db_path": "/mnt/ssd2/repos/cypherglot/my_test_databases/runtime-small-20260503T225653Z/duckdb-unindexed/r03/benchmark-duckdb-runtime-20260503T232638Z/oltp-duckdb-unindexed-suite/runtime.duckdb",
+          "compile": {
+            "mean_of_mean_ms": 1.443087319342857,
+            "mean_of_p50_ms": 1.313724357142857,
+            "mean_of_p95_ms": 2.1632115928571425,
+            "mean_of_p99_ms": 2.865772885000001
+          },
+          "execute": {
+            "mean_of_mean_ms": 0.8717515230928571,
+            "mean_of_p50_ms": 0.7634843214285715,
+            "mean_of_p95_ms": 1.5005199714285713,
+            "mean_of_p99_ms": 2.126548028571429
+          },
+          "end_to_end": {
+            "mean_of_mean_ms": 2.3148388424357145,
+            "mean_of_p50_ms": 2.1000948214285713,
+            "mean_of_p95_ms": 3.5731585285714282,
+            "mean_of_p99_ms": 4.576629941428573
+          },
+          "reset": {
+            "mean_of_mean_ms": 0.08691021470714286,
+            "mean_of_p50_ms": 0.07727817857142857,
+            "mean_of_p95_ms": 0.14219667857142843,
+            "mean_of_p99_ms": 0.23072242214285724
+          },
+          "queries": [
+            {
+              "name": "oltp_type1_point_lookup",
+              "workload": "oltp",
+              "category": "read-point",
+              "backend": "duckdb",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "compile": {
+                "min_ms": 1.084364,
+                "mean_ms": 1.4106871036,
+                "p50_ms": 1.2902,
+                "p95_ms": 2.1320144499999993,
+                "p99_ms": 2.824679900000002,
+                "max_ms": 4.234166
+              },
+              "execute": {
+                "min_ms": 0.194291,
+                "mean_ms": 0.3340759769,
+                "p50_ms": 0.269707,
+                "p95_ms": 0.6655139999999996,
+                "p99_ms": 1.059958500000001,
+                "max_ms": 3.879855
+              },
+              "end_to_end": {
+                "min_ms": 1.292266,
+                "mean_ms": 1.7447630804999998,
+                "p50_ms": 1.5866905,
+                "p95_ms": 2.7381505499999985,
+                "p99_ms": 3.7184906100000004,
+                "max_ms": 7.025447
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              },
+              "rss_stages_mib": {
+                "before_compile": {
+                  "client_mean_mib": 416.3883234375,
+                  "client_peak_mib": 705.8828125,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 416.3883234375,
+                  "combined_peak_mib": 705.8828125
+                },
+                "after_compile": {
+                  "client_mean_mib": 416.44163671875,
+                  "client_peak_mib": 705.9375,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 416.44163671875,
+                  "combined_peak_mib": 705.9375
+                },
+                "after_execute": {
+                  "client_mean_mib": 416.445452734375,
+                  "client_peak_mib": 705.9453125,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 416.445452734375,
+                  "combined_peak_mib": 705.9453125
+                },
+                "after_reset": {
+                  "client_mean_mib": 416.44566015625,
+                  "client_peak_mib": 705.9453125,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 416.44566015625,
+                  "combined_peak_mib": 705.9453125
+                }
+              }
+            },
+            {
+              "name": "oltp_type1_neighbors",
+              "workload": "oltp",
+              "category": "read-adjacency",
+              "backend": "duckdb",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "compile": {
+                "min_ms": 1.098795,
+                "mean_ms": 1.9090514483,
+                "p50_ms": 1.737722,
+                "p95_ms": 3.198779,
+                "p99_ms": 3.777653400000001,
+                "max_ms": 6.116653
+              },
+              "execute": {
+                "min_ms": 0.561272,
+                "mean_ms": 1.3953887009000001,
+                "p50_ms": 1.2073295,
+                "p95_ms": 2.637643,
+                "p99_ms": 3.234932390000001,
+                "max_ms": 5.416321
+              },
+              "end_to_end": {
+                "min_ms": 1.701937,
+                "mean_ms": 3.3044401492,
+                "p50_ms": 3.025177,
+                "p95_ms": 5.632609,
+                "p99_ms": 6.6030151900000025,
+                "max_ms": 9.473947
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              },
+              "rss_stages_mib": {
+                "before_compile": {
+                  "client_mean_mib": 576.50718359375,
+                  "client_peak_mib": 925.3125,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 576.50718359375,
+                  "combined_peak_mib": 925.3125
+                },
+                "after_compile": {
+                  "client_mean_mib": 576.554532421875,
+                  "client_peak_mib": 925.390625,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 576.554532421875,
+                  "combined_peak_mib": 925.390625
+                },
+                "after_execute": {
+                  "client_mean_mib": 576.55748671875,
+                  "client_peak_mib": 925.390625,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 576.55748671875,
+                  "combined_peak_mib": 925.390625
+                },
+                "after_reset": {
+                  "client_mean_mib": 576.55761875,
+                  "client_peak_mib": 925.390625,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 576.55761875,
+                  "combined_peak_mib": 925.390625
+                }
+              }
+            },
+            {
+              "name": "oltp_cross_type_lookup",
+              "workload": "oltp",
+              "category": "read-join",
+              "backend": "duckdb",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "compile": {
+                "min_ms": 1.338885,
+                "mean_ms": 1.5696299584,
+                "p50_ms": 1.513566,
+                "p95_ms": 1.9066799499999998,
+                "p99_ms": 2.3124303,
+                "max_ms": 4.850869
+              },
+              "execute": {
+                "min_ms": 0.695823,
+                "mean_ms": 0.915933284,
+                "p50_ms": 0.873143,
+                "p95_ms": 1.16377,
+                "p99_ms": 1.5058122000000012,
+                "max_ms": 4.745518
+              },
+              "end_to_end": {
+                "min_ms": 2.068118,
+                "mean_ms": 2.4855632424,
+                "p50_ms": 2.3899595,
+                "p95_ms": 3.022626,
+                "p99_ms": 3.675079600000001,
+                "max_ms": 8.578884
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              },
+              "rss_stages_mib": {
+                "before_compile": {
+                  "client_mean_mib": 653.85509375,
+                  "client_peak_mib": 1051.31640625,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 653.85509375,
+                  "combined_peak_mib": 1051.31640625
+                },
+                "after_compile": {
+                  "client_mean_mib": 653.910940625,
+                  "client_peak_mib": 1051.3984375,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 653.910940625,
+                  "combined_peak_mib": 1051.3984375
+                },
+                "after_execute": {
+                  "client_mean_mib": 653.911621484375,
+                  "client_peak_mib": 1051.40625,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 653.911621484375,
+                  "combined_peak_mib": 1051.40625
+                },
+                "after_reset": {
+                  "client_mean_mib": 653.911642578125,
+                  "client_peak_mib": 1051.40625,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 653.911642578125,
+                  "combined_peak_mib": 1051.40625
+                }
+              }
+            },
+            {
+              "name": "oltp_optional_type1_lookup",
+              "workload": "oltp",
+              "category": "read-optional",
+              "backend": "duckdb",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "compile": {
+                "min_ms": 1.027214,
+                "mean_ms": 1.2824111862,
+                "p50_ms": 1.148489,
+                "p95_ms": 1.944888999999999,
+                "p99_ms": 2.7023295000000007,
+                "max_ms": 6.109584
+              },
+              "execute": {
+                "min_ms": 0.353332,
+                "mean_ms": 0.588029828,
+                "p50_ms": 0.486792,
+                "p95_ms": 1.1682325499999995,
+                "p99_ms": 1.7903406000000002,
+                "max_ms": 4.548368
+              },
+              "end_to_end": {
+                "min_ms": 1.395156,
+                "mean_ms": 1.8704410142,
+                "p50_ms": 1.6405515,
+                "p95_ms": 3.0259375,
+                "p99_ms": 3.9184244900000005,
+                "max_ms": 7.51456
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              },
+              "rss_stages_mib": {
+                "before_compile": {
+                  "client_mean_mib": 529.98399765625,
+                  "client_peak_mib": 800.28515625,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 529.98399765625,
+                  "combined_peak_mib": 800.28515625
+                },
+                "after_compile": {
+                  "client_mean_mib": 530.020194921875,
+                  "client_peak_mib": 800.34375,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 530.020194921875,
+                  "combined_peak_mib": 800.34375
+                },
+                "after_execute": {
+                  "client_mean_mib": 530.02094453125,
+                  "client_peak_mib": 800.34765625,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 530.02094453125,
+                  "combined_peak_mib": 800.34765625
+                },
+                "after_reset": {
+                  "client_mean_mib": 530.021001171875,
+                  "client_peak_mib": 800.34765625,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 530.021001171875,
+                  "combined_peak_mib": 800.34765625
+                }
+              }
+            },
+            {
+              "name": "oltp_optional_missing_type1_lookup",
+              "workload": "oltp",
+              "category": "read-optional-null",
+              "backend": "duckdb",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "compile": {
+                "min_ms": 0.997423,
+                "mean_ms": 1.3569193272,
+                "p50_ms": 1.2016745,
+                "p95_ms": 2.154115449999999,
+                "p99_ms": 3.0035984000000004,
+                "max_ms": 5.586712
+              },
+              "execute": {
+                "min_ms": 0.332891,
+                "mean_ms": 0.6410585187,
+                "p50_ms": 0.524892,
+                "p95_ms": 1.3283484999999995,
+                "p99_ms": 1.8169816100000002,
+                "max_ms": 3.709284
+              },
+              "end_to_end": {
+                "min_ms": 1.350634,
+                "mean_ms": 1.9979778459000002,
+                "p50_ms": 1.7755065,
+                "p95_ms": 3.247727999999998,
+                "p99_ms": 4.151802110000002,
+                "max_ms": 6.470956
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              },
+              "rss_stages_mib": {
+                "before_compile": {
+                  "client_mean_mib": 539.2828,
+                  "client_peak_mib": 799.43359375,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 539.2828,
+                  "combined_peak_mib": 799.43359375
+                },
+                "after_compile": {
+                  "client_mean_mib": 539.316801171875,
+                  "client_peak_mib": 799.48828125,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 539.316801171875,
+                  "combined_peak_mib": 799.48828125
+                },
+                "after_execute": {
+                  "client_mean_mib": 539.317945703125,
+                  "client_peak_mib": 799.4921875,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 539.317945703125,
+                  "combined_peak_mib": 799.4921875
+                },
+                "after_reset": {
+                  "client_mean_mib": 539.3180125,
+                  "client_peak_mib": 799.4921875,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 539.3180125,
+                  "combined_peak_mib": 799.4921875
+                }
+              }
+            },
+            {
+              "name": "oltp_unwind_literal_top2",
+              "workload": "oltp",
+              "category": "unwind",
+              "backend": "duckdb",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "compile": {
+                "min_ms": 0.944523,
+                "mean_ms": 1.1864224735000002,
+                "p50_ms": 1.0764035,
+                "p95_ms": 1.7436744999999993,
+                "p99_ms": 2.4820484900000004,
+                "max_ms": 5.504229
+              },
+              "execute": {
+                "min_ms": 0.227871,
+                "mean_ms": 0.417613855,
+                "p50_ms": 0.3380815,
+                "p95_ms": 0.8476769999999993,
+                "p99_ms": 1.2520489100000005,
+                "max_ms": 5.476169
+              },
+              "end_to_end": {
+                "min_ms": 1.187764,
+                "mean_ms": 1.6040363285,
+                "p50_ms": 1.4410455,
+                "p95_ms": 2.448433999999999,
+                "p99_ms": 3.2932188100000013,
+                "max_ms": 8.538461
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              },
+              "rss_stages_mib": {
+                "before_compile": {
+                  "client_mean_mib": 515.750527734375,
+                  "client_peak_mib": 811.1796875,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 515.750527734375,
+                  "combined_peak_mib": 811.1796875
+                },
+                "after_compile": {
+                  "client_mean_mib": 515.794554296875,
+                  "client_peak_mib": 811.25,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 515.794554296875,
+                  "combined_peak_mib": 811.25
+                },
+                "after_execute": {
+                  "client_mean_mib": 515.79571796875,
+                  "client_peak_mib": 811.25,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 515.79571796875,
+                  "combined_peak_mib": 811.25
+                },
+                "after_reset": {
+                  "client_mean_mib": 515.795774609375,
+                  "client_peak_mib": 811.25,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 515.795774609375,
+                  "combined_peak_mib": 811.25
+                }
+              }
+            },
+            {
+              "name": "oltp_update_type1_score",
+              "workload": "oltp",
+              "category": "update-node",
+              "backend": "duckdb",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": true,
+              "status": "passed",
+              "compile": {
+                "min_ms": 0.788733,
+                "mean_ms": 1.1987246853,
+                "p50_ms": 1.0178785,
+                "p95_ms": 2.2164895,
+                "p99_ms": 2.8934245000000014,
+                "max_ms": 6.473563
+              },
+              "execute": {
+                "min_ms": 0.285631,
+                "mean_ms": 0.599312422,
+                "p50_ms": 0.475162,
+                "p95_ms": 1.25570555,
+                "p99_ms": 1.8963172000000004,
+                "max_ms": 4.843767
+              },
+              "end_to_end": {
+                "min_ms": 1.094974,
+                "mean_ms": 1.7980371073,
+                "p50_ms": 1.540526,
+                "p95_ms": 3.3014394999999994,
+                "p99_ms": 4.460951580000002,
+                "max_ms": 10.054906
+              },
+              "reset": {
+                "min_ms": 0.07412,
+                "mean_ms": 0.14364869270000002,
+                "p50_ms": 0.12022,
+                "p95_ms": 0.27552549999999976,
+                "p99_ms": 0.4285466900000001,
+                "max_ms": 2.030777
+              },
+              "rss_stages_mib": {
+                "before_compile": {
+                  "client_mean_mib": 481.774476953125,
+                  "client_peak_mib": 611.78515625,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 481.774476953125,
+                  "combined_peak_mib": 611.78515625
+                },
+                "after_compile": {
+                  "client_mean_mib": 481.78869375,
+                  "client_peak_mib": 611.8203125,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 481.78869375,
+                  "combined_peak_mib": 611.8203125
+                },
+                "after_execute": {
+                  "client_mean_mib": 481.78903828125,
+                  "client_peak_mib": 611.82421875,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 481.78903828125,
+                  "combined_peak_mib": 611.82421875
+                },
+                "after_reset": {
+                  "client_mean_mib": 481.78862421875,
+                  "client_peak_mib": 611.82421875,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 481.78862421875,
+                  "combined_peak_mib": 611.82421875
+                }
+              }
+            },
+            {
+              "name": "oltp_create_type1_node",
+              "workload": "oltp",
+              "category": "create-node",
+              "backend": "duckdb",
+              "index_mode": "unindexed",
+              "mode": "program",
+              "mutation": true,
+              "status": "passed",
+              "compile": {
+                "min_ms": 0.772343,
+                "mean_ms": 1.0048267766,
+                "p50_ms": 0.880068,
+                "p95_ms": 1.72356995,
+                "p99_ms": 2.513130700000002,
+                "max_ms": 3.535892
+              },
+              "execute": {
+                "min_ms": 0.389342,
+                "mean_ms": 0.6359220359000001,
+                "p50_ms": 0.532042,
+                "p95_ms": 1.3452984499999998,
+                "p99_ms": 2.0358683000000006,
+                "max_ms": 4.044984
+              },
+              "end_to_end": {
+                "min_ms": 1.171204,
+                "mean_ms": 1.6407488125,
+                "p50_ms": 1.4167705,
+                "p95_ms": 3.0577014999999994,
+                "p99_ms": 4.349311790000001,
+                "max_ms": 6.317673
+              },
+              "reset": {
+                "min_ms": 0.09951,
+                "mean_ms": 0.1701760667,
+                "p50_ms": 0.146486,
+                "p95_ms": 0.2851804999999994,
+                "p99_ms": 0.5724791000000002,
+                "max_ms": 1.587615
+              },
+              "rss_stages_mib": {
+                "before_compile": {
+                  "client_mean_mib": 496.672398046875,
+                  "client_peak_mib": 620.6484375,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 496.672398046875,
+                  "combined_peak_mib": 620.6484375
+                },
+                "after_compile": {
+                  "client_mean_mib": 496.68564296875,
+                  "client_peak_mib": 620.69140625,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 496.68564296875,
+                  "combined_peak_mib": 620.69140625
+                },
+                "after_execute": {
+                  "client_mean_mib": 496.686344921875,
+                  "client_peak_mib": 620.69921875,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 496.686344921875,
+                  "combined_peak_mib": 620.69921875
+                },
+                "after_reset": {
+                  "client_mean_mib": 496.686340234375,
+                  "client_peak_mib": 620.69921875,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 496.686340234375,
+                  "combined_peak_mib": 620.69921875
+                }
+              }
+            },
+            {
+              "name": "oltp_create_cross_type_edge",
+              "workload": "oltp",
+              "category": "create-edge",
+              "backend": "duckdb",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": true,
+              "status": "passed",
+              "compile": {
+                "min_ms": 1.507046,
+                "mean_ms": 2.1904984378999997,
+                "p50_ms": 1.8561115,
+                "p95_ms": 3.7898675,
+                "p99_ms": 4.822656600000005,
+                "max_ms": 9.614594
+              },
+              "execute": {
+                "min_ms": 0.649822,
+                "mean_ms": 1.3454797752,
+                "p50_ms": 0.999749,
+                "p95_ms": 2.87792055,
+                "p99_ms": 3.977880200000001,
+                "max_ms": 8.741331
+              },
+              "end_to_end": {
+                "min_ms": 2.187988,
+                "mean_ms": 3.5359782131,
+                "p50_ms": 2.8998005,
+                "p95_ms": 6.380122449999999,
+                "p99_ms": 8.028079590000003,
+                "max_ms": 14.948083
+              },
+              "reset": {
+                "min_ms": 0.09885,
+                "mean_ms": 0.2033393228,
+                "p50_ms": 0.160231,
+                "p95_ms": 0.4433054999999995,
+                "p99_ms": 0.8041307000000002,
+                "max_ms": 2.671849
+              },
+              "rss_stages_mib": {
+                "before_compile": {
+                  "client_mean_mib": 709.11629765625,
+                  "client_peak_mib": 1154.75390625,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 709.11629765625,
+                  "combined_peak_mib": 1154.75390625
+                },
+                "after_compile": {
+                  "client_mean_mib": 709.179873828125,
+                  "client_peak_mib": 1154.84765625,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 709.179873828125,
+                  "combined_peak_mib": 1154.84765625
+                },
+                "after_execute": {
+                  "client_mean_mib": 709.18326171875,
+                  "client_peak_mib": 1154.8515625,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 709.18326171875,
+                  "combined_peak_mib": 1154.8515625
+                },
+                "after_reset": {
+                  "client_mean_mib": 709.18331171875,
+                  "client_peak_mib": 1154.8515625,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 709.18331171875,
+                  "combined_peak_mib": 1154.8515625
+                }
+              }
+            },
+            {
+              "name": "oltp_merge_cross_type_edge",
+              "workload": "oltp",
+              "category": "merge-edge",
+              "backend": "duckdb",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": true,
+              "status": "passed",
+              "compile": {
+                "min_ms": 1.828356,
+                "mean_ms": 2.3021862513999998,
+                "p50_ms": 2.059122,
+                "p95_ms": 3.620213499999999,
+                "p99_ms": 5.550895500000001,
+                "max_ms": 8.52181
+              },
+              "execute": {
+                "min_ms": 1.027074,
+                "mean_ms": 1.6405109654999999,
+                "p50_ms": 1.409385,
+                "p95_ms": 3.1369225,
+                "p99_ms": 5.108701700000001,
+                "max_ms": 8.277049
+              },
+              "end_to_end": {
+                "min_ms": 2.881611,
+                "mean_ms": 3.9426972169,
+                "p50_ms": 3.485142,
+                "p95_ms": 6.811713999999999,
+                "p99_ms": 9.031470410000008,
+                "max_ms": 14.560761
+              },
+              "reset": {
+                "min_ms": 0.095411,
+                "mean_ms": 0.1662094885,
+                "p50_ms": 0.141765,
+                "p95_ms": 0.2821794999999996,
+                "p99_ms": 0.5422696000000004,
+                "max_ms": 1.624525
+              },
+              "rss_stages_mib": {
+                "before_compile": {
+                  "client_mean_mib": 942.8269390625,
+                  "client_peak_mib": 1663.85546875,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 942.8269390625,
+                  "combined_peak_mib": 1663.85546875
+                },
+                "after_compile": {
+                  "client_mean_mib": 942.946365625,
+                  "client_peak_mib": 1664.00390625,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 942.946365625,
+                  "combined_peak_mib": 1664.00390625
+                },
+                "after_execute": {
+                  "client_mean_mib": 942.948537109375,
+                  "client_peak_mib": 1664.0078125,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 942.948537109375,
+                  "combined_peak_mib": 1664.0078125
+                },
+                "after_reset": {
+                  "client_mean_mib": 942.948362109375,
+                  "client_peak_mib": 1664.0078125,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 942.948362109375,
+                  "combined_peak_mib": 1664.0078125
+                }
+              }
+            },
+            {
+              "name": "oltp_delete_type1_edge",
+              "workload": "oltp",
+              "category": "delete-edge",
+              "backend": "duckdb",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": true,
+              "status": "passed",
+              "compile": {
+                "min_ms": 0.817263,
+                "mean_ms": 0.9019623928,
+                "p50_ms": 0.861768,
+                "p95_ms": 1.1377774999999994,
+                "p99_ms": 1.4334732000000001,
+                "max_ms": 3.188571
+              },
+              "execute": {
+                "min_ms": 0.773273,
+                "mean_ms": 1.0568581536000001,
+                "p50_ms": 1.028959,
+                "p95_ms": 1.31264,
+                "p99_ms": 1.6026909900000004,
+                "max_ms": 3.744313
+              },
+              "end_to_end": {
+                "min_ms": 1.599546,
+                "mean_ms": 1.9588205464000001,
+                "p50_ms": 1.8949815,
+                "p95_ms": 2.4224085,
+                "p99_ms": 2.9066235000000002,
+                "max_ms": 6.434602
+              },
+              "reset": {
+                "min_ms": 0.078241,
+                "mean_ms": 0.1087103916,
+                "p50_ms": 0.1044705,
+                "p95_ms": 0.14018005,
+                "p99_ms": 0.1690546100000001,
+                "max_ms": 1.019814
+              },
+              "rss_stages_mib": {
+                "before_compile": {
+                  "client_mean_mib": 733.793940625,
+                  "client_peak_mib": 821.41015625,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 733.793940625,
+                  "combined_peak_mib": 821.41015625
+                },
+                "after_compile": {
+                  "client_mean_mib": 733.79823203125,
+                  "client_peak_mib": 821.46484375,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 733.79823203125,
+                  "combined_peak_mib": 821.46484375
+                },
+                "after_execute": {
+                  "client_mean_mib": 733.798351171875,
+                  "client_peak_mib": 821.46875,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 733.798351171875,
+                  "combined_peak_mib": 821.46875
+                },
+                "after_reset": {
+                  "client_mean_mib": 733.79788125,
+                  "client_peak_mib": 821.46875,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 733.79788125,
+                  "combined_peak_mib": 821.46875
+                }
+              }
+            },
+            {
+              "name": "oltp_delete_type1_node",
+              "workload": "oltp",
+              "category": "delete-node",
+              "backend": "duckdb",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": true,
+              "status": "passed",
+              "compile": {
+                "min_ms": 0.556222,
+                "mean_ms": 0.6101679338,
+                "p50_ms": 0.589297,
+                "p95_ms": 0.7253659999999997,
+                "p99_ms": 1.0258142000000001,
+                "max_ms": 2.043107
+              },
+              "execute": {
+                "min_ms": 0.253441,
+                "mean_ms": 0.3217647103,
+                "p50_ms": 0.310481,
+                "p95_ms": 0.3980594999999999,
+                "p99_ms": 0.5152423100000001,
+                "max_ms": 3.903894
+              },
+              "end_to_end": {
+                "min_ms": 0.819622,
+                "mean_ms": 0.9319326441,
+                "p50_ms": 0.901003,
+                "p95_ms": 1.1253004499999997,
+                "p99_ms": 1.49473519,
+                "max_ms": 4.526027
+              },
+              "reset": {
+                "min_ms": 0.08132,
+                "mean_ms": 0.11200509269999999,
+                "p50_ms": 0.1089305,
+                "p95_ms": 0.1404005,
+                "p99_ms": 0.17075341000000005,
+                "max_ms": 1.699576
+              },
+              "rss_stages_mib": {
+                "before_compile": {
+                  "client_mean_mib": 684.9402734375,
+                  "client_peak_mib": 718.66015625,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 684.9402734375,
+                  "combined_peak_mib": 718.66015625
+                },
+                "after_compile": {
+                  "client_mean_mib": 684.940193359375,
+                  "client_peak_mib": 718.66015625,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 684.940193359375,
+                  "combined_peak_mib": 718.66015625
+                },
+                "after_execute": {
+                  "client_mean_mib": 684.940098046875,
+                  "client_peak_mib": 717.66015625,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 684.940098046875,
+                  "combined_peak_mib": 717.66015625
+                },
+                "after_reset": {
+                  "client_mean_mib": 684.9397984375,
+                  "client_peak_mib": 717.66015625,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 684.9397984375,
+                  "combined_peak_mib": 717.66015625
+                }
+              }
+            },
+            {
+              "name": "oltp_program_create_and_link",
+              "workload": "oltp",
+              "category": "create-program",
+              "backend": "duckdb",
+              "index_mode": "unindexed",
+              "mode": "program",
+              "mutation": true,
+              "status": "passed",
+              "compile": {
+                "min_ms": 1.837446,
+                "mean_ms": 2.0823777345,
+                "p50_ms": 2.024532,
+                "p95_ms": 2.4542889999999997,
+                "p99_ms": 2.901297400000002,
+                "max_ms": 6.843094
+              },
+              "execute": {
+                "min_ms": 0.991243,
+                "mean_ms": 1.3066175305999999,
+                "p50_ms": 1.264189,
+                "p95_ms": 1.5900715499999998,
+                "p99_ms": 2.1315360900000013,
+                "max_ms": 5.65628
+              },
+              "end_to_end": {
+                "min_ms": 2.876791,
+                "mean_ms": 3.3889952651,
+                "p50_ms": 3.296006,
+                "p95_ms": 4.00941645,
+                "p99_ms": 4.8470894200000005,
+                "max_ms": 9.204863
+              },
+              "reset": {
+                "min_ms": 0.10998,
+                "mean_ms": 0.1945596787,
+                "p50_ms": 0.184276,
+                "p95_ms": 0.27704499999999993,
+                "p99_ms": 0.3439571000000001,
+                "max_ms": 1.692286
+              },
+              "rss_stages_mib": {
+                "before_compile": {
+                  "client_mean_mib": 856.34463671875,
+                  "client_peak_mib": 1388.53515625,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 856.34463671875,
+                  "combined_peak_mib": 1388.53515625
+                },
+                "after_compile": {
+                  "client_mean_mib": 856.412615234375,
+                  "client_peak_mib": 1388.640625,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 856.412615234375,
+                  "combined_peak_mib": 1388.640625
+                },
+                "after_execute": {
+                  "client_mean_mib": 856.418902734375,
+                  "client_peak_mib": 1388.80078125,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 856.418902734375,
+                  "combined_peak_mib": 1388.80078125
+                },
+                "after_reset": {
+                  "client_mean_mib": 856.41908671875,
+                  "client_peak_mib": 1388.80078125,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 856.41908671875,
+                  "combined_peak_mib": 1388.80078125
+                }
+              }
+            },
+            {
+              "name": "oltp_update_cross_type_edge_rank",
+              "workload": "oltp",
+              "category": "update-edge",
+              "backend": "duckdb",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": true,
+              "status": "passed",
+              "compile": {
+                "min_ms": 1.006073,
+                "mean_ms": 1.1973567612999998,
+                "p50_ms": 1.135309,
+                "p95_ms": 1.537237,
+                "p99_ms": 1.8773883,
+                "max_ms": 5.138548
+              },
+              "execute": {
+                "min_ms": 0.692633,
+                "mean_ms": 1.0059555667,
+                "p50_ms": 0.9688685,
+                "p95_ms": 1.27947645,
+                "p99_ms": 1.8433614,
+                "max_ms": 6.464302
+              },
+              "end_to_end": {
+                "min_ms": 1.729977,
+                "mean_ms": 2.2033123280000004,
+                "p50_ms": 2.1081675,
+                "p95_ms": 2.8006314999999997,
+                "p99_ms": 3.5945268900000005,
+                "max_ms": 9.814924
+              },
+              "reset": {
+                "min_ms": 0.077591,
+                "mean_ms": 0.1180942722,
+                "p50_ms": 0.1155155,
+                "p95_ms": 0.14693694999999993,
+                "p99_ms": 0.19892270000000004,
+                "max_ms": 1.869287
+              },
+              "rss_stages_mib": {
+                "before_compile": {
+                  "client_mean_mib": 725.274628515625,
+                  "client_peak_mib": 922.35546875,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 725.274628515625,
+                  "combined_peak_mib": 922.35546875
+                },
+                "after_compile": {
+                  "client_mean_mib": 725.296740625,
+                  "client_peak_mib": 922.41796875,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 725.296740625,
+                  "combined_peak_mib": 922.41796875
+                },
+                "after_execute": {
+                  "client_mean_mib": 725.297502734375,
+                  "client_peak_mib": 922.41796875,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 725.297502734375,
+                  "combined_peak_mib": 922.41796875
+                },
+                "after_reset": {
+                  "client_mean_mib": 725.297369140625,
+                  "client_peak_mib": 922.41796875,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 725.297369140625,
+                  "combined_peak_mib": 922.41796875
+                }
+              }
+            }
+          ]
+        }
+      },
+      "olap": {
+        "description": "Analytical read queries measured against the generated graph for the selected SQL runtime backends.",
+        "duckdb_unindexed": {
+          "backend": "duckdb",
+          "index_mode": "unindexed",
+          "iterations": 500,
+          "warmup": 20,
+          "query_count": 16,
+          "pass_count": 16,
+          "timeout_count": 0,
+          "fail_count": 0,
+          "setup": {
+            "connect_ms": 8.994141,
+            "schema_ms": 91.186242,
+            "ingest_ms": 162.603644,
+            "index_ms": 42.547921,
+            "analyze_ms": 0.11174
+          },
+          "row_counts": {
+            "node_count": 4000,
+            "edge_count": 12000,
+            "node_type_count": 4,
+            "edge_type_count": 4
+          },
+          "rss_snapshots_mib": {
+            "after_connect": {
+              "client_mib": 761.53125,
+              "server_mib": null,
+              "combined_mib": 761.53125
+            },
+            "after_schema": {
+              "client_mib": 759.80078125,
+              "server_mib": null,
+              "combined_mib": 759.80078125
+            },
+            "after_ingest": {
+              "client_mib": 789.91015625,
+              "server_mib": null,
+              "combined_mib": 789.91015625
+            },
+            "after_index": {
+              "client_mib": 789.91015625,
+              "server_mib": null,
+              "combined_mib": 789.91015625
+            },
+            "after_analyze": {
+              "client_mib": 789.91015625,
+              "server_mib": null,
+              "combined_mib": 789.91015625
+            },
+            "suite_start": {
+              "client_mib": 789.91015625,
+              "server_mib": null,
+              "combined_mib": 789.91015625
+            },
+            "suite_complete": {
+              "client_mib": 505.0625,
+              "server_mib": null,
+              "combined_mib": 505.0625
+            }
+          },
+          "storage": {
+            "db_size_mib": 0.01171875,
+            "wal_size_mib": 0.0
+          },
+          "db_path": "/mnt/ssd2/repos/cypherglot/my_test_databases/runtime-small-20260503T225653Z/duckdb-unindexed/r03/benchmark-duckdb-runtime-20260503T232638Z/olap-duckdb-unindexed-suite/runtime.duckdb",
+          "compile": {
+            "mean_of_mean_ms": 1.893694142375,
+            "mean_of_p50_ms": 1.853138,
+            "mean_of_p95_ms": 2.2211121343749998,
+            "mean_of_p99_ms": 2.5472175587499994
+          },
+          "execute": {
+            "mean_of_mean_ms": 1.1881590097499999,
+            "mean_of_p50_ms": 1.1609099375,
+            "mean_of_p95_ms": 1.4815987874999998,
+            "mean_of_p99_ms": 1.7537931268749996
+          },
+          "end_to_end": {
+            "mean_of_mean_ms": 3.081853152125,
+            "mean_of_p50_ms": 3.0185804375,
+            "mean_of_p95_ms": 3.6678992468749994,
+            "mean_of_p99_ms": 4.179893122499999
+          },
+          "reset": {
+            "mean_of_mean_ms": 0.0,
+            "mean_of_p50_ms": 0.0,
+            "mean_of_p95_ms": 0.0,
+            "mean_of_p99_ms": 0.0
+          },
+          "queries": [
+            {
+              "name": "olap_type1_active_leaderboard",
+              "workload": "olap",
+              "category": "scan-order",
+              "backend": "duckdb",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "compile": {
+                "min_ms": 1.263435,
+                "mean_ms": 1.4026571540000001,
+                "p50_ms": 1.3406245,
+                "p95_ms": 1.762258,
+                "p99_ms": 1.9646676999999997,
+                "max_ms": 2.365258
+              },
+              "execute": {
+                "min_ms": 0.554462,
+                "mean_ms": 0.7598477680000001,
+                "p50_ms": 0.737302,
+                "p95_ms": 0.9396129499999994,
+                "p99_ms": 1.2618671099999994,
+                "max_ms": 3.174411
+              },
+              "end_to_end": {
+                "min_ms": 1.848007,
+                "mean_ms": 2.1625049219999997,
+                "p50_ms": 2.083872,
+                "p95_ms": 2.674248949999999,
+                "p99_ms": 3.2692580999999996,
+                "max_ms": 4.921147
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              },
+              "rss_stages_mib": {
+                "before_compile": {
+                  "client_mean_mib": 747.7492890625,
+                  "client_peak_mib": 780.5859375,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 747.7492890625,
+                  "combined_peak_mib": 780.5859375
+                },
+                "after_compile": {
+                  "client_mean_mib": 747.7135546875,
+                  "client_peak_mib": 780.5859375,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 747.7135546875,
+                  "combined_peak_mib": 780.5859375
+                },
+                "after_execute": {
+                  "client_mean_mib": 747.7031953125,
+                  "client_peak_mib": 780.5859375,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 747.7031953125,
+                  "combined_peak_mib": 780.5859375
+                },
+                "after_reset": {
+                  "client_mean_mib": 747.701203125,
+                  "client_peak_mib": 780.5859375,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 747.701203125,
+                  "combined_peak_mib": 780.5859375
+                }
+              }
+            },
+            {
+              "name": "olap_type1_age_rollup",
+              "workload": "olap",
+              "category": "aggregation",
+              "backend": "duckdb",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "compile": {
+                "min_ms": 1.373315,
+                "mean_ms": 1.4988388240000001,
+                "p50_ms": 1.4716,
+                "p95_ms": 1.6476534999999994,
+                "p99_ms": 2.0608725999999997,
+                "max_ms": 3.493082
+              },
+              "execute": {
+                "min_ms": 0.414392,
+                "mean_ms": 0.5353589919999999,
+                "p50_ms": 0.521117,
+                "p95_ms": 0.6487239999999997,
+                "p99_ms": 0.7777189999999999,
+                "max_ms": 1.054624
+              },
+              "end_to_end": {
+                "min_ms": 1.822777,
+                "mean_ms": 2.0341978160000003,
+                "p50_ms": 1.993842,
+                "p95_ms": 2.325417999999999,
+                "p99_ms": 2.7727697099999995,
+                "max_ms": 4.547706
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              },
+              "rss_stages_mib": {
+                "before_compile": {
+                  "client_mean_mib": 712.4171953125,
+                  "client_peak_mib": 729.75390625,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 712.4171953125,
+                  "combined_peak_mib": 729.75390625
+                },
+                "after_compile": {
+                  "client_mean_mib": 712.3951953125,
+                  "client_peak_mib": 729.75390625,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 712.3951953125,
+                  "combined_peak_mib": 729.75390625
+                },
+                "after_execute": {
+                  "client_mean_mib": 712.3856015625,
+                  "client_peak_mib": 729.75390625,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 712.3856015625,
+                  "combined_peak_mib": 729.75390625
+                },
+                "after_reset": {
+                  "client_mean_mib": 712.3816015625,
+                  "client_peak_mib": 729.75390625,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 712.3816015625,
+                  "combined_peak_mib": 729.75390625
+                }
+              }
+            },
+            {
+              "name": "olap_optional_type1_aggregate",
+              "workload": "olap",
+              "category": "optional-aggregation",
+              "backend": "duckdb",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "compile": {
+                "min_ms": 1.220944,
+                "mean_ms": 1.412061244,
+                "p50_ms": 1.373594,
+                "p95_ms": 1.6585179999999997,
+                "p99_ms": 1.8951158999999995,
+                "max_ms": 2.372109
+              },
+              "execute": {
+                "min_ms": 0.529372,
+                "mean_ms": 0.690511302,
+                "p50_ms": 0.671507,
+                "p95_ms": 0.8525919999999998,
+                "p99_ms": 1.0136996999999999,
+                "max_ms": 2.237498
+              },
+              "end_to_end": {
+                "min_ms": 1.758796,
+                "mean_ms": 2.102572546,
+                "p50_ms": 2.0446575,
+                "p95_ms": 2.4847020499999997,
+                "p99_ms": 2.7730416999999985,
+                "max_ms": 4.609607
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              },
+              "rss_stages_mib": {
+                "before_compile": {
+                  "client_mean_mib": 685.1519375,
+                  "client_peak_mib": 697.21484375,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 685.1519375,
+                  "combined_peak_mib": 697.21484375
+                },
+                "after_compile": {
+                  "client_mean_mib": 685.1299375,
+                  "client_peak_mib": 697.21484375,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 685.1299375,
+                  "combined_peak_mib": 697.21484375
+                },
+                "after_execute": {
+                  "client_mean_mib": 685.126921875,
+                  "client_peak_mib": 697.21875,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 685.126921875,
+                  "combined_peak_mib": 697.21875
+                },
+                "after_reset": {
+                  "client_mean_mib": 685.126921875,
+                  "client_peak_mib": 697.21875,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 685.126921875,
+                  "combined_peak_mib": 697.21875
+                }
+              }
+            },
+            {
+              "name": "olap_cross_type_edge_rollup",
+              "workload": "olap",
+              "category": "join-aggregation",
+              "backend": "duckdb",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "compile": {
+                "min_ms": 1.383785,
+                "mean_ms": 1.6903523999999999,
+                "p50_ms": 1.623986,
+                "p95_ms": 2.1696304999999994,
+                "p99_ms": 2.5171341,
+                "max_ms": 3.556493
+              },
+              "execute": {
+                "min_ms": 0.693072,
+                "mean_ms": 1.053771236,
+                "p50_ms": 1.022578,
+                "p95_ms": 1.4165199999999998,
+                "p99_ms": 1.5857904999999997,
+                "max_ms": 2.89871
+              },
+              "end_to_end": {
+                "min_ms": 2.076857,
+                "mean_ms": 2.744123636,
+                "p50_ms": 2.65143,
+                "p95_ms": 3.4986569,
+                "p99_ms": 3.9867498999999986,
+                "max_ms": 4.972728
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              },
+              "rss_stages_mib": {
+                "before_compile": {
+                  "client_mean_mib": 678.864234375,
+                  "client_peak_mib": 681.94921875,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 678.864234375,
+                  "combined_peak_mib": 681.94921875
+                },
+                "after_compile": {
+                  "client_mean_mib": 678.85825,
+                  "client_peak_mib": 681.94921875,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 678.85825,
+                  "combined_peak_mib": 681.94921875
+                },
+                "after_execute": {
+                  "client_mean_mib": 678.86125,
+                  "client_peak_mib": 681.94921875,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 678.86125,
+                  "combined_peak_mib": 681.94921875
+                },
+                "after_reset": {
+                  "client_mean_mib": 678.86125,
+                  "client_peak_mib": 681.94921875,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 678.86125,
+                  "combined_peak_mib": 681.94921875
+                }
+              }
+            },
+            {
+              "name": "olap_variable_length_reachability",
+              "workload": "olap",
+              "category": "variable-length",
+              "backend": "duckdb",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "compile": {
+                "min_ms": 1.815036,
+                "mean_ms": 2.259547124,
+                "p50_ms": 2.230628,
+                "p95_ms": 2.7017954999999994,
+                "p99_ms": 2.951676209999999,
+                "max_ms": 3.743833
+              },
+              "execute": {
+                "min_ms": 1.271484,
+                "mean_ms": 1.7548503340000001,
+                "p50_ms": 1.703211,
+                "p95_ms": 2.2864574999999996,
+                "p99_ms": 2.6044528,
+                "max_ms": 3.348092
+              },
+              "end_to_end": {
+                "min_ms": 3.131991,
+                "mean_ms": 4.014397458,
+                "p50_ms": 3.9492435,
+                "p95_ms": 4.9358466,
+                "p99_ms": 5.488415099999998,
+                "max_ms": 6.224212
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              },
+              "rss_stages_mib": {
+                "before_compile": {
+                  "client_mean_mib": 477.9835546875,
+                  "client_peak_mib": 482.1875,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 477.9835546875,
+                  "combined_peak_mib": 482.1875
+                },
+                "after_compile": {
+                  "client_mean_mib": 477.9775546875,
+                  "client_peak_mib": 482.1875,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 477.9775546875,
+                  "combined_peak_mib": 482.1875
+                },
+                "after_execute": {
+                  "client_mean_mib": 477.974953125,
+                  "client_peak_mib": 482.1875,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 477.974953125,
+                  "combined_peak_mib": 482.1875
+                },
+                "after_reset": {
+                  "client_mean_mib": 477.974953125,
+                  "client_peak_mib": 482.1875,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 477.974953125,
+                  "combined_peak_mib": 482.1875
+                }
+              }
+            },
+            {
+              "name": "olap_three_type_path_count",
+              "workload": "olap",
+              "category": "multi-hop",
+              "backend": "duckdb",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "compile": {
+                "min_ms": 1.002374,
+                "mean_ms": 1.16678365,
+                "p50_ms": 1.133549,
+                "p95_ms": 1.4325624999999986,
+                "p99_ms": 1.6672222999999993,
+                "max_ms": 2.238088
+              },
+              "execute": {
+                "min_ms": 0.908873,
+                "mean_ms": 1.271356838,
+                "p50_ms": 1.2692595,
+                "p95_ms": 1.56837455,
+                "p99_ms": 1.6929272,
+                "max_ms": 1.845617
+              },
+              "end_to_end": {
+                "min_ms": 1.920096,
+                "mean_ms": 2.4381404879999997,
+                "p50_ms": 2.4063785,
+                "p95_ms": 2.97899895,
+                "p99_ms": 3.2775929999999995,
+                "max_ms": 3.718983
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              },
+              "rss_stages_mib": {
+                "before_compile": {
+                  "client_mean_mib": 475.5682734375,
+                  "client_peak_mib": 479.12890625,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 475.5682734375,
+                  "combined_peak_mib": 479.12890625
+                },
+                "after_compile": {
+                  "client_mean_mib": 475.5662734375,
+                  "client_peak_mib": 479.12890625,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 475.5662734375,
+                  "combined_peak_mib": 479.12890625
+                },
+                "after_execute": {
+                  "client_mean_mib": 475.582078125,
+                  "client_peak_mib": 479.13671875,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 475.582078125,
+                  "combined_peak_mib": 479.13671875
+                },
+                "after_reset": {
+                  "client_mean_mib": 475.582078125,
+                  "client_peak_mib": 479.13671875,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 475.582078125,
+                  "combined_peak_mib": 479.13671875
+                }
+              }
+            },
+            {
+              "name": "olap_type2_score_distribution",
+              "workload": "olap",
+              "category": "group-order",
+              "backend": "duckdb",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "compile": {
+                "min_ms": 1.469205,
+                "mean_ms": 1.6181974080000001,
+                "p50_ms": 1.579306,
+                "p95_ms": 1.839534,
+                "p99_ms": 2.1797071999999997,
+                "max_ms": 2.79042
+              },
+              "execute": {
+                "min_ms": 0.449882,
+                "mean_ms": 0.5925484799999999,
+                "p50_ms": 0.575577,
+                "p95_ms": 0.73786555,
+                "p99_ms": 0.8697172099999992,
+                "max_ms": 1.388485
+              },
+              "end_to_end": {
+                "min_ms": 1.925107,
+                "mean_ms": 2.210745888,
+                "p50_ms": 2.1619875,
+                "p95_ms": 2.58094345,
+                "p99_ms": 2.96102331,
+                "max_ms": 3.740744
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              },
+              "rss_stages_mib": {
+                "before_compile": {
+                  "client_mean_mib": 477.4618125,
+                  "client_peak_mib": 479.31640625,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 477.4618125,
+                  "combined_peak_mib": 479.31640625
+                },
+                "after_compile": {
+                  "client_mean_mib": 477.4598125,
+                  "client_peak_mib": 479.31640625,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 477.4598125,
+                  "combined_peak_mib": 479.31640625
+                },
+                "after_execute": {
+                  "client_mean_mib": 477.4579921875,
+                  "client_peak_mib": 479.31640625,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 477.4579921875,
+                  "combined_peak_mib": 479.31640625
+                },
+                "after_reset": {
+                  "client_mean_mib": 477.4579921875,
+                  "client_peak_mib": 479.31640625,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 477.4579921875,
+                  "combined_peak_mib": 479.31640625
+                }
+              }
+            },
+            {
+              "name": "olap_fixed_length_path_projection",
+              "workload": "olap",
+              "category": "multi-hop-projection",
+              "backend": "duckdb",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "compile": {
+                "min_ms": 1.745506,
+                "mean_ms": 2.081024912,
+                "p50_ms": 2.021692,
+                "p95_ms": 2.5004770499999993,
+                "p99_ms": 2.9712585,
+                "max_ms": 3.138281
+              },
+              "execute": {
+                "min_ms": 1.501976,
+                "mean_ms": 2.078082784,
+                "p50_ms": 2.0360675,
+                "p95_ms": 2.62646355,
+                "p99_ms": 2.9535535999999993,
+                "max_ms": 3.901193
+              },
+              "end_to_end": {
+                "min_ms": 3.306002,
+                "mean_ms": 4.159107696,
+                "p50_ms": 4.0403795,
+                "p95_ms": 5.141517499999998,
+                "p99_ms": 5.676914399999999,
+                "max_ms": 6.121492
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              },
+              "rss_stages_mib": {
+                "before_compile": {
+                  "client_mean_mib": 495.48290625,
+                  "client_peak_mib": 503.08984375,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 495.48290625,
+                  "combined_peak_mib": 503.08984375
+                },
+                "after_compile": {
+                  "client_mean_mib": 495.48290625,
+                  "client_peak_mib": 503.08984375,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 495.48290625,
+                  "combined_peak_mib": 503.08984375
+                },
+                "after_execute": {
+                  "client_mean_mib": 495.5261328125,
+                  "client_peak_mib": 503.08984375,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 495.5261328125,
+                  "combined_peak_mib": 503.08984375
+                },
+                "after_reset": {
+                  "client_mean_mib": 495.5261328125,
+                  "client_peak_mib": 503.08984375,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 495.5261328125,
+                  "combined_peak_mib": 503.08984375
+                }
+              }
+            },
+            {
+              "name": "olap_fixed_length_path_with_rebinding",
+              "workload": "olap",
+              "category": "multi-hop-with",
+              "backend": "duckdb",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "compile": {
+                "min_ms": 2.092538,
+                "mean_ms": 2.5293157940000004,
+                "p50_ms": 2.487433,
+                "p95_ms": 2.983868,
+                "p99_ms": 3.633705499999999,
+                "max_ms": 4.017474
+              },
+              "execute": {
+                "min_ms": 1.593076,
+                "mean_ms": 2.175435204,
+                "p50_ms": 2.131223,
+                "p95_ms": 2.725801,
+                "p99_ms": 3.0609630999999986,
+                "max_ms": 3.678603
+              },
+              "end_to_end": {
+                "min_ms": 3.770493,
+                "mean_ms": 4.704750998,
+                "p50_ms": 4.6087615,
+                "p95_ms": 5.6290755,
+                "p99_ms": 6.245518489999999,
+                "max_ms": 7.507036
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              },
+              "rss_stages_mib": {
+                "before_compile": {
+                  "client_mean_mib": 499.265890625,
+                  "client_peak_mib": 500.28125,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 499.265890625,
+                  "combined_peak_mib": 500.28125
+                },
+                "after_compile": {
+                  "client_mean_mib": 499.265890625,
+                  "client_peak_mib": 500.28125,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 499.265890625,
+                  "combined_peak_mib": 500.28125
+                },
+                "after_execute": {
+                  "client_mean_mib": 499.2701640625,
+                  "client_peak_mib": 500.28125,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 499.2701640625,
+                  "combined_peak_mib": 500.28125
+                },
+                "after_reset": {
+                  "client_mean_mib": 499.2701640625,
+                  "client_peak_mib": 500.28125,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 499.2701640625,
+                  "combined_peak_mib": 500.28125
+                }
+              }
+            },
+            {
+              "name": "olap_graph_introspection_rollup",
+              "workload": "olap",
+              "category": "introspection",
+              "backend": "duckdb",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "compile": {
+                "min_ms": 1.748706,
+                "mean_ms": 1.9711596,
+                "p50_ms": 1.9047965,
+                "p95_ms": 2.3513910499999997,
+                "p99_ms": 2.53309741,
+                "max_ms": 3.390662
+              },
+              "execute": {
+                "min_ms": 0.662782,
+                "mean_ms": 0.980112264,
+                "p50_ms": 0.953738,
+                "p95_ms": 1.2647699999999995,
+                "p99_ms": 1.5729529,
+                "max_ms": 1.896897
+              },
+              "end_to_end": {
+                "min_ms": 2.463419,
+                "mean_ms": 2.951271864,
+                "p50_ms": 2.872195,
+                "p95_ms": 3.57369595,
+                "p99_ms": 4.069811799999999,
+                "max_ms": 4.716637
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              },
+              "rss_stages_mib": {
+                "before_compile": {
+                  "client_mean_mib": 500.9299296875,
+                  "client_peak_mib": 501.3046875,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 500.9299296875,
+                  "combined_peak_mib": 501.3046875
+                },
+                "after_compile": {
+                  "client_mean_mib": 500.9299296875,
+                  "client_peak_mib": 501.3046875,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 500.9299296875,
+                  "combined_peak_mib": 501.3046875
+                },
+                "after_execute": {
+                  "client_mean_mib": 500.93171875,
+                  "client_peak_mib": 501.3046875,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 500.93171875,
+                  "combined_peak_mib": 501.3046875
+                },
+                "after_reset": {
+                  "client_mean_mib": 500.93171875,
+                  "client_peak_mib": 501.3046875,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 500.93171875,
+                  "combined_peak_mib": 501.3046875
+                }
+              }
+            },
+            {
+              "name": "olap_with_scalar_rebinding",
+              "workload": "olap",
+              "category": "with-aggregation",
+              "backend": "duckdb",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "compile": {
+                "min_ms": 1.817126,
+                "mean_ms": 1.9587973619999999,
+                "p50_ms": 1.9082815,
+                "p95_ms": 2.2899289999999994,
+                "p99_ms": 2.7310656099999995,
+                "max_ms": 3.357192
+              },
+              "execute": {
+                "min_ms": 0.473512,
+                "mean_ms": 0.6214792560000001,
+                "p50_ms": 0.599882,
+                "p95_ms": 0.74471495,
+                "p99_ms": 1.074334399999999,
+                "max_ms": 1.754886
+              },
+              "end_to_end": {
+                "min_ms": 2.344039,
+                "mean_ms": 2.5802766179999996,
+                "p50_ms": 2.511474,
+                "p95_ms": 2.998851049999999,
+                "p99_ms": 3.6883580999999994,
+                "max_ms": 4.960078
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              },
+              "rss_stages_mib": {
+                "before_compile": {
+                  "client_mean_mib": 501.430078125,
+                  "client_peak_mib": 501.43359375,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 501.430078125,
+                  "combined_peak_mib": 501.43359375
+                },
+                "after_compile": {
+                  "client_mean_mib": 501.430078125,
+                  "client_peak_mib": 501.43359375,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 501.430078125,
+                  "combined_peak_mib": 501.43359375
+                },
+                "after_execute": {
+                  "client_mean_mib": 501.430109375,
+                  "client_peak_mib": 501.43359375,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 501.430109375,
+                  "combined_peak_mib": 501.43359375
+                },
+                "after_reset": {
+                  "client_mean_mib": 501.430109375,
+                  "client_peak_mib": 501.43359375,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 501.430109375,
+                  "combined_peak_mib": 501.43359375
+                }
+              }
+            },
+            {
+              "name": "olap_with_where_lower_projection",
+              "workload": "olap",
+              "category": "with-filter",
+              "backend": "duckdb",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "compile": {
+                "min_ms": 1.601655,
+                "mean_ms": 1.6954198,
+                "p50_ms": 1.668406,
+                "p95_ms": 1.8451429999999998,
+                "p99_ms": 2.1306587999999995,
+                "max_ms": 2.415959
+              },
+              "execute": {
+                "min_ms": 0.401181,
+                "mean_ms": 0.500328484,
+                "p50_ms": 0.4874265,
+                "p95_ms": 0.5885094999999999,
+                "p99_ms": 0.7459886999999997,
+                "max_ms": 1.148343
+              },
+              "end_to_end": {
+                "min_ms": 2.034846,
+                "mean_ms": 2.195748284,
+                "p50_ms": 2.1582025,
+                "p95_ms": 2.4198385,
+                "p99_ms": 2.84353111,
+                "max_ms": 3.330522
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              },
+              "rss_stages_mib": {
+                "before_compile": {
+                  "client_mean_mib": 500.62109375,
+                  "client_peak_mib": 500.62109375,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 500.62109375,
+                  "combined_peak_mib": 500.62109375
+                },
+                "after_compile": {
+                  "client_mean_mib": 500.62109375,
+                  "client_peak_mib": 500.62109375,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 500.62109375,
+                  "combined_peak_mib": 500.62109375
+                },
+                "after_execute": {
+                  "client_mean_mib": 500.62109375,
+                  "client_peak_mib": 500.62109375,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 500.62109375,
+                  "combined_peak_mib": 500.62109375
+                },
+                "after_reset": {
+                  "client_mean_mib": 500.62109375,
+                  "client_peak_mib": 500.62109375,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 500.62109375,
+                  "combined_peak_mib": 500.62109375
+                }
+              }
+            },
+            {
+              "name": "olap_with_size_predicate_projection",
+              "workload": "olap",
+              "category": "with-predicate",
+              "backend": "duckdb",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "compile": {
+                "min_ms": 1.738316,
+                "mean_ms": 1.921237678,
+                "p50_ms": 1.830382,
+                "p95_ms": 2.3771295,
+                "p99_ms": 2.7071037099999975,
+                "max_ms": 4.595236
+              },
+              "execute": {
+                "min_ms": 0.395841,
+                "mean_ms": 0.55946407,
+                "p50_ms": 0.5103565,
+                "p95_ms": 0.826543,
+                "p99_ms": 1.0053477099999997,
+                "max_ms": 2.407519
+              },
+              "end_to_end": {
+                "min_ms": 2.172038,
+                "mean_ms": 2.480701748,
+                "p50_ms": 2.339584,
+                "p95_ms": 3.1327125,
+                "p99_ms": 3.6392023199999977,
+                "max_ms": 6.751495
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              },
+              "rss_stages_mib": {
+                "before_compile": {
+                  "client_mean_mib": 500.80859375,
+                  "client_peak_mib": 500.80859375,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 500.80859375,
+                  "combined_peak_mib": 500.80859375
+                },
+                "after_compile": {
+                  "client_mean_mib": 500.80859375,
+                  "client_peak_mib": 500.80859375,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 500.80859375,
+                  "combined_peak_mib": 500.80859375
+                },
+                "after_execute": {
+                  "client_mean_mib": 500.80859375,
+                  "client_peak_mib": 500.80859375,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 500.80859375,
+                  "combined_peak_mib": 500.80859375
+                },
+                "after_reset": {
+                  "client_mean_mib": 500.80859375,
+                  "client_peak_mib": 500.80859375,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 500.80859375,
+                  "combined_peak_mib": 500.80859375
+                }
+              }
+            },
+            {
+              "name": "olap_relationship_function_projection",
+              "workload": "olap",
+              "category": "join-functions",
+              "backend": "duckdb",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "compile": {
+                "min_ms": 1.850597,
+                "mean_ms": 2.121199342,
+                "p50_ms": 2.098842,
+                "p95_ms": 2.31507155,
+                "p99_ms": 2.5045053999999998,
+                "max_ms": 3.010221
+              },
+              "execute": {
+                "min_ms": 0.992203,
+                "mean_ms": 1.224568978,
+                "p50_ms": 1.204289,
+                "p95_ms": 1.4384305,
+                "p99_ms": 1.7513865999999993,
+                "max_ms": 2.392959
+              },
+              "end_to_end": {
+                "min_ms": 2.970681,
+                "mean_ms": 3.34576832,
+                "p50_ms": 3.3043865,
+                "p95_ms": 3.7405690499999986,
+                "p99_ms": 4.1752744,
+                "max_ms": 4.442175
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              },
+              "rss_stages_mib": {
+                "before_compile": {
+                  "client_mean_mib": 501.593171875,
+                  "client_peak_mib": 501.95703125,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 501.593171875,
+                  "combined_peak_mib": 501.95703125
+                },
+                "after_compile": {
+                  "client_mean_mib": 501.593171875,
+                  "client_peak_mib": 501.95703125,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 501.593171875,
+                  "combined_peak_mib": 501.95703125
+                },
+                "after_execute": {
+                  "client_mean_mib": 501.5952734375,
+                  "client_peak_mib": 501.95703125,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 501.5952734375,
+                  "combined_peak_mib": 501.95703125
+                },
+                "after_reset": {
+                  "client_mean_mib": 501.5952734375,
+                  "client_peak_mib": 501.95703125,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 501.5952734375,
+                  "combined_peak_mib": 501.95703125
+                }
+              }
+            },
+            {
+              "name": "olap_variable_length_grouped_rollup",
+              "workload": "olap",
+              "category": "variable-length-grouped",
+              "backend": "duckdb",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "compile": {
+                "min_ms": 1.954397,
+                "mean_ms": 2.3824767519999996,
+                "p50_ms": 2.377078,
+                "p95_ms": 2.67469505,
+                "p99_ms": 3.043688499999999,
+                "max_ms": 6.420233
+              },
+              "execute": {
+                "min_ms": 1.553535,
+                "mean_ms": 2.1036218,
+                "p50_ms": 2.084877,
+                "p95_ms": 2.4687255,
+                "p99_ms": 3.128477599999999,
+                "max_ms": 5.602829
+              },
+              "end_to_end": {
+                "min_ms": 3.545272,
+                "mean_ms": 4.4860985520000005,
+                "p50_ms": 4.472616,
+                "p95_ms": 5.069503549999997,
+                "p99_ms": 5.874616309999998,
+                "max_ms": 10.142766
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              },
+              "rss_stages_mib": {
+                "before_compile": {
+                  "client_mean_mib": 504.035953125,
+                  "client_peak_mib": 505.05859375,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 504.035953125,
+                  "combined_peak_mib": 505.05859375
+                },
+                "after_compile": {
+                  "client_mean_mib": 504.035953125,
+                  "client_peak_mib": 505.05859375,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 504.035953125,
+                  "combined_peak_mib": 505.05859375
+                },
+                "after_execute": {
+                  "client_mean_mib": 504.040484375,
+                  "client_peak_mib": 505.05859375,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 504.040484375,
+                  "combined_peak_mib": 505.05859375
+                },
+                "after_reset": {
+                  "client_mean_mib": 504.040484375,
+                  "client_peak_mib": 505.05859375,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 504.040484375,
+                  "combined_peak_mib": 505.05859375
+                }
+              }
+            },
+            {
+              "name": "olap_variable_length_grouped_max_rollup",
+              "workload": "olap",
+              "category": "variable-length-grouped-max",
+              "backend": "duckdb",
+              "index_mode": "unindexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "compile": {
+                "min_ms": 2.097028,
+                "mean_ms": 2.590037234,
+                "p50_ms": 2.6000095,
+                "p95_ms": 2.9881379499999996,
+                "p99_ms": 3.264001499999999,
+                "max_ms": 3.889224
+              },
+              "execute": {
+                "min_ms": 1.544135,
+                "mean_ms": 2.109206366,
+                "p50_ms": 2.066148,
+                "p95_ms": 2.57147605,
+                "p99_ms": 2.9615118999999996,
+                "max_ms": 3.227751
+              },
+              "end_to_end": {
+                "min_ms": 3.641163,
+                "mean_ms": 4.6992436,
+                "p50_ms": 4.698277,
+                "p95_ms": 5.5018094500000005,
+                "p99_ms": 6.136212209999999,
+                "max_ms": 6.559614
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              },
+              "rss_stages_mib": {
+                "before_compile": {
+                  "client_mean_mib": 505.05928125,
+                  "client_peak_mib": 505.0625,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 505.05928125,
+                  "combined_peak_mib": 505.0625
+                },
+                "after_compile": {
+                  "client_mean_mib": 505.05928125,
+                  "client_peak_mib": 505.0625,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 505.05928125,
+                  "combined_peak_mib": 505.0625
+                },
+                "after_execute": {
+                  "client_mean_mib": 505.0592890625,
+                  "client_peak_mib": 505.0625,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 505.0592890625,
+                  "combined_peak_mib": 505.0625
+                },
+                "after_reset": {
+                  "client_mean_mib": 505.0592890625,
+                  "client_peak_mib": 505.0625,
+                  "server_mean_mib": null,
+                  "server_peak_mib": null,
+                  "combined_mean_mib": 505.0592890625,
+                  "combined_peak_mib": 505.0625
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "token_map": {
+      "variable_hop_max": "2",
+      "grouped_rollup_variable_hop_max": "2",
+      "created_type_1_name": "nodetype01-created-node",
+      "created_type_1_peer_name": "nodetype01-created-peer",
+      "created_type_2_name": "nodetype02-created-node",
+      "node_type_1": "NodeType01",
+      "node_type_1_name_1": "nodetype01-000001",
+      "node_type_1_name_2": "nodetype01-000002",
+      "node_type_1_name_3": "nodetype01-000003",
+      "node_type_1_name_4": "nodetype01-000004",
+      "node_type_2": "NodeType02",
+      "node_type_2_name_1": "nodetype02-000001",
+      "node_type_2_name_2": "nodetype02-000002",
+      "node_type_2_name_3": "nodetype02-000003",
+      "node_type_2_name_4": "nodetype02-000004",
+      "node_type_3": "NodeType03",
+      "node_type_3_name_1": "nodetype03-000001",
+      "node_type_3_name_2": "nodetype03-000002",
+      "node_type_3_name_3": "nodetype03-000003",
+      "node_type_3_name_4": "nodetype03-000004",
+      "node_type_4": "NodeType04",
+      "node_type_4_name_1": "nodetype04-000001",
+      "node_type_4_name_2": "nodetype04-000002",
+      "node_type_4_name_3": "nodetype04-000003",
+      "node_type_4_name_4": "nodetype04-000004",
+      "edge_type_1": "EdgeType01",
+      "edge_type_2": "EdgeType02",
+      "edge_type_3": "EdgeType03",
+      "edge_type_4": "EdgeType04"
+    }
+  },
+  "completed_at": "2026-05-03T23:34:11.739328+00:00"
+}

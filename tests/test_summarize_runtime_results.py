@@ -430,7 +430,7 @@ class SummarizeRuntimeResultsTests(unittest.TestCase):
         self.assertIn("| SQLite Indexed (2) | `100.00 MiB +- 0.00` |", markdown)
         self.assertIn("#### Small runtime suite comparison", markdown)
         self.assertIn("Read these tables with a couple of caveats:", markdown)
-        self.assertIn("| `oltp/sqlite_indexed` | `3.00 ms +- 0.00` |", markdown)
+        self.assertIn("| `oltp/sqlite_indexed` | `3.00 ms +- 2.83` |", markdown)
 
     def test_render_summary_includes_query_tables_when_requested(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

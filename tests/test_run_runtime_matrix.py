@@ -213,7 +213,7 @@ class RunRuntimeMatrixTests(unittest.TestCase):
         )
         self.assertEqual(
             resolve_arcadedb_jvm_args("large", None),
-            "-Xmx32g",
+            "-xmx64g",
         )
         self.assertEqual(
             resolve_arcadedb_jvm_args("medium", "-Xmx12g"),

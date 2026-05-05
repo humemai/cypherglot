@@ -453,40 +453,60 @@ def _query_worker_startup_lists(
     return metrics
 
 
+def _suite_end_to_end_values(
+    *,
+    workload_name: str,
+    suite: dict[str, Any],
+) -> dict[str, float]:
+    query_percentiles: dict[str, list[float]] = {
+        "p50_ms": [],
+        "p95_ms": [],
+        "p99_ms": [],
+    }
+    for query in suite.get("queries", []):
+        query_name = query.get("name")
+        if not isinstance(query_name, str) or not query_name:
+            continue
+        if (
+            workload_name == "oltp"
+            and query_name in EXCLUDED_OLTP_QUERY_NAMES
+        ):
+            continue
+        end_to_end = query.get("end_to_end")
+        if not isinstance(end_to_end, dict):
+            continue
+        for percentile_key in query_percentiles:
+            value = end_to_end.get(percentile_key)
+            if value is not None:
+                query_percentiles[percentile_key].append(float(value))
+
+    if any(query_percentiles.values()):
+        return {
+            percentile_key: statistics.mean(values)
+            for percentile_key, values in query_percentiles.items()
+            if values
+        }
+
+    return {
+        "p50_ms": float(suite["end_to_end"]["mean_of_p50_ms"]),
+        "p95_ms": float(suite["end_to_end"]["mean_of_p95_ms"]),
+        "p99_ms": float(suite["end_to_end"]["mean_of_p99_ms"]),
+    }
+
+
 def _suite_end_to_end_metric_lists(
     *,
     workload_name: str,
     suites: list[dict[str, Any]],
 ) -> dict[str, list[float]]:
-    if workload_name != "oltp":
-        return {
-            "p50_ms": [suite["end_to_end"]["mean_of_p50_ms"] for suite in suites],
-            "p95_ms": [suite["end_to_end"]["mean_of_p95_ms"] for suite in suites],
-            "p99_ms": [suite["end_to_end"]["mean_of_p99_ms"] for suite in suites],
-        }
-
-    query_metrics = _query_metric_lists(workload_name=workload_name, suites=suites)
-
-    def values_for(percentile_key: str) -> list[float]:
-        values: list[float] = []
-        for query_name in sorted(query_metrics):
-            metrics = query_metrics[query_name].get(percentile_key, [])
-            if metrics:
-                values.append(statistics.mean(metrics))
-        return values
-
-    filtered = {
-        "p50_ms": values_for("p50_ms"),
-        "p95_ms": values_for("p95_ms"),
-        "p99_ms": values_for("p99_ms"),
-    }
-    if any(filtered.values()):
-        return filtered
-
+    suite_values = [
+        _suite_end_to_end_values(workload_name=workload_name, suite=suite)
+        for suite in suites
+    ]
     return {
-        "p50_ms": [suite["end_to_end"]["mean_of_p50_ms"] for suite in suites],
-        "p95_ms": [suite["end_to_end"]["mean_of_p95_ms"] for suite in suites],
-        "p99_ms": [suite["end_to_end"]["mean_of_p99_ms"] for suite in suites],
+        "p50_ms": [suite_value["p50_ms"] for suite_value in suite_values],
+        "p95_ms": [suite_value["p95_ms"] for suite_value in suite_values],
+        "p99_ms": [suite_value["p99_ms"] for suite_value in suite_values],
     }
 
 

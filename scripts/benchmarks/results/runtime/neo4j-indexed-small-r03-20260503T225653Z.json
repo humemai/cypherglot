@@ -1,0 +1,1291 @@
+{
+  "generated_at": "2026-05-03T22:58:05.688122+00:00",
+  "updated_at": "2026-05-03T23:00:19.557236+00:00",
+  "run_status": "completed",
+  "python_version": "3.12.13",
+  "platform": "Linux-6.17.9-76061709-generic-x86_64-with-glibc2.36",
+  "cypherglot_version": "0.0.1.dev27",
+  "database_versions": {
+    "neo4j": "5.26.24"
+  },
+  "neo4j": {
+    "uri": "bolt://127.0.0.1:8788",
+    "database": "neo4j",
+    "user": "neo4j",
+    "docker": {
+      "image": "neo4j:5.26.24-community",
+      "container_name": "cypherglot-neo4j-indexed-20260503T225653Z-r03",
+      "bolt_port": 8788,
+      "http_port": 8575,
+      "keep_container": false
+    }
+  },
+  "corpus_path": "/mnt/ssd2/repos/cypherglot/scripts/benchmarks/corpora/sqlite_runtime_benchmark_corpus.json",
+  "workload_counts": {
+    "oltp": 14,
+    "olap": 16
+  },
+  "graph_scale": {
+    "node_type_count": 4,
+    "edge_type_count": 4,
+    "nodes_per_type": 1000,
+    "edges_per_source": 3,
+    "edge_degree_profile": "uniform",
+    "average_edges_per_source": 3.0,
+    "total_nodes": 4000,
+    "total_edges": 12000,
+    "node_extra_text_property_count": 2,
+    "node_extra_numeric_property_count": 6,
+    "node_extra_boolean_property_count": 2,
+    "edge_extra_text_property_count": 1,
+    "edge_extra_numeric_property_count": 3,
+    "edge_extra_boolean_property_count": 1,
+    "ingest_batch_size": 1000,
+    "variable_hop_max": 2
+  },
+  "schema_contract": {
+    "layout": "property-graph",
+    "node_labels": [
+      "NodeType01",
+      "NodeType02",
+      "NodeType03",
+      "NodeType04"
+    ],
+    "relationship_types": [
+      "EdgeType01",
+      "EdgeType02",
+      "EdgeType03",
+      "EdgeType04"
+    ]
+  },
+  "index_mode": "indexed",
+  "workload_controls": {
+    "default_iterations": 1000,
+    "default_warmup": 10,
+    "oltp_iterations": 10000,
+    "oltp_warmup": 200,
+    "oltp_timeout_ms": 400.0,
+    "olap_iterations": 500,
+    "olap_warmup": 20,
+    "olap_timeout_ms": 10000.0
+  },
+  "setup": {
+    "connect_ms": 71.113075,
+    "connect_rss_mib": {
+      "client_mib": 90.7265625,
+      "server_mib": 581.1,
+      "combined_mib": 671.8265625
+    }
+  },
+  "results": {
+    "workloads": {
+      "oltp": {
+        "description": "Transactional-style Neo4j execution over the generated graph using the runtime corpus directly as Cypher.",
+        "neo4j_indexed": {
+          "backend": "neo4j",
+          "index_mode": "indexed",
+          "iterations": 10000,
+          "warmup": 200,
+          "query_count": 14,
+          "pass_count": 14,
+          "timeout_count": 0,
+          "fail_count": 0,
+          "setup": {
+            "reset_ms": 228.64071,
+            "seed_constraints_ms": 353.571746,
+            "ingest_ms": 2263.445852,
+            "index_ms": 704.66398
+          },
+          "row_counts": {
+            "node_count": 4000,
+            "edge_count": 12000,
+            "node_type_count": 4,
+            "edge_type_count": 4
+          },
+          "rss_snapshots_mib": {
+            "after_reset": {
+              "client_mib": 90.73828125,
+              "server_mib": 624.5,
+              "combined_mib": 715.23828125
+            },
+            "after_seed_constraints": {
+              "client_mib": 90.73828125,
+              "server_mib": 637.4,
+              "combined_mib": 728.13828125
+            },
+            "after_ingest": {
+              "client_mib": 91.92578125,
+              "server_mib": 1669.12,
+              "combined_mib": 1761.04578125
+            },
+            "after_index": {
+              "client_mib": 91.92578125,
+              "server_mib": 807.5,
+              "combined_mib": 899.42578125
+            },
+            "suite_start": {
+              "client_mib": 91.92578125,
+              "server_mib": 807.3,
+              "combined_mib": 899.22578125
+            },
+            "suite_complete": {
+              "client_mib": 225.8671875,
+              "server_mib": 1005.0,
+              "combined_mib": 1230.8671875
+            }
+          },
+          "execute": {
+            "mean_of_mean_ms": 0.24576383815,
+            "mean_of_p50_ms": 0.2354974642857143,
+            "mean_of_p95_ms": 0.32379924285714273,
+            "mean_of_p99_ms": 0.4369434535714288
+          },
+          "end_to_end": {
+            "mean_of_mean_ms": 0.24576383815,
+            "mean_of_p50_ms": 0.2354974642857143,
+            "mean_of_p95_ms": 0.32379924285714273,
+            "mean_of_p99_ms": 0.4369434535714288
+          },
+          "reset": {
+            "mean_of_mean_ms": 0.04934154942142858,
+            "mean_of_p50_ms": 0.04704460714285714,
+            "mean_of_p95_ms": 0.06514296071428569,
+            "mean_of_p99_ms": 0.08798561500000004
+          },
+          "queries": [
+            {
+              "name": "oltp_type1_point_lookup",
+              "workload": "oltp",
+              "category": "read-point",
+              "backend": "neo4j",
+              "index_mode": "indexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.163691,
+                "mean_ms": 0.30459626360000003,
+                "p50_ms": 0.281921,
+                "p95_ms": 0.49007599999999935,
+                "p99_ms": 0.7444662000000005,
+                "max_ms": 3.664816
+              },
+              "end_to_end": {
+                "min_ms": 0.163691,
+                "mean_ms": 0.30459626360000003,
+                "p50_ms": 0.281921,
+                "p95_ms": 0.49007599999999935,
+                "p99_ms": 0.7444662000000005,
+                "max_ms": 3.664816
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "oltp_type1_neighbors",
+              "workload": "oltp",
+              "category": "read-adjacency",
+              "backend": "neo4j",
+              "index_mode": "indexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.189281,
+                "mean_ms": 0.28004831890000004,
+                "p50_ms": 0.268136,
+                "p95_ms": 0.36180404999999993,
+                "p99_ms": 0.4865031,
+                "max_ms": 3.737087
+              },
+              "end_to_end": {
+                "min_ms": 0.189281,
+                "mean_ms": 0.28004831890000004,
+                "p50_ms": 0.268136,
+                "p95_ms": 0.36180404999999993,
+                "p99_ms": 0.4865031,
+                "max_ms": 3.737087
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "oltp_cross_type_lookup",
+              "workload": "oltp",
+              "category": "read-join",
+              "backend": "neo4j",
+              "index_mode": "indexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.187481,
+                "mean_ms": 0.2678132827,
+                "p50_ms": 0.257981,
+                "p95_ms": 0.34158295,
+                "p99_ms": 0.4380134,
+                "max_ms": 3.357185
+              },
+              "end_to_end": {
+                "min_ms": 0.187481,
+                "mean_ms": 0.2678132827,
+                "p50_ms": 0.257981,
+                "p95_ms": 0.34158295,
+                "p99_ms": 0.4380134,
+                "max_ms": 3.357185
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "oltp_optional_type1_lookup",
+              "workload": "oltp",
+              "category": "read-optional",
+              "backend": "neo4j",
+              "index_mode": "indexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.155391,
+                "mean_ms": 0.2290667292,
+                "p50_ms": 0.219086,
+                "p95_ms": 0.30172594999999997,
+                "p99_ms": 0.40090940000000014,
+                "max_ms": 2.31453
+              },
+              "end_to_end": {
+                "min_ms": 0.155391,
+                "mean_ms": 0.2290667292,
+                "p50_ms": 0.219086,
+                "p95_ms": 0.30172594999999997,
+                "p99_ms": 0.40090940000000014,
+                "max_ms": 2.31453
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "oltp_optional_missing_type1_lookup",
+              "workload": "oltp",
+              "category": "read-optional-null",
+              "backend": "neo4j",
+              "index_mode": "indexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.156971,
+                "mean_ms": 0.2248311825,
+                "p50_ms": 0.216261,
+                "p95_ms": 0.2904264999999999,
+                "p99_ms": 0.38936581000000037,
+                "max_ms": 2.186739
+              },
+              "end_to_end": {
+                "min_ms": 0.156971,
+                "mean_ms": 0.2248311825,
+                "p50_ms": 0.216261,
+                "p95_ms": 0.2904264999999999,
+                "p99_ms": 0.38936581000000037,
+                "max_ms": 2.186739
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "oltp_unwind_literal_top2",
+              "workload": "oltp",
+              "category": "unwind",
+              "backend": "neo4j",
+              "index_mode": "indexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.162921,
+                "mean_ms": 0.23564346179999998,
+                "p50_ms": 0.225131,
+                "p95_ms": 0.3089774999999999,
+                "p99_ms": 0.4082600100000002,
+                "max_ms": 2.399721
+              },
+              "end_to_end": {
+                "min_ms": 0.162921,
+                "mean_ms": 0.23564346179999998,
+                "p50_ms": 0.225131,
+                "p95_ms": 0.3089774999999999,
+                "p99_ms": 0.4082600100000002,
+                "max_ms": 2.399721
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "oltp_update_type1_score",
+              "workload": "oltp",
+              "category": "update-node",
+              "backend": "neo4j",
+              "index_mode": "indexed",
+              "mode": "statement",
+              "mutation": true,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.148491,
+                "mean_ms": 0.22855278890000003,
+                "p50_ms": 0.219661,
+                "p95_ms": 0.2974115,
+                "p99_ms": 0.4090657100000001,
+                "max_ms": 1.991958
+              },
+              "end_to_end": {
+                "min_ms": 0.148491,
+                "mean_ms": 0.22855278890000003,
+                "p50_ms": 0.219661,
+                "p95_ms": 0.2974115,
+                "p99_ms": 0.4090657100000001,
+                "max_ms": 1.991958
+              },
+              "reset": {
+                "min_ms": 0.05681,
+                "mean_ms": 0.08591175109999999,
+                "p50_ms": 0.081521,
+                "p95_ms": 0.11384199999999998,
+                "p99_ms": 0.1568590100000002,
+                "max_ms": 2.093279
+              }
+            },
+            {
+              "name": "oltp_create_type1_node",
+              "workload": "oltp",
+              "category": "create-node",
+              "backend": "neo4j",
+              "index_mode": "indexed",
+              "mode": "program",
+              "mutation": true,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.148291,
+                "mean_ms": 0.2250182152,
+                "p50_ms": 0.216136,
+                "p95_ms": 0.29088754999999994,
+                "p99_ms": 0.38575730000000036,
+                "max_ms": 2.744202
+              },
+              "end_to_end": {
+                "min_ms": 0.148291,
+                "mean_ms": 0.2250182152,
+                "p50_ms": 0.216136,
+                "p95_ms": 0.29088754999999994,
+                "p99_ms": 0.38575730000000036,
+                "max_ms": 2.744202
+              },
+              "reset": {
+                "min_ms": 0.05912,
+                "mean_ms": 0.08547353960000001,
+                "p50_ms": 0.0820105,
+                "p95_ms": 0.11415294999999996,
+                "p99_ms": 0.14958670000000013,
+                "max_ms": 0.730963
+              }
+            },
+            {
+              "name": "oltp_create_cross_type_edge",
+              "workload": "oltp",
+              "category": "create-edge",
+              "backend": "neo4j",
+              "index_mode": "indexed",
+              "mode": "statement",
+              "mutation": true,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.188141,
+                "mean_ms": 0.275718438,
+                "p50_ms": 0.263291,
+                "p95_ms": 0.3575904499999999,
+                "p99_ms": 0.49745620000000007,
+                "max_ms": 2.47897
+              },
+              "end_to_end": {
+                "min_ms": 0.188141,
+                "mean_ms": 0.275718438,
+                "p50_ms": 0.263291,
+                "p95_ms": 0.3575904499999999,
+                "p99_ms": 0.49745620000000007,
+                "max_ms": 2.47897
+              },
+              "reset": {
+                "min_ms": 0.05973,
+                "mean_ms": 0.0918574189,
+                "p50_ms": 0.08671,
+                "p95_ms": 0.12353299999999998,
+                "p99_ms": 0.17451380000000005,
+                "max_ms": 2.023429
+              }
+            },
+            {
+              "name": "oltp_merge_cross_type_edge",
+              "workload": "oltp",
+              "category": "merge-edge",
+              "backend": "neo4j",
+              "index_mode": "indexed",
+              "mode": "statement",
+              "mutation": true,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.19376,
+                "mean_ms": 0.2720492557,
+                "p50_ms": 0.2635565,
+                "p95_ms": 0.3458915,
+                "p99_ms": 0.4551283000000008,
+                "max_ms": 1.891738
+              },
+              "end_to_end": {
+                "min_ms": 0.19376,
+                "mean_ms": 0.2720492557,
+                "p50_ms": 0.2635565,
+                "p95_ms": 0.3458915,
+                "p99_ms": 0.4551283000000008,
+                "max_ms": 1.891738
+              },
+              "reset": {
+                "min_ms": 0.06063,
+                "mean_ms": 0.0889019541,
+                "p50_ms": 0.0849005,
+                "p95_ms": 0.11728399999999994,
+                "p99_ms": 0.16104309000000006,
+                "max_ms": 1.403886
+              }
+            },
+            {
+              "name": "oltp_delete_type1_edge",
+              "workload": "oltp",
+              "category": "delete-edge",
+              "backend": "neo4j",
+              "index_mode": "indexed",
+              "mode": "statement",
+              "mutation": true,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.149461,
+                "mean_ms": 0.2277459229,
+                "p50_ms": 0.219481,
+                "p95_ms": 0.29435295,
+                "p99_ms": 0.39625261000000006,
+                "max_ms": 2.2798
+              },
+              "end_to_end": {
+                "min_ms": 0.149461,
+                "mean_ms": 0.2277459229,
+                "p50_ms": 0.219481,
+                "p95_ms": 0.29435295,
+                "p99_ms": 0.39625261000000006,
+                "max_ms": 2.2798
+              },
+              "reset": {
+                "min_ms": 0.057901,
+                "mean_ms": 0.08613305389999999,
+                "p50_ms": 0.08195,
+                "p95_ms": 0.11433694999999991,
+                "p99_ms": 0.15624041,
+                "max_ms": 1.422576
+              }
+            },
+            {
+              "name": "oltp_delete_type1_node",
+              "workload": "oltp",
+              "category": "delete-node",
+              "backend": "neo4j",
+              "index_mode": "indexed",
+              "mode": "statement",
+              "mutation": true,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.15355,
+                "mean_ms": 0.22523561120000002,
+                "p50_ms": 0.218176,
+                "p95_ms": 0.2835709499999999,
+                "p99_ms": 0.36697240000000003,
+                "max_ms": 3.106683
+              },
+              "end_to_end": {
+                "min_ms": 0.15355,
+                "mean_ms": 0.22523561120000002,
+                "p50_ms": 0.218176,
+                "p95_ms": 0.2835709499999999,
+                "p99_ms": 0.36697240000000003,
+                "max_ms": 3.106683
+              },
+              "reset": {
+                "min_ms": 0.05906,
+                "mean_ms": 0.0871654174,
+                "p50_ms": 0.083671,
+                "p95_ms": 0.11214699999999991,
+                "p99_ms": 0.1452965000000001,
+                "max_ms": 1.861047
+              }
+            },
+            {
+              "name": "oltp_program_create_and_link",
+              "workload": "oltp",
+              "category": "create-program",
+              "backend": "neo4j",
+              "index_mode": "indexed",
+              "mode": "program",
+              "mutation": true,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.15655,
+                "mean_ms": 0.22484648699999998,
+                "p50_ms": 0.216441,
+                "p95_ms": 0.28991654999999994,
+                "p99_ms": 0.3747744,
+                "max_ms": 1.708287
+              },
+              "end_to_end": {
+                "min_ms": 0.15655,
+                "mean_ms": 0.22484648699999998,
+                "p50_ms": 0.216441,
+                "p95_ms": 0.28991654999999994,
+                "p99_ms": 0.3747744,
+                "max_ms": 1.708287
+              },
+              "reset": {
+                "min_ms": 0.06096,
+                "mean_ms": 0.084142214,
+                "p50_ms": 0.080351,
+                "p95_ms": 0.11273554999999992,
+                "p99_ms": 0.14473190000000002,
+                "max_ms": 1.018015
+              }
+            },
+            {
+              "name": "oltp_update_cross_type_edge_rank",
+              "workload": "oltp",
+              "category": "update-edge",
+              "backend": "neo4j",
+              "index_mode": "indexed",
+              "mode": "statement",
+              "mutation": true,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.154901,
+                "mean_ms": 0.2195277765,
+                "p50_ms": 0.211706,
+                "p95_ms": 0.2789749999999999,
+                "p99_ms": 0.3642835100000001,
+                "max_ms": 1.640428
+              },
+              "end_to_end": {
+                "min_ms": 0.154901,
+                "mean_ms": 0.2195277765,
+                "p50_ms": 0.211706,
+                "p95_ms": 0.2789749999999999,
+                "p99_ms": 0.3642835100000001,
+                "max_ms": 1.640428
+              },
+              "reset": {
+                "min_ms": 0.05754,
+                "mean_ms": 0.08119634290000001,
+                "p50_ms": 0.0775105,
+                "p95_ms": 0.10397,
+                "p99_ms": 0.14352720000000013,
+                "max_ms": 1.985478
+              }
+            }
+          ]
+        }
+      },
+      "olap": {
+        "description": "Analytical-style Neo4j execution over the generated graph using the runtime corpus directly as Cypher.",
+        "neo4j_indexed": {
+          "backend": "neo4j",
+          "index_mode": "indexed",
+          "iterations": 500,
+          "warmup": 20,
+          "query_count": 16,
+          "pass_count": 16,
+          "timeout_count": 0,
+          "fail_count": 0,
+          "setup": {
+            "reset_ms": 228.64071,
+            "seed_constraints_ms": 353.571746,
+            "ingest_ms": 2263.445852,
+            "index_ms": 704.66398
+          },
+          "row_counts": {
+            "node_count": 4000,
+            "edge_count": 12000,
+            "node_type_count": 4,
+            "edge_type_count": 4
+          },
+          "rss_snapshots_mib": {
+            "after_reset": {
+              "client_mib": 90.73828125,
+              "server_mib": 624.5,
+              "combined_mib": 715.23828125
+            },
+            "after_seed_constraints": {
+              "client_mib": 90.73828125,
+              "server_mib": 637.4,
+              "combined_mib": 728.13828125
+            },
+            "after_ingest": {
+              "client_mib": 91.92578125,
+              "server_mib": 1669.12,
+              "combined_mib": 1761.04578125
+            },
+            "after_index": {
+              "client_mib": 91.92578125,
+              "server_mib": 807.5,
+              "combined_mib": 899.42578125
+            },
+            "suite_start": {
+              "client_mib": 225.8671875,
+              "server_mib": 1005.0,
+              "combined_mib": 1230.8671875
+            },
+            "suite_complete": {
+              "client_mib": 184.640625,
+              "server_mib": 1041.408,
+              "combined_mib": 1226.048625
+            }
+          },
+          "execute": {
+            "mean_of_mean_ms": 2.40434320125,
+            "mean_of_p50_ms": 2.3367480625,
+            "mean_of_p95_ms": 2.872247159374999,
+            "mean_of_p99_ms": 3.4603535012499993
+          },
+          "end_to_end": {
+            "mean_of_mean_ms": 2.40434320125,
+            "mean_of_p50_ms": 2.3367480625,
+            "mean_of_p95_ms": 2.872247159374999,
+            "mean_of_p99_ms": 3.4603535012499993
+          },
+          "reset": {
+            "mean_of_mean_ms": 0.0,
+            "mean_of_p50_ms": 0.0,
+            "mean_of_p95_ms": 0.0,
+            "mean_of_p99_ms": 0.0
+          },
+          "queries": [
+            {
+              "name": "olap_type1_active_leaderboard",
+              "workload": "olap",
+              "category": "scan-order",
+              "backend": "neo4j",
+              "index_mode": "indexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 1.259455,
+                "mean_ms": 1.48584359,
+                "p50_ms": 1.410716,
+                "p95_ms": 1.9450659499999998,
+                "p99_ms": 2.3678005999999994,
+                "max_ms": 4.208818
+              },
+              "end_to_end": {
+                "min_ms": 1.259455,
+                "mean_ms": 1.48584359,
+                "p50_ms": 1.410716,
+                "p95_ms": 1.9450659499999998,
+                "p99_ms": 2.3678005999999994,
+                "max_ms": 4.208818
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_type1_age_rollup",
+              "workload": "olap",
+              "category": "aggregation",
+              "backend": "neo4j",
+              "index_mode": "indexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.717283,
+                "mean_ms": 0.864391916,
+                "p50_ms": 0.802158,
+                "p95_ms": 1.3635079999999997,
+                "p99_ms": 1.50825969,
+                "max_ms": 2.46108
+              },
+              "end_to_end": {
+                "min_ms": 0.717283,
+                "mean_ms": 0.864391916,
+                "p50_ms": 0.802158,
+                "p95_ms": 1.3635079999999997,
+                "p99_ms": 1.50825969,
+                "max_ms": 2.46108
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_optional_type1_aggregate",
+              "workload": "olap",
+              "category": "optional-aggregation",
+              "backend": "neo4j",
+              "index_mode": "indexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.629993,
+                "mean_ms": 0.738648488,
+                "p50_ms": 0.712758,
+                "p95_ms": 0.9735934999999999,
+                "p99_ms": 1.1675825999999994,
+                "max_ms": 1.298945
+              },
+              "end_to_end": {
+                "min_ms": 0.629993,
+                "mean_ms": 0.738648488,
+                "p50_ms": 0.712758,
+                "p95_ms": 0.9735934999999999,
+                "p99_ms": 1.1675825999999994,
+                "max_ms": 1.298945
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_cross_type_edge_rollup",
+              "workload": "olap",
+              "category": "join-aggregation",
+              "backend": "neo4j",
+              "index_mode": "indexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 2.000908,
+                "mean_ms": 2.2961768300000003,
+                "p50_ms": 2.1799195,
+                "p95_ms": 2.9490530499999954,
+                "p99_ms": 3.7175732999999997,
+                "max_ms": 5.047572
+              },
+              "end_to_end": {
+                "min_ms": 2.000908,
+                "mean_ms": 2.2961768300000003,
+                "p50_ms": 2.1799195,
+                "p95_ms": 2.9490530499999954,
+                "p99_ms": 3.7175732999999997,
+                "max_ms": 5.047572
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_variable_length_reachability",
+              "workload": "olap",
+              "category": "variable-length",
+              "backend": "neo4j",
+              "index_mode": "indexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.326821,
+                "mean_ms": 0.421462556,
+                "p50_ms": 0.406972,
+                "p95_ms": 0.5304514499999995,
+                "p99_ms": 0.6721452999999997,
+                "max_ms": 1.045454
+              },
+              "end_to_end": {
+                "min_ms": 0.326821,
+                "mean_ms": 0.421462556,
+                "p50_ms": 0.406972,
+                "p95_ms": 0.5304514499999995,
+                "p99_ms": 0.6721452999999997,
+                "max_ms": 1.045454
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_three_type_path_count",
+              "workload": "olap",
+              "category": "multi-hop",
+              "backend": "neo4j",
+              "index_mode": "indexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 1.740108,
+                "mean_ms": 1.9707983519999999,
+                "p50_ms": 1.887938,
+                "p95_ms": 2.5496979999999976,
+                "p99_ms": 3.1512233,
+                "max_ms": 4.302879
+              },
+              "end_to_end": {
+                "min_ms": 1.740108,
+                "mean_ms": 1.9707983519999999,
+                "p50_ms": 1.887938,
+                "p95_ms": 2.5496979999999976,
+                "p99_ms": 3.1512233,
+                "max_ms": 4.302879
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_type2_score_distribution",
+              "workload": "olap",
+              "category": "group-order",
+              "backend": "neo4j",
+              "index_mode": "indexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.662353,
+                "mean_ms": 0.78858448,
+                "p50_ms": 0.763483,
+                "p95_ms": 0.9611725499999995,
+                "p99_ms": 1.24460799,
+                "max_ms": 1.344675
+              },
+              "end_to_end": {
+                "min_ms": 0.662353,
+                "mean_ms": 0.78858448,
+                "p50_ms": 0.763483,
+                "p95_ms": 0.9611725499999995,
+                "p99_ms": 1.24460799,
+                "max_ms": 1.344675
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_fixed_length_path_projection",
+              "workload": "olap",
+              "category": "multi-hop-projection",
+              "backend": "neo4j",
+              "index_mode": "indexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 4.60507,
+                "mean_ms": 5.141202914,
+                "p50_ms": 5.0144815,
+                "p95_ms": 6.1999815499999995,
+                "p99_ms": 7.5274921,
+                "max_ms": 8.038975
+              },
+              "end_to_end": {
+                "min_ms": 4.60507,
+                "mean_ms": 5.141202914,
+                "p50_ms": 5.0144815,
+                "p95_ms": 6.1999815499999995,
+                "p99_ms": 7.5274921,
+                "max_ms": 8.038975
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_fixed_length_path_with_rebinding",
+              "workload": "olap",
+              "category": "multi-hop-with",
+              "backend": "neo4j",
+              "index_mode": "indexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 4.995751,
+                "mean_ms": 5.504039366000001,
+                "p50_ms": 5.369013,
+                "p95_ms": 6.521351499999998,
+                "p99_ms": 7.969036109999999,
+                "max_ms": 9.26434
+              },
+              "end_to_end": {
+                "min_ms": 4.995751,
+                "mean_ms": 5.504039366000001,
+                "p50_ms": 5.369013,
+                "p95_ms": 6.521351499999998,
+                "p99_ms": 7.969036109999999,
+                "max_ms": 9.26434
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_graph_introspection_rollup",
+              "workload": "olap",
+              "category": "introspection",
+              "backend": "neo4j",
+              "index_mode": "indexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 2.676312,
+                "mean_ms": 3.0246888700000003,
+                "p50_ms": 2.9541325,
+                "p95_ms": 3.5352895,
+                "p99_ms": 4.360066199999999,
+                "max_ms": 6.666498
+              },
+              "end_to_end": {
+                "min_ms": 2.676312,
+                "mean_ms": 3.0246888700000003,
+                "p50_ms": 2.9541325,
+                "p95_ms": 3.5352895,
+                "p99_ms": 4.360066199999999,
+                "max_ms": 6.666498
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_with_scalar_rebinding",
+              "workload": "olap",
+              "category": "with-aggregation",
+              "backend": "neo4j",
+              "index_mode": "indexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.754704,
+                "mean_ms": 0.870543514,
+                "p50_ms": 0.8452985,
+                "p95_ms": 0.9813089999999995,
+                "p99_ms": 1.4608176,
+                "max_ms": 1.943948
+              },
+              "end_to_end": {
+                "min_ms": 0.754704,
+                "mean_ms": 0.870543514,
+                "p50_ms": 0.8452985,
+                "p95_ms": 0.9813089999999995,
+                "p99_ms": 1.4608176,
+                "max_ms": 1.943948
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_with_where_lower_projection",
+              "workload": "olap",
+              "category": "with-filter",
+              "backend": "neo4j",
+              "index_mode": "indexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 1.160804,
+                "mean_ms": 1.3257765460000002,
+                "p50_ms": 1.282911,
+                "p95_ms": 1.5773639999999998,
+                "p99_ms": 1.8088528099999992,
+                "max_ms": 2.813852
+              },
+              "end_to_end": {
+                "min_ms": 1.160804,
+                "mean_ms": 1.3257765460000002,
+                "p50_ms": 1.282911,
+                "p95_ms": 1.5773639999999998,
+                "p99_ms": 1.8088528099999992,
+                "max_ms": 2.813852
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_with_size_predicate_projection",
+              "workload": "olap",
+              "category": "with-predicate",
+              "backend": "neo4j",
+              "index_mode": "indexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 1.129885,
+                "mean_ms": 1.288727808,
+                "p50_ms": 1.242585,
+                "p95_ms": 1.6143750499999998,
+                "p99_ms": 1.8101139,
+                "max_ms": 2.33706
+              },
+              "end_to_end": {
+                "min_ms": 1.129885,
+                "mean_ms": 1.288727808,
+                "p50_ms": 1.242585,
+                "p95_ms": 1.6143750499999998,
+                "p99_ms": 1.8101139,
+                "max_ms": 2.33706
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_relationship_function_projection",
+              "workload": "olap",
+              "category": "join-functions",
+              "backend": "neo4j",
+              "index_mode": "indexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 2.27934,
+                "mean_ms": 2.584275596,
+                "p50_ms": 2.5147655,
+                "p95_ms": 2.9995765,
+                "p99_ms": 3.7282103999999996,
+                "max_ms": 4.033087
+              },
+              "end_to_end": {
+                "min_ms": 2.27934,
+                "mean_ms": 2.584275596,
+                "p50_ms": 2.5147655,
+                "p95_ms": 2.9995765,
+                "p99_ms": 3.7282103999999996,
+                "max_ms": 4.033087
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_variable_length_grouped_rollup",
+              "workload": "olap",
+              "category": "variable-length-grouped",
+              "backend": "neo4j",
+              "index_mode": "indexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 9.28443,
+                "mean_ms": 9.900840604,
+                "p50_ms": 9.7426665,
+                "p95_ms": 10.934609499999999,
+                "p99_ms": 12.477147419999996,
+                "max_ms": 13.570859
+              },
+              "end_to_end": {
+                "min_ms": 9.28443,
+                "mean_ms": 9.900840604,
+                "p50_ms": 9.7426665,
+                "p95_ms": 10.934609499999999,
+                "p99_ms": 12.477147419999996,
+                "max_ms": 13.570859
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            },
+            {
+              "name": "olap_variable_length_grouped_max_rollup",
+              "workload": "olap",
+              "category": "variable-length-grouped-max",
+              "backend": "neo4j",
+              "index_mode": "indexed",
+              "mode": "statement",
+              "mutation": false,
+              "status": "passed",
+              "execute": {
+                "min_ms": 0.202181,
+                "mean_ms": 0.26348979,
+                "p50_ms": 0.258171,
+                "p95_ms": 0.31955545,
+                "p99_ms": 0.3947266999999999,
+                "max_ms": 1.079205
+              },
+              "end_to_end": {
+                "min_ms": 0.202181,
+                "mean_ms": 0.26348979,
+                "p50_ms": 0.258171,
+                "p95_ms": 0.31955545,
+                "p99_ms": 0.3947266999999999,
+                "max_ms": 1.079205
+              },
+              "reset": {
+                "min_ms": 0.0,
+                "mean_ms": 0.0,
+                "p50_ms": 0.0,
+                "p95_ms": 0.0,
+                "p99_ms": 0.0,
+                "max_ms": 0.0
+              }
+            }
+          ]
+        }
+      }
+    },
+    "token_map": {
+      "variable_hop_max": "2",
+      "grouped_rollup_variable_hop_max": "2",
+      "created_type_1_name": "nodetype01-created-node",
+      "created_type_1_peer_name": "nodetype01-created-peer",
+      "created_type_2_name": "nodetype02-created-node",
+      "node_type_1": "NodeType01",
+      "node_type_1_name_1": "nodetype01-000001",
+      "node_type_1_name_2": "nodetype01-000002",
+      "node_type_1_name_3": "nodetype01-000003",
+      "node_type_1_name_4": "nodetype01-000004",
+      "node_type_2": "NodeType02",
+      "node_type_2_name_1": "nodetype02-000001",
+      "node_type_2_name_2": "nodetype02-000002",
+      "node_type_2_name_3": "nodetype02-000003",
+      "node_type_2_name_4": "nodetype02-000004",
+      "node_type_3": "NodeType03",
+      "node_type_3_name_1": "nodetype03-000001",
+      "node_type_3_name_2": "nodetype03-000002",
+      "node_type_3_name_3": "nodetype03-000003",
+      "node_type_3_name_4": "nodetype03-000004",
+      "node_type_4": "NodeType04",
+      "node_type_4_name_1": "nodetype04-000001",
+      "node_type_4_name_2": "nodetype04-000002",
+      "node_type_4_name_3": "nodetype04-000003",
+      "node_type_4_name_4": "nodetype04-000004",
+      "edge_type_1": "EdgeType01",
+      "edge_type_2": "EdgeType02",
+      "edge_type_3": "EdgeType03",
+      "edge_type_4": "EdgeType04"
+    }
+  },
+  "failure_count": 0,
+  "completed_at": "2026-05-03T23:00:19.557225+00:00"
+}
