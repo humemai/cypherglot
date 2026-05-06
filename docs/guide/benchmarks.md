@@ -475,7 +475,7 @@ ArcadeDB heap defaults now follow the scale preset automatically:
 
 - `small`: `ARCADEDB_JVM_ARGS='-Xmx4g'`
 - `medium`: `ARCADEDB_JVM_ARGS='-Xmx16g'`
-- `large`: `ARCADEDB_JVM_ARGS='-xmx64g'`
+- `large`: `ARCADEDB_JVM_ARGS='-Xmx64g'`
 
 Override that default for a given run with `--arcadedb-jvm-args`.
 

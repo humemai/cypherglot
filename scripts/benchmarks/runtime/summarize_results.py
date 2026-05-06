@@ -161,7 +161,6 @@ def _config_key(payload: dict[str, Any]) -> tuple[Any, ...]:
         _normalize_for_key(payload.get("graph_scale", {})),
         _normalize_for_key(payload.get("workload_controls", {})),
         payload.get("index_mode"),
-        payload.get("cypherglot_version"),
         _normalize_for_key(payload.get("database_versions", {})),
         _suite_names(payload),
     )

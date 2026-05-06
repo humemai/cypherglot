@@ -234,7 +234,7 @@ SCALE_PRESETS: dict[str, ScalePreset] = {
             ingest_batch_size=10_000,
             variable_hop_max=8,
         ),
-        arcadedb_jvm_args="-xmx64g",
+        arcadedb_jvm_args="-Xmx64g",
     ),
 }
 
@@ -430,7 +430,7 @@ def _parse_args() -> argparse.Namespace:
         "--arcadedb-jvm-args",
         help=(
             "Override ARCADEDB_JVM_ARGS for ArcadeDB jobs. Defaults to -Xmx4g, "
-            "-Xmx16g, or -xmx64g for small, medium, and large respectively."
+            "-Xmx16g, or -Xmx64g for small, medium, and large respectively."
         ),
     )
     parser.add_argument(
