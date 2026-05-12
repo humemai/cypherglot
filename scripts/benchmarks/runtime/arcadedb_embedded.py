@@ -117,6 +117,20 @@ class ArcadeDBFixture:
         self.work_dir.close()
 
 
+@dataclass(slots=True)
+class ArcadeDBWorkerServer:
+    process: subprocess.Popen[str]
+    session_dir: Path
+    request_dir: Path
+    response_dir: Path
+    progress_path: Path
+    spec_path: Path
+    index_mode: str
+    progress_offset: int
+    request_counter: int
+    worker_startup: dict[str, float]
+
+
 class ArcadeDBFixtureSetupError(RuntimeError):
     def __init__(
         self,
@@ -893,7 +907,10 @@ def _arcadedb_timeout_result(
     last_progress_event: dict[str, object] | None,
     warmup: int,
 ) -> dict[str, object]:
-    if last_progress_event is not None and last_progress_event.get("phase") == "execute-start":
+    if (
+        last_progress_event is not None
+        and last_progress_event.get("phase") == "execute-start"
+    ):
         phase = str(last_progress_event.get("step_phase", "iteration"))
         iteration = int(last_progress_event.get("step_iteration", 1))
     else:
@@ -952,9 +969,6 @@ def _run_arcadedb_query_worker(spec_path: Path) -> int:
     progress_path = Path(spec["progress_path"])
     result_path = Path(spec["result_path"])
     index_mode = str(spec["index_mode"])
-    worker_startup_timeout_s = float(
-        spec.get("worker_startup_timeout_s", ARCADEDB_WORKER_STARTUP_TIMEOUT_S)
-    )
     worker_started_at_ns = time.perf_counter_ns()
     startup_probe_execute_ns = 0
     startup_probe_end_to_end_ns = 0
@@ -1117,6 +1131,482 @@ def _run_arcadedb_query_worker(spec_path: Path) -> int:
         fixture.database.close()
 
 
+def _next_arcadedb_worker_request_path(request_dir: Path) -> Path | None:
+    request_paths = sorted(request_dir.glob("*.json"))
+    if not request_paths:
+        return None
+    return request_paths[0]
+
+
+def _run_arcadedb_query_worker_server(spec_path: Path) -> int:
+    spec = json.loads(spec_path.read_text(encoding="utf-8"))
+    progress_path = Path(spec["progress_path"])
+    request_dir = Path(spec["request_dir"])
+    response_dir = Path(spec["response_dir"])
+    index_mode = str(spec["index_mode"])
+
+    fixture = _arcadedb_worker_fixture(
+        db_path=Path(spec["db_path"]),
+        row_counts={
+            str(key): int(value) for key, value in dict(spec["row_counts"]).items()
+        },
+        index_mode=index_mode,
+    )
+    try:
+        _append_arcadedb_worker_progress(
+            progress_path,
+            phase="ready",
+            iteration=0,
+        )
+        while True:
+            request_path = _next_arcadedb_worker_request_path(request_dir)
+            if request_path is None:
+                time.sleep(0.05)
+                continue
+
+            request = json.loads(request_path.read_text(encoding="utf-8"))
+            request_path.unlink(missing_ok=True)
+            if request.get("command") == "shutdown":
+                return 0
+
+            request_id = str(request["request_id"])
+            query = _corpus_query_from_payload(request["query"])
+            warmup = int(request["warmup"])
+            iterations = int(request["iterations"])
+            response_path = response_dir / f"{request_id}.json"
+
+            try:
+                for warmup_index in range(1, warmup + 1):
+                    _append_arcadedb_worker_progress(
+                        progress_path,
+                        phase="execute-start",
+                        iteration=warmup_index,
+                        step_phase="warmup",
+                        step_iteration=warmup_index,
+                    )
+                    _, _, transaction_started = _execute_query_once(
+                        fixture,
+                        query=query,
+                    )
+                    _append_arcadedb_worker_progress(
+                        progress_path,
+                        phase="execute-end",
+                        iteration=warmup_index,
+                        step_phase="warmup",
+                        step_iteration=warmup_index,
+                    )
+                    _reset_query_once(
+                        fixture,
+                        transaction_started=transaction_started,
+                    )
+                    _append_arcadedb_worker_progress(
+                        progress_path,
+                        phase="warmup",
+                        iteration=warmup_index,
+                    )
+
+                execute_latencies: list[int] = []
+                end_to_end_latencies: list[int] = []
+                reset_latencies: list[int] = []
+                for iteration_index in range(1, iterations + 1):
+                    _append_arcadedb_worker_progress(
+                        progress_path,
+                        phase="execute-start",
+                        iteration=iteration_index,
+                        step_phase="iteration",
+                        step_iteration=iteration_index,
+                    )
+                    (
+                        execute_ns,
+                        end_to_end_ns,
+                        transaction_started,
+                    ) = _execute_query_once(
+                        fixture,
+                        query=query,
+                    )
+                    _append_arcadedb_worker_progress(
+                        progress_path,
+                        phase="execute-end",
+                        iteration=iteration_index,
+                        step_phase="iteration",
+                        step_iteration=iteration_index,
+                    )
+                    reset_ns = _reset_query_once(
+                        fixture,
+                        transaction_started=transaction_started,
+                    )
+                    execute_latencies.append(execute_ns)
+                    end_to_end_latencies.append(end_to_end_ns)
+                    reset_latencies.append(reset_ns)
+                    _append_arcadedb_worker_progress(
+                        progress_path,
+                        phase="iteration",
+                        iteration=iteration_index,
+                    )
+
+                response = {
+                    "name": query.name,
+                    "workload": query.workload,
+                    "category": query.category,
+                    "backend": ARCADEDB_BACKEND_NAME,
+                    "index_mode": index_mode,
+                    "mode": query.mode,
+                    "mutation": query.mutation,
+                    "status": "passed",
+                    "execute": _summarize(execute_latencies),
+                    "end_to_end": _summarize(end_to_end_latencies),
+                    "reset": _summarize(reset_latencies),
+                }
+            except ARCADEDB_QUERY_EXCEPTIONS as exc:
+                response = {
+                    "name": query.name,
+                    "workload": query.workload,
+                    "category": query.category,
+                    "backend": ARCADEDB_BACKEND_NAME,
+                    "index_mode": index_mode,
+                    "mode": query.mode,
+                    "mutation": query.mutation,
+                    "status": "failed",
+                    "error_type": type(exc).__name__,
+                    "error_message": str(exc),
+                }
+
+            response_path.write_text(json.dumps(response), encoding="utf-8")
+    finally:
+        fixture.database.close()
+
+
+def _cleanup_arcadedb_worker_server(server: ArcadeDBWorkerServer) -> None:
+    for path in sorted(server.response_dir.glob("*.json")):
+        path.unlink(missing_ok=True)
+    for path in sorted(server.request_dir.glob("*.json")):
+        path.unlink(missing_ok=True)
+    for path in (server.spec_path, server.progress_path):
+        path.unlink(missing_ok=True)
+    for directory in (server.response_dir, server.request_dir, server.session_dir):
+        try:
+            directory.rmdir()
+        except OSError:
+            pass
+
+
+def _communicate_arcadedb_worker_process(
+    process: subprocess.Popen[str],
+) -> tuple[str, str]:
+    try:
+        return process.communicate()
+    except ValueError:
+        # A prior communicate() may already have drained and closed stderr.
+        process.wait()
+        return "", ""
+
+
+def _stop_arcadedb_worker_server(server: ArcadeDBWorkerServer) -> None:
+    try:
+        if server.process.poll() is None:
+            shutdown_request_path = (
+                server.request_dir / f"{server.request_counter + 1:06d}.json"
+            )
+            shutdown_request_path.write_text(
+                json.dumps({"command": "shutdown"}),
+                encoding="utf-8",
+            )
+            try:
+                server.process.wait(timeout=ARCADEDB_WORKER_SHUTDOWN_TIMEOUT_S)
+            except subprocess.TimeoutExpired:
+                server.process.kill()
+                _communicate_arcadedb_worker_process(server.process)
+            else:
+                _communicate_arcadedb_worker_process(server.process)
+        else:
+            _communicate_arcadedb_worker_process(server.process)
+    finally:
+        _cleanup_arcadedb_worker_server(server)
+
+
+def _start_arcadedb_worker_server(
+    fixture: ArcadeDBFixture,
+    *,
+    worker_startup_timeout_s: float,
+    startup_probe_query: CorpusQuery,
+) -> ArcadeDBWorkerServer | dict[str, object]:
+    session_dir = fixture.work_dir.path / f"olap-probe-worker-{time.time_ns()}"
+    request_dir = session_dir / "requests"
+    response_dir = session_dir / "responses"
+    progress_path = session_dir / "progress.jsonl"
+    spec_path = session_dir / "server-spec.json"
+    session_dir.mkdir(parents=True, exist_ok=False)
+    request_dir.mkdir(parents=True, exist_ok=False)
+    response_dir.mkdir(parents=True, exist_ok=False)
+
+    spec = {
+        "db_path": str(fixture.db_path),
+        "row_counts": fixture.row_counts,
+        "index_mode": fixture.index_mode,
+        "progress_path": str(progress_path),
+        "request_dir": str(request_dir),
+        "response_dir": str(response_dir),
+    }
+    spec_path.write_text(json.dumps(spec), encoding="utf-8")
+
+    command = [
+        sys.executable,
+        "-m",
+        "scripts.benchmarks.runtime.arcadedb_embedded",
+        "--query-worker-server-spec",
+        str(spec_path),
+    ]
+    process = subprocess.Popen(
+        command,
+        cwd=str(REPO_ROOT),
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+
+    started_at = time.monotonic()
+    progress_offset = 0
+    stderr_output = ""
+    startup_timed_out = False
+    while True:
+        events, progress_offset = _read_arcadedb_worker_progress(
+            progress_path,
+            offset=progress_offset,
+        )
+        if any(str(event["phase"]) == "ready" for event in events):
+            open_ms = (time.monotonic() - started_at) * 1_000.0
+            worker_startup = {
+                "open_ms": open_ms,
+                "ready_ms": open_ms,
+                "startup_probe_execute_ms": 0.0,
+                "startup_probe_end_to_end_ms": 0.0,
+                "startup_probe_reset_ms": 0.0,
+            }
+            return ArcadeDBWorkerServer(
+                process=process,
+                session_dir=session_dir,
+                request_dir=request_dir,
+                response_dir=response_dir,
+                progress_path=progress_path,
+                spec_path=spec_path,
+                index_mode=fixture.index_mode,
+                progress_offset=progress_offset,
+                request_counter=0,
+                worker_startup=worker_startup,
+            )
+
+        return_code = process.poll()
+        if return_code is not None:
+            _, stderr_output = _communicate_arcadedb_worker_process(process)
+            break
+
+        if time.monotonic() - started_at > worker_startup_timeout_s:
+            startup_timed_out = True
+            process.kill()
+            _, stderr_output = _communicate_arcadedb_worker_process(process)
+            break
+
+        time.sleep(0.05)
+
+    for path in sorted(response_dir.glob("*.json")):
+        path.unlink(missing_ok=True)
+    for path in sorted(request_dir.glob("*.json")):
+        path.unlink(missing_ok=True)
+    for path in (spec_path, progress_path):
+        path.unlink(missing_ok=True)
+    for directory in (response_dir, request_dir, session_dir):
+        try:
+            directory.rmdir()
+        except OSError:
+            pass
+    if startup_timed_out:
+        error_type = "WorkerStartupTimeout"
+        error_message = (
+            "ArcadeDB worker did not become ready within "
+            f"{worker_startup_timeout_s:.1f}s."
+        )
+    else:
+        error_type = "WorkerProcessError"
+        error_message = (
+            stderr_output.strip()
+            or "ArcadeDB worker exited before signalling ready."
+        )
+    return {
+        "name": startup_probe_query.name,
+        "workload": startup_probe_query.workload,
+        "category": startup_probe_query.category,
+        "backend": ARCADEDB_BACKEND_NAME,
+        "index_mode": fixture.index_mode,
+        "mode": startup_probe_query.mode,
+        "mutation": startup_probe_query.mutation,
+        "status": "failed",
+        "error_type": error_type,
+        "error_message": error_message,
+    }
+
+
+def _measure_query_in_arcadedb_worker_server(
+    server: ArcadeDBWorkerServer,
+    *,
+    query: CorpusQuery,
+    iterations: int,
+    warmup: int,
+    timeout_ms: float,
+) -> dict[str, object]:
+    server.request_counter += 1
+    request_id = f"{server.request_counter:06d}"
+    request_path = server.request_dir / f"{request_id}.json"
+    response_path = server.response_dir / f"{request_id}.json"
+    request_path.write_text(
+        json.dumps(
+            {
+                "request_id": request_id,
+                "query": _corpus_query_payload(query),
+                "warmup": warmup,
+                "iterations": iterations,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    timeout_s = timeout_ms / 1_000.0
+    request_started_at = time.monotonic()
+    active_query_started_at: float | None = None
+    last_progress_event: dict[str, object] | None = None
+    stderr_output = ""
+
+    while True:
+        events, server.progress_offset = _read_arcadedb_worker_progress(
+            server.progress_path,
+            offset=server.progress_offset,
+        )
+        if events:
+            last_progress_event = events[-1]
+            for event in events:
+                phase = str(event["phase"])
+                if phase == "execute-start":
+                    active_query_started_at = time.monotonic()
+                elif phase == "execute-end":
+                    active_query_started_at = None
+
+        if response_path.exists():
+            result = json.loads(response_path.read_text(encoding="utf-8"))
+            response_path.unlink(missing_ok=True)
+            return _with_worker_startup(
+                result,
+                worker_startup=server.worker_startup,
+            )
+
+        return_code = server.process.poll()
+        if return_code is not None:
+            _, stderr_output = _communicate_arcadedb_worker_process(server.process)
+            return {
+                "name": query.name,
+                "workload": query.workload,
+                "category": query.category,
+                "backend": ARCADEDB_BACKEND_NAME,
+                "index_mode": server.index_mode,
+                "mode": query.mode,
+                "mutation": query.mutation,
+                "status": "failed",
+                "error_type": "WorkerProcessError",
+                "error_message": (
+                    stderr_output.strip()
+                    or f"ArcadeDB worker exited with code {return_code}."
+                ),
+                "worker_startup": dict(server.worker_startup),
+            }
+
+        now = time.monotonic()
+        if (
+            active_query_started_at is not None
+            and now - active_query_started_at > timeout_s
+        ) or now - request_started_at > timeout_s:
+            server.process.kill()
+            _communicate_arcadedb_worker_process(server.process)
+            return _with_worker_startup(
+                _arcadedb_timeout_result(
+                    query=query,
+                    index_mode=server.index_mode,
+                    timeout_ms=timeout_ms,
+                    last_progress_event=last_progress_event,
+                    warmup=warmup,
+                ),
+                worker_startup=server.worker_startup,
+            )
+
+        time.sleep(0.05)
+
+
+def _classify_arcadedb_queries_in_persistent_worker(
+    fixture: ArcadeDBFixture,
+    *,
+    queries: list[CorpusQuery],
+    iterations: int,
+    warmup: int,
+    timeout_ms: float,
+    worker_startup_timeout_s: float,
+) -> tuple[
+    dict[str, str],
+    dict[str, dict[str, object]],
+    dict[str, dict[str, object]],
+]:
+    query_execution_modes: dict[str, str] = {}
+    skipped_query_results: dict[str, dict[str, object]] = {}
+    startup_probe_metrics: dict[str, dict[str, object]] = {}
+    server: ArcadeDBWorkerServer | None = None
+
+    try:
+        for query in queries:
+            if server is None:
+                started_server = _start_arcadedb_worker_server(
+                    fixture,
+                    worker_startup_timeout_s=worker_startup_timeout_s,
+                    startup_probe_query=query,
+                )
+                if isinstance(started_server, dict):
+                    query_execution_modes[query.name] = (
+                        ARCADEDB_SKIPPED_AFTER_PROBE_EXECUTION_MODE
+                    )
+                    skipped_query_results[query.name] = _with_execution_mode(
+                        started_server,
+                        execution_mode=ARCADEDB_SKIPPED_AFTER_PROBE_EXECUTION_MODE,
+                    )
+                    continue
+                server = started_server
+
+            probe_result = _measure_query_in_arcadedb_worker_server(
+                server,
+                query=query,
+                iterations=1 if iterations > 0 else 0,
+                warmup=1 if warmup > 0 else 0,
+                timeout_ms=timeout_ms,
+            )
+            if probe_result.get("status") == "passed":
+                query_execution_modes[query.name] = ARCADEDB_ITERATIVE_EXECUTION_MODE
+                if "worker_startup" in probe_result:
+                    startup_probe_metrics[query.name] = dict(
+                        probe_result["worker_startup"]
+                    )
+                continue
+
+            query_execution_modes[query.name] = (
+                ARCADEDB_SKIPPED_AFTER_PROBE_EXECUTION_MODE
+            )
+            skipped_query_results[query.name] = _with_execution_mode(
+                probe_result,
+                execution_mode=ARCADEDB_SKIPPED_AFTER_PROBE_EXECUTION_MODE,
+            )
+            if server is not None:
+                _stop_arcadedb_worker_server(server)
+                server = None
+    finally:
+        if server is not None:
+            _stop_arcadedb_worker_server(server)
+
+    return query_execution_modes, skipped_query_results, startup_probe_metrics
+
+
 def _measure_query_in_arcadedb_worker(
     fixture: ArcadeDBFixture,
     *,
@@ -1189,19 +1679,19 @@ def _measure_query_in_arcadedb_worker(
                     process.wait(timeout=ARCADEDB_WORKER_SHUTDOWN_TIMEOUT_S)
                 except subprocess.TimeoutExpired:
                     process.kill()
-                    process.communicate()
+                    _communicate_arcadedb_worker_process(process)
                 return result
 
             return_code = process.poll()
             if return_code is not None:
-                _, stderr_output = process.communicate()
+                _, stderr_output = _communicate_arcadedb_worker_process(process)
                 break
 
             now = time.monotonic()
             if not worker_ready:
                 if now - started_at > worker_startup_timeout_s:
                     process.kill()
-                    _, stderr_output = process.communicate()
+                    _, stderr_output = _communicate_arcadedb_worker_process(process)
                     return {
                         "name": query.name,
                         "workload": query.workload,
@@ -1220,9 +1710,12 @@ def _measure_query_in_arcadedb_worker(
                 time.sleep(0.05)
                 continue
 
-            if active_query_started_at is not None and now - active_query_started_at > timeout_s:
+            if (
+                active_query_started_at is not None
+                and now - active_query_started_at > timeout_s
+            ):
                 process.kill()
-                _, stderr_output = process.communicate()
+                _, stderr_output = _communicate_arcadedb_worker_process(process)
                 return _arcadedb_timeout_result(
                     query=query,
                     index_mode=fixture.index_mode,
@@ -1554,26 +2047,49 @@ def _run_workload_suite(
                 f"{suite_name}: probing {len(queries)} queries for iterative execution"
             )
             _close_arcadedb_fixture_database(fixture)
-            for query in queries:
-                execution_mode, skipped_result = _classify_arcadedb_query_execution_mode(
+            if workload == "olap":
+                rss_snapshots_mib["before_olap_probe"] = _capture_rss_snapshot(
+                    backend=ARCADEDB_BACKEND_NAME
+                )
+                (
+                    query_execution_modes,
+                    skipped_query_results,
+                    startup_probe_metrics,
+                ) = _classify_arcadedb_queries_in_persistent_worker(
                     fixture,
-                    query=query,
+                    queries=queries,
                     iterations=iterations,
                     warmup=warmup,
                     timeout_ms=timeout_ms,
                     worker_startup_timeout_s=worker_startup_timeout_s,
                 )
-                query_execution_modes[query.name] = execution_mode
-                if skipped_result is not None and "worker_startup" in skipped_result:
-                    startup_probe_metrics[query.name] = dict(
-                        skipped_result["worker_startup"]
+            else:
+                for query in queries:
+                    (
+                        execution_mode,
+                        skipped_result,
+                    ) = _classify_arcadedb_query_execution_mode(
+                        fixture,
+                        query=query,
+                        iterations=iterations,
+                        warmup=warmup,
+                        timeout_ms=timeout_ms,
+                        worker_startup_timeout_s=worker_startup_timeout_s,
                     )
-                if (
-                    execution_mode
-                    == ARCADEDB_SKIPPED_AFTER_PROBE_EXECUTION_MODE
-                    and skipped_result is not None
-                ):
-                    skipped_query_results[query.name] = skipped_result
+                    query_execution_modes[query.name] = execution_mode
+                    if (
+                        skipped_result is not None
+                        and "worker_startup" in skipped_result
+                    ):
+                        startup_probe_metrics[query.name] = dict(
+                            skipped_result["worker_startup"]
+                        )
+                    if (
+                        execution_mode
+                        == ARCADEDB_SKIPPED_AFTER_PROBE_EXECUTION_MODE
+                        and skipped_result is not None
+                    ):
+                        skipped_query_results[query.name] = skipped_result
             iterative_count = sum(
                 1
                 for mode in query_execution_modes.values()
@@ -1604,14 +2120,14 @@ def _run_workload_suite(
                 query_results.append(
                     _with_worker_startup(
                         _measure_query(
-                        fixture,
-                        query=query,
-                        iterations=iterations,
-                        warmup=warmup,
-                        progress_label=query_progress_label,
-                        iteration_progress=iteration_progress,
-                        timeout_ms=timeout_ms,
-                        execution_mode=execution_mode,
+                            fixture,
+                            query=query,
+                            iterations=iterations,
+                            warmup=warmup,
+                            progress_label=query_progress_label,
+                            iteration_progress=iteration_progress,
+                            timeout_ms=timeout_ms,
+                            execution_mode=execution_mode,
                         ),
                         worker_startup=startup_probe_metrics.get(query.name),
                     )
@@ -1625,7 +2141,9 @@ def _run_workload_suite(
         _progress(f"{suite_name}: suite complete")
 
         failures = [result for result in query_results if result["status"] == "failed"]
-        timed_out = [result for result in query_results if result["status"] == "timed_out"]
+        timed_out = [
+            result for result in query_results if result["status"] == "timed_out"
+        ]
         return {
             "backend": ARCADEDB_BACKEND_NAME,
             "index_mode": index_mode,
@@ -2015,6 +2533,11 @@ def _parse_args() -> argparse.Namespace:
         type=Path,
         help=argparse.SUPPRESS,
     )
+    parser.add_argument(
+        "--query-worker-server-spec",
+        type=Path,
+        help=argparse.SUPPRESS,
+    )
     return parser.parse_args()
 
 
@@ -2022,6 +2545,8 @@ def main() -> int:
     args = _parse_args()
     if args.query_worker_spec is not None:
         return _run_arcadedb_query_worker(args.query_worker_spec)
+    if args.query_worker_server_spec is not None:
+        return _run_arcadedb_query_worker_server(args.query_worker_server_spec)
 
     started_at = datetime.now(UTC)
     args_dict = vars(args)

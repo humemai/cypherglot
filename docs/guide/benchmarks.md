@@ -479,6 +479,11 @@ ArcadeDB heap defaults now follow the scale preset automatically:
 
 Override that default for a given run with `--arcadedb-jvm-args`.
 
+When per-job containers are enabled with `--container-cpus`, you can also pass
+`--arcadedb-wheel-path /absolute/path/to/arcadedb_embedded-...whl` to install a
+local ArcadeDB wheel into those containers instead of resolving the latest
+`arcadedb-embedded` build from PyPI.
+
 Recommended `small` run:
 
 ```bash
@@ -510,7 +515,7 @@ python -m scripts.benchmarks.runtime.matrix \
   --olap-iterations 100 \
   --olap-warmup 10 \
   --olap-timeout-ms 100000 \
-  --arcadedb-worker-startup-timeout-s 120 \
+  --arcadedb-worker-startup-timeout-s 180 \
   --neo4j-password cypherglot1 \
   --container-cpus 4
 ```
@@ -528,7 +533,7 @@ python -m scripts.benchmarks.runtime.matrix \
   --olap-iterations 50 \
   --olap-warmup 5 \
   --olap-timeout-ms 200000 \
-  --arcadedb-worker-startup-timeout-s 600 \
+  --arcadedb-worker-startup-timeout-s 3600 \
   --neo4j-password cypherglot1 \
   --container-cpus 4
 ```
@@ -547,9 +552,12 @@ guardrails explicitly: scale-specific OLTP and OLAP query timeouts plus a
 separate ArcadeDB worker startup budget so larger ArcadeDB datasets have time
 to open before query timing begins. The query timeout limits are the emergency
 brake for queries that stop making progress; the ArcadeDB startup timeout only
-covers worker readiness and database open time. In practice, ArcadeDB first
-waits for worker readiness, then runs the startup probe, and only then can the
-OLTP or OLAP query timeout window begin.
+covers time from ArcadeDB worker process launch until that worker reports
+ready, including Python worker startup, opening the ArcadeDB database, and any
+pre-ready initialization work. It does not include the startup probe query,
+warmup iterations, measured iterations, or their query timeout windows. In
+practice, ArcadeDB first waits for worker readiness, then runs the startup
+probe, and only then can the OLTP or OLAP query timeout window begin.
 
 Per-iteration progress output from the underlying benchmark scripts is enabled
 by default. Use `--no-iteration-progress` when you want quieter worker logs.
@@ -578,11 +586,42 @@ those fields exist for the grouped backend. Per-query end-to-end percentile
 tables are now included by default; use `--no-queries` if you want only the
 suite-level tables.
 
+The cross-engine suite tables keep only shared setup phases side by side, so
+ArcadeDB's `gav_ms` is not shown there. Instead, the generated report adds an
+ArcadeDB-only setup section where `GAV` is broken out explicitly and described
+as part of the ArcadeDB setup hierarchy:
+`connect/reset -> schema/constraints -> ingest -> index -> GAV -> analyze/checkpoint`.
+
+The ArcadeDB-only worker-startup tables also report `open` timing from the raw
+`worker_startup` payloads. Worker close time is not currently recorded, so the
+report cannot show it yet.
+
 ### Small runtime dataset
 
 ### Medium runtime dataset
 
 ### Large runtime dataset
+
+### Runtime caveats
+
+LadybugDB has two known upstream follow-ups that affect the large-runtime benchmark
+path. One is the long ingest time on the largest dataset. The other is the grouped
+variable-length traversal below:
+
+```cypher
+MATCH (a:NodeType01)-[:EdgeType01*0..3]->(b:NodeType01)
+RETURN b.active AS active, count(b) AS total, avg(b.score) AS avg_score
+ORDER BY total DESC, active
+```
+
+Upstream LadybugDB work is expected to address both the large ingest cost and this query
+shape.
+
+ArcadeDB also has a known reopen issue when the database is indexed and a persisted GAV
+is enabled. Reopening that database can fail in the OLAP path, so the benchmark harness
+works around it by keeping one GAV-enabled OLAP worker open for the full timeout-probe
+and classification pass instead of reopening the database for each query. A future
+ArcadeDB release may make that workaround unnecessary.
 
 ## Notes
 

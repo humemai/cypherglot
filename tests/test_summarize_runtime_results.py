@@ -29,6 +29,7 @@ parse_args = getattr(summarize_runtime_results, "_parse_args")
 def _payload(
     *,
     generated_at: str,
+    updated_at: str | None = None,
     suite_name: str,
     backend: str = "sqlite",
     p50: float,
@@ -131,7 +132,7 @@ def _payload(
         "benchmark_entrypoint": backend,
         "enabled_backends": [backend],
         "generated_at": generated_at,
-        "updated_at": generated_at,
+        "updated_at": updated_at or generated_at,
         "run_status": run_status,
         "cypherglot_version": "0.0.1.dev7",
         "database_versions": database_versions,
@@ -360,6 +361,7 @@ class SummarizeRuntimeResultsTests(unittest.TestCase):
                 json.dumps(
                     _payload(
                         generated_at="2026-04-21T13:00:00+00:00",
+                        updated_at="2026-04-21T13:01:00+00:00",
                         suite_name="sqlite_indexed",
                         p50=10.0,
                         p95=20.0,
@@ -375,6 +377,7 @@ class SummarizeRuntimeResultsTests(unittest.TestCase):
                 json.dumps(
                     _payload(
                         generated_at="2026-04-21T13:10:00+00:00",
+                        updated_at="2026-04-21T13:12:00+00:00",
                         suite_name="sqlite_indexed",
                         p50=14.0,
                         p95=24.0,
@@ -425,6 +428,8 @@ class SummarizeRuntimeResultsTests(unittest.TestCase):
             "- `24` property fields across the schema (`14` per node, `10` per edge)",
             markdown,
         )
+        self.assertIn("Wall-clock run time per completed result file:", markdown)
+        self.assertIn("| SQLite Indexed (2) | `90.00 s +- 42.43` |", markdown)
         self.assertIn("OLTP summary:", markdown)
         self.assertIn("| SQLite Indexed (2) | `10.00 ms +- 0.00` |", markdown)
         self.assertIn("| SQLite Indexed (2) | `100.00 MiB +- 0.00` |", markdown)
@@ -464,6 +469,38 @@ class SummarizeRuntimeResultsTests(unittest.TestCase):
         self.assertIn("##### OLTP query breakdown, end-to-end `p50`", markdown)
         self.assertIn("oltp_type1_point_lookup", markdown)
         self.assertIn("`1.00 ms +- 0.00`", markdown)
+
+    def test_render_summary_reports_single_run_wall_clock_std_as_zero(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            result_path = temp_path / "sqlite-indexed-small-r01.json"
+            result_path.write_text(
+                json.dumps(
+                    _payload(
+                        generated_at="2026-04-21T13:00:00+00:00",
+                        updated_at="2026-04-21T13:01:30+00:00",
+                        suite_name="sqlite_indexed",
+                        p50=10.0,
+                        p95=20.0,
+                        p99=30.0,
+                        query_p50=1.0,
+                        query_p95=2.0,
+                        query_p99=3.0,
+                    )
+                ),
+                encoding="utf-8",
+            )
+
+            discovered = discover_json_files([temp_path])
+            completed, skipped = load_completed_runs(discovered)
+            markdown = summarize_runtime_results.render_summary(
+                completed,
+                skipped=skipped,
+                include_queries=False,
+            )
+
+        self.assertIn("Wall-clock run time per completed result file:", markdown)
+        self.assertIn("| SQLite Indexed (1) | `90.00 s +- 0.00` |", markdown)
 
     def test_render_summary_merges_same_scale_campaigns_with_different_controls(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

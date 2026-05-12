@@ -120,6 +120,7 @@ class RunRuntimeMatrixTests(unittest.TestCase):
         self.assertEqual(args.olap_timeout_ms, 10000.0)
         self.assertIsNone(args.container_cpus)
         self.assertEqual(args.container_image, "python:3.12-bookworm")
+        self.assertIsNone(args.arcadedb_wheel_path)
 
     def test_parse_args_supports_no_iteration_progress_opt_out(self) -> None:
         with patch.object(
@@ -462,6 +463,37 @@ class RunRuntimeMatrixTests(unittest.TestCase):
 
         self.assertNotIn("--iteration-progress", command)
 
+    def test_validate_args_rejects_arcadedb_wheel_without_containers(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            wheel_path = Path(temp_dir) / "arcadedb_embedded-26.5.1.dev0.whl"
+            wheel_path.write_text("placeholder", encoding="utf-8")
+            args = argparse.Namespace(
+                workers=2,
+                repeats=1,
+                iterations=1000,
+                warmup=10,
+                oltp_iterations=None,
+                oltp_warmup=None,
+                olap_iterations=None,
+                olap_warmup=None,
+                oltp_timeout_ms=1000.0,
+                olap_timeout_ms=10000.0,
+                neo4j_docker_startup_timeout=120,
+                neo4j_port_scan_limit=10,
+                neo4j_password="secret",
+                postgres_dsn=None,
+                container_cpus=None,
+                container_image="python:3.12-bookworm",
+                arcadedb_worker_startup_timeout_s=None,
+                arcadedb_wheel_path=wheel_path,
+            )
+
+            with self.assertRaisesRegex(ValueError, "requires --container-cpus"):
+                validate_args(
+                    args,
+                    [run_runtime_matrix.VARIANT_BY_NAME["arcadedb-indexed"]],
+                )
+
     def test_cleanup_job_db_root_dir_removes_existing_job_directory(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -652,6 +684,69 @@ class RunRuntimeMatrixTests(unittest.TestCase):
             shell_command,
         )
         self.assertIn("--worker-startup-timeout-s 60.0", shell_command)
+        self.assertEqual(env["ARCADEDB_JVM_ARGS"], "-Xmx16g")
+
+    def test_build_command_uses_arcadedb_wheel_override_in_container(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            wheel_path = temp_path / "arcadedb_embedded-26.5.1.dev0.whl"
+            wheel_path.write_text("placeholder", encoding="utf-8")
+            args = argparse.Namespace(
+                workers=2,
+                repeats=1,
+                scale="medium",
+                iterations=1000,
+                warmup=10,
+                oltp_iterations=250,
+                oltp_warmup=5,
+                olap_iterations=50,
+                olap_warmup=2,
+                oltp_timeout_ms=750.0,
+                olap_timeout_ms=9000.0,
+                iteration_progress=True,
+                postgres_dsn=None,
+                neo4j_user="neo4j",
+                neo4j_database="neo4j",
+                neo4j_password="secret",
+                neo4j_docker_image="neo4j:5.26.24-community",
+                neo4j_docker_startup_timeout=120,
+                neo4j_port_scan_limit=10,
+                neo4j_keep_container=False,
+                arcadedb_jvm_args=None,
+                arcadedb_worker_startup_timeout_s=60.0,
+                arcadedb_wheel_path=wheel_path,
+                container_cpus=2.0,
+                container_image="python:3.12-bookworm",
+            )
+            validate_args(
+                args,
+                [run_runtime_matrix.VARIANT_BY_NAME["arcadedb-indexed"]],
+            )
+            job = run_runtime_matrix.MatrixJob(
+                sequence=1,
+                variant=run_runtime_matrix.VARIANT_BY_NAME["arcadedb-indexed"],
+                repeat=1,
+                output_path=temp_path / "result.json",
+                log_path=temp_path / "job.log",
+                db_root_dir=temp_path / "db",
+            )
+
+            command, env = build_command(
+                args,
+                job=job,
+                scale_preset=run_runtime_matrix.SCALE_PRESETS["medium"],
+            )
+
+        resolved_wheel_path = str(wheel_path.resolve())
+        self.assertEqual(command[:2], ["docker", "run"])
+        self.assertIn("--volume", command)
+        self.assertIn(
+            f"{resolved_wheel_path}:{resolved_wheel_path}:ro",
+            command,
+        )
+        shell_command = command[-1]
+        self.assertIn(resolved_wheel_path, shell_command)
+        self.assertIn("uv pip install --system --upgrade", shell_command)
         self.assertEqual(env["ARCADEDB_JVM_ARGS"], "-Xmx16g")
 
     def test_validate_args_requires_docker_when_container_cpus_enabled(self) -> None:

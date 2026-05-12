@@ -42,7 +42,6 @@ CONTAINER_PYTHON_PACKAGES = (
     "duckdb",
     "psycopg2-binary",
     "neo4j",
-    "arcadedb-embedded",
     "ladybug",
 )
 
@@ -442,6 +441,15 @@ def _parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--arcadedb-wheel-path",
+        type=Path,
+        help=(
+            "Optional local arcadedb-embedded wheel to install into each job "
+            "container instead of resolving the latest package from PyPI. "
+            "Requires --container-cpus."
+        ),
+    )
+    parser.add_argument(
         "--container-cpus",
         type=float,
         help=(
@@ -614,6 +622,13 @@ def _containerized_jobs_enabled(args: argparse.Namespace) -> bool:
     return getattr(args, "container_cpus", None) is not None
 
 
+def _resolve_arcadedb_install_target(args: argparse.Namespace) -> str:
+    wheel_path = getattr(args, "arcadedb_wheel_path", None)
+    if wheel_path is None:
+        return "arcadedb-embedded"
+    return str(Path(wheel_path).expanduser().resolve())
+
+
 def _build_container_cleanup(paths: list[Path]) -> str:
     host_uid = os.getuid()
     host_gid = os.getgid()
@@ -634,12 +649,14 @@ def _build_container_bootstrap(
     inner_command: list[str],
     *,
     cleanup_paths: list[Path],
+    arcadedb_install_target: str,
 ) -> str:
     repo_path = shlex.quote(str(REPO_ROOT))
     inner = " ".join(shlex.quote(part) for part in inner_command)
     apt_packages = " ".join(CONTAINER_APT_PACKAGES)
     python_packages = " ".join(
-        shlex.quote(package) for package in CONTAINER_PYTHON_PACKAGES
+        shlex.quote(package)
+        for package in (*CONTAINER_PYTHON_PACKAGES, arcadedb_install_target)
     )
     cleanup = _build_container_cleanup(cleanup_paths)
     return (
@@ -681,6 +698,15 @@ def _wrap_command_in_container(
                 f"{DOCKER_SOCKET_PATH}:{DOCKER_SOCKET_PATH}",
             ]
         )
+    arcadedb_wheel_path = getattr(args, "arcadedb_wheel_path", None)
+    if arcadedb_wheel_path is not None:
+        resolved_wheel_path = Path(arcadedb_wheel_path).expanduser().resolve()
+        command.extend(
+            [
+                "--volume",
+                f"{resolved_wheel_path}:{resolved_wheel_path}:ro",
+            ]
+        )
     arcadedb_jvm_args = env.get("ARCADEDB_JVM_ARGS")
     if arcadedb_jvm_args:
         command.extend(["--env", f"ARCADEDB_JVM_ARGS={arcadedb_jvm_args}"])
@@ -695,6 +721,7 @@ def _wrap_command_in_container(
                     job.output_path,
                     *([job.db_root_dir] if job.db_root_dir is not None else []),
                 ],
+                arcadedb_install_target=_resolve_arcadedb_install_target(args),
             ),
         ]
     )
@@ -863,6 +890,12 @@ def _initial_manifest(
             "container_image",
             DEFAULT_CONTAINER_IMAGE,
         ),
+        "arcadedb_wheel_path": (
+            str(Path(arcadedb_wheel_path).expanduser().resolve())
+            if (arcadedb_wheel_path := getattr(args, "arcadedb_wheel_path", None))
+            is not None
+            else None
+        ),
         "shuffle": not args.no_shuffle,
         "shuffle_seed": args.shuffle_seed,
         "arcadedb_jvm_args": _resolve_arcadedb_jvm_args(
@@ -1007,6 +1040,21 @@ def _validate_args(args: argparse.Namespace, variants: list[VariantSpec]) -> Non
         raise ValueError("--container-cpus requires docker in PATH.")
     if not getattr(args, "container_image", "").strip():
         raise ValueError("--container-image must not be empty.")
+    arcadedb_wheel_path = getattr(args, "arcadedb_wheel_path", None)
+    if arcadedb_wheel_path is not None:
+        resolved_wheel_path = Path(arcadedb_wheel_path).expanduser().resolve()
+        if container_cpus is None:
+            raise ValueError(
+                "--arcadedb-wheel-path requires --container-cpus because the "
+                "matrix runner only installs packages inside per-job containers."
+            )
+        if not resolved_wheel_path.exists():
+            raise ValueError("--arcadedb-wheel-path must point to an existing file.")
+        if not resolved_wheel_path.is_file():
+            raise ValueError("--arcadedb-wheel-path must point to a file.")
+        if resolved_wheel_path.suffix != ".whl":
+            raise ValueError("--arcadedb-wheel-path must point to a .whl file.")
+        args.arcadedb_wheel_path = resolved_wheel_path
     requires_neo4j_password = any(
         variant.uses_neo4j_docker for variant in variants
     )
@@ -1282,6 +1330,8 @@ def main() -> int:
             f"per-job containers: image={args.container_image}, "
             f"cpus={args.container_cpus}"
         )
+        if getattr(args, "arcadedb_wheel_path", None) is not None:
+            print(f"ArcadeDB wheel override: {args.arcadedb_wheel_path}")
     print(f"output root: {args.output_root}")
     print(f"session root: {session_dir}")
     print(

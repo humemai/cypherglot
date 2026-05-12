@@ -8,6 +8,7 @@ import os
 import statistics
 from collections import defaultdict
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +37,14 @@ EXCLUDED_OLTP_QUERY_NAMES = {
 }
 
 
+def _included_query_name(*, workload_name: str, query_name: Any) -> str | None:
+    if not isinstance(query_name, str) or not query_name:
+        return None
+    if workload_name == "oltp" and query_name in EXCLUDED_OLTP_QUERY_NAMES:
+        return None
+    return query_name
+
+
 @dataclass(frozen=True, slots=True)
 class RunRecord:
     path: Path
@@ -53,6 +62,7 @@ class ConfigSummary:
     corpus_path: str | None
     files: tuple[Path, ...]
     repeat_count: int
+    run_durations_s: list[float]
     workload_summaries: dict[str, dict[str, Any]]
 
 
@@ -362,8 +372,8 @@ def _normalized_setup(
         ),
         "ingest_ms": _to_float(setup.get("ingest_ms")),
         "index_ms": _to_float(setup.get("index_ms")),
+        "gav_ms": _to_float(setup.get("gav_ms")),
         "analyze_ms": _to_float(setup.get("analyze_ms"))
-        + _to_float(setup.get("gav_ms"))
         + _to_float(setup.get("checkpoint_ms")),
     }
 
@@ -404,13 +414,11 @@ def _query_metric_lists(
     )
     for suite in suites:
         for query in suite.get("queries", []):
-            query_name = query.get("name")
-            if not isinstance(query_name, str) or not query_name:
-                continue
-            if (
-                workload_name == "oltp"
-                and query_name in EXCLUDED_OLTP_QUERY_NAMES
-            ):
+            query_name = _included_query_name(
+                workload_name=workload_name,
+                query_name=query.get("name"),
+            )
+            if query_name is None:
                 continue
             query_metrics = metrics[query_name]
             end_to_end = query.get("end_to_end")
@@ -424,6 +432,7 @@ def _query_metric_lists(
 
 def _query_worker_startup_lists(
     *,
+    workload_name: str,
     suites: list[dict[str, Any]],
 ) -> dict[str, dict[str, list[float]]]:
     metrics: dict[str, dict[str, list[float]]] = defaultdict(
@@ -431,14 +440,16 @@ def _query_worker_startup_lists(
             "open_ms": [],
             "ready_ms": [],
             "startup_probe_execute_ms": [],
-            "startup_probe_end_to_end_ms": [],
             "startup_probe_reset_ms": [],
         }
     )
     for suite in suites:
         for query in suite.get("queries", []):
-            query_name = query.get("name")
-            if not isinstance(query_name, str) or not query_name:
+            query_name = _included_query_name(
+                workload_name=workload_name,
+                query_name=query.get("name"),
+            )
+            if query_name is None:
                 continue
             worker_startup = query.get("worker_startup")
             if not isinstance(worker_startup, dict):
@@ -463,13 +474,11 @@ def _suite_end_to_end_values(
         "p99_ms": [],
     }
     for query in suite.get("queries", []):
-        query_name = query.get("name")
-        if not isinstance(query_name, str) or not query_name:
-            continue
-        if (
-            workload_name == "oltp"
-            and query_name in EXCLUDED_OLTP_QUERY_NAMES
-        ):
+        query_name = _included_query_name(
+            workload_name=workload_name,
+            query_name=query.get("name"),
+        )
+        if query_name is None:
             continue
         end_to_end = query.get("end_to_end")
         if not isinstance(end_to_end, dict):
@@ -509,6 +518,22 @@ def _suite_end_to_end_metric_lists(
     }
 
 
+def _run_duration_seconds(payload: dict[str, Any]) -> float | None:
+    generated_at = payload.get("generated_at")
+    updated_at = payload.get("updated_at")
+    if not isinstance(generated_at, str) or not isinstance(updated_at, str):
+        return None
+    try:
+        started_at = datetime.fromisoformat(generated_at)
+        finished_at = datetime.fromisoformat(updated_at)
+    except ValueError:
+        return None
+    duration_s = (finished_at - started_at).total_seconds()
+    if duration_s < 0:
+        return None
+    return duration_s
+
+
 def _build_config_summary(group: list[RunRecord]) -> ConfigSummary:
     payload = group[0].payload
     grouped_suites = _suite_rows(group)
@@ -542,6 +567,7 @@ def _build_config_summary(group: list[RunRecord]) -> ConfigSummary:
                     "schema_constraints_ms",
                     "ingest_ms",
                     "index_ms",
+                    "gav_ms",
                     "analyze_ms",
                 )
             },
@@ -560,8 +586,16 @@ def _build_config_summary(group: list[RunRecord]) -> ConfigSummary:
                 workload_name=workload_name,
                 suites=suites,
             ),
-            "worker_startup": _query_worker_startup_lists(suites=suites),
+            "worker_startup": _query_worker_startup_lists(
+                workload_name=workload_name,
+                suites=suites,
+            ),
         }
+    run_durations_s = [
+        duration_s
+        for record in group
+        if (duration_s := _run_duration_seconds(record.payload)) is not None
+    ]
     return ConfigSummary(
         suite_name=suite_name,
         display_name=_display_suite_name(suite_name),
@@ -572,6 +606,7 @@ def _build_config_summary(group: list[RunRecord]) -> ConfigSummary:
         corpus_path=payload.get("corpus_path"),
         files=tuple(record.path for record in group),
         repeat_count=len(group),
+        run_durations_s=run_durations_s,
         workload_summaries=workload_summaries,
     )
 
@@ -714,10 +749,59 @@ def _render_workload_summary_table(
             "Schema / Constraints",
             "Ingest",
             "Index",
-            "Analyze",
+            "Analyze / Checkpoint",
             "End-to-end p50",
             "End-to-end p95",
             "End-to-end p99",
+        ],
+        rows,
+    )
+
+
+def _render_run_duration_table(summaries: list[ConfigSummary]) -> str:
+    rows: list[list[str]] = []
+    for summary in summaries:
+        if not summary.run_durations_s:
+            continue
+        rows.append(
+            [
+                _display_label(summary),
+                _stat_cell(summary.run_durations_s, unit="s"),
+            ]
+        )
+    return _table(["Combo", "Wall-clock run time"], rows)
+
+
+def _render_arcadedb_setup_breakdown_table(
+    summaries: list[ConfigSummary],
+    *,
+    workload_name: str,
+) -> str:
+    rows: list[list[str]] = []
+    for summary in summaries:
+        workload = summary.workload_summaries.get(workload_name)
+        if workload is None:
+            continue
+        rows.append(
+            [
+                _display_label(summary),
+                _stat_cell(workload["setup"]["connect_reset_ms"]),
+                _stat_cell(workload["setup"]["schema_constraints_ms"]),
+                _stat_cell(workload["setup"]["ingest_ms"]),
+                _stat_cell(workload["setup"]["index_ms"]),
+                _stat_cell(workload["setup"]["gav_ms"]),
+                _stat_cell(workload["setup"]["analyze_ms"]),
+            ]
+        )
+    return _table(
+        [
+            "Combo",
+            "Connect / Reset",
+            "Schema / Constraints",
+            "Ingest",
+            "Index",
+            "GAV",
+            "Analyze / Checkpoint",
         ],
         rows,
     )
@@ -781,6 +865,14 @@ def _render_suite_comparison_table(summaries: list[ConfigSummary]) -> str:
                 ]
             )
     return _table(["Suite", "p50", "p95", "p99"], rows)
+
+
+def _arcadedb_summaries(summaries: list[ConfigSummary]) -> list[ConfigSummary]:
+    return [
+        summary
+        for summary in summaries
+        if summary.suite_name.startswith("arcadedb_embedded_")
+    ]
 
 
 def _render_query_breakdown_table(
@@ -895,7 +987,8 @@ def _direct_runner_notes(summaries: list[ConfigSummary]) -> list[str]:
                 "LadybugDB is also a direct-Cypher runner, and it currently uses a",
                 "post-load `CHECKPOINT` instead of an `ANALYZE` step. In the summary",
                 (
-                    "tables below, that checkpoint time is shown in the `Analyze` "
+                    "tables below, that checkpoint time is shown in the "
+                    "`Analyze / Checkpoint` "
                     "column so"
                 ),
                 "the setup layout stays consistent across engines.",
@@ -919,14 +1012,14 @@ def _direct_runner_notes(summaries: list[ConfigSummary]) -> list[str]:
                     "`gav_ms`; in the"
                 ),
                 (
-                    "summary tables below, that engine-specific post-load work is "
-                    "folded into the"
+                    "cross-engine setup tables below, that engine-specific post-load "
+                    "work is omitted so"
                 ),
                 (
-                    "`Analyze` column, along with the checkpoint step, so the "
-                    "setup layout stays"
+                    "only shared phases appear side by side. The ArcadeDB-specific "
+                    "timing tables below break out"
                 ),
-                "consistent across engines.",
+                "`GAV` separately and keep `Analyze / Checkpoint` as a shared bucket.",
                 "",
             ]
         )
@@ -996,6 +1089,7 @@ def _render_campaign(
     include_queries: bool,
 ) -> str:
     lead = summaries[0]
+    arcadedb_summaries = _arcadedb_summaries(summaries)
     graph_scale = lead.graph_scale
     node_property_fields = (
         4
@@ -1056,6 +1150,10 @@ def _render_campaign(
     lines.extend(
         [
             "",
+            "Wall-clock run time per completed result file:",
+            "",
+            _render_run_duration_table(summaries),
+            "",
             "OLTP summary:",
             "",
             _render_workload_summary_table(summaries, workload_name="oltp"),
@@ -1094,6 +1192,37 @@ def _render_campaign(
             *_caveats(summaries),
         ]
     )
+    if arcadedb_summaries:
+        lines.extend(
+            [
+                "",
+                f"#### {lead.scale_name.capitalize()} ArcadeDB-specific timings",
+                "",
+                "These tables keep ArcadeDB-only timing phases out of the",
+                "cross-engine comparison tables.",
+                "",
+                "ArcadeDB setup hierarchy is `connect/reset -> schema/constraints ->",
+                (
+                    "ingest -> index -> GAV -> analyze/checkpoint`, with `GAV` "
+                    "present only"
+                ),
+                "for OLAP fixtures.",
+                "",
+                "ArcadeDB setup phase breakdown, OLTP:",
+                "",
+                _render_arcadedb_setup_breakdown_table(
+                    arcadedb_summaries,
+                    workload_name="oltp",
+                ),
+                "",
+                "ArcadeDB setup phase breakdown, OLAP:",
+                "",
+                _render_arcadedb_setup_breakdown_table(
+                    arcadedb_summaries,
+                    workload_name="olap",
+                ),
+            ]
+        )
     if include_queries:
         workload_label = {"oltp": "OLTP", "olap": "OLAP"}
         percentile_label = {
@@ -1105,7 +1234,6 @@ def _render_campaign(
             "open_ms": "open",
             "ready_ms": "ready",
             "startup_probe_execute_ms": "startup probe execute",
-            "startup_probe_end_to_end_ms": "startup probe end-to-end",
             "startup_probe_reset_ms": "startup probe reset",
         }
         lines.extend(
@@ -1129,13 +1257,17 @@ def _render_campaign(
                     "These ArcadeDB-only tables also show worker startup timing",
                     "separately from query execution, using the worker-side",
                     "`worker_startup` metrics recorded in the raw JSON.",
+                    (
+                        "`open` is already reported here; worker close time is not "
+                        "currently"
+                    ),
+                    "recorded in the raw benchmark payloads.",
                 ]
             )
             for workload_name in ("oltp", "olap"):
                 for metric_key in (
                     "open_ms",
                     "startup_probe_execute_ms",
-                    "startup_probe_end_to_end_ms",
                     "startup_probe_reset_ms",
                 ):
                     table = _render_worker_startup_breakdown_table(
@@ -1149,8 +1281,9 @@ def _render_campaign(
                         [
                             "",
                             (
-                                f"##### {workload_label[workload_name]} ArcadeDB worker "
-                                f"startup breakdown, `{worker_startup_label[metric_key]}`"
+                                f"##### {workload_label[workload_name]} "
+                                "ArcadeDB worker startup breakdown, "
+                                f"`{worker_startup_label[metric_key]}`"
                             ),
                             "",
                             table,
