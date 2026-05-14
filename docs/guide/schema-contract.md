@@ -74,6 +74,12 @@ Type identity is carried by table selection itself. There is no separate
 canonical `node_labels` table in the target contract, because node type filters
 resolve to the appropriate typed table directly.
 
+This contract is intentionally rigid for performance. In the current type-aware
+path, a stored node maps to one declared node type and therefore does not carry
+multiple labels through the physical schema contract. This is a deliberate
+storage-contract tradeoff rather than a claim about Cypher semantics; broader
+label membership would require a different schema path.
+
 ## Result shape contract
 
 The physical schema is fixed and relational, but Cypher return values can still

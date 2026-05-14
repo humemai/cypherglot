@@ -125,6 +125,11 @@ CREATE INDEX idx_cg_edge_works_at_to_from ON cg_edge_works_at(to_id, from_id);
 CypherGlot's schema contract is the generated type-aware layout rather than a
 generic `nodes` / `edges` / `node_labels` family.
 
+That contract is intentionally performance-oriented and currently assumes one
+stored node type per physical node table row rather than native multi-label
+nodes. This is a storage-contract tradeoff, not a claim about Cypher
+semantics; broader label membership would require a different schema path.
+
 See the dedicated guide for the full schema contract, column semantics, and
 indexing notes:
 
