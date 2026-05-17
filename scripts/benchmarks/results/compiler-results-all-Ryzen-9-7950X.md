@@ -774,3 +774,4 @@ Platform: `Linux-6.17.9-76061709-generic-x86_64-with-glibc2.35`
   - `generator`: `/tmp/sqlglot-pure-sfhb2f2f/sqlglot/generator.py`
   - `tokenizer_core`: `/tmp/sqlglot-pure-sfhb2f2f/sqlglot/tokenizer_core.py`
 
+
