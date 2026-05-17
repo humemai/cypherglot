@@ -53,7 +53,12 @@ from scripts.benchmarks.common.runtime_shared import (
 try:
     import arcadedb_embedded as arcadedb
 except ImportError:  # pragma: no cover - optional dependency
-    arcadedb = SimpleNamespace()
+    arcadedb = SimpleNamespace(
+        __version__=None,
+        database_exists=None,
+        open_database=None,
+        create_database=None,
+    )
     _ARCADEDB_AVAILABLE = False
 
     class ArcadeDBQueryError(RuntimeError):
@@ -937,9 +942,8 @@ def _read_arcadedb_worker_progress(
 ) -> tuple[list[dict[str, object]], int]:
     if not progress_path.exists():
         return [], offset
-    with progress_path.open("r", encoding="utf-8") as handle:
-        handle.seek(offset)
-        chunk = handle.read()
+    content = progress_path.read_text(encoding="utf-8")
+    chunk = content[offset:]
     if not chunk:
         return [], offset
 

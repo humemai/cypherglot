@@ -630,19 +630,32 @@ def _resolve_arcadedb_install_target(args: argparse.Namespace) -> str:
 
 
 def _build_container_cleanup(paths: list[Path]) -> str:
-    host_uid = os.getuid()
-    host_gid = os.getgid()
     cleanup_lines = ["cleanup() {"]
-    for path in paths:
-        quoted = shlex.quote(str(path))
-        command = (
-            f"if [ -e {quoted} ]; then chown -R {host_uid}:{host_gid} "
-            f"{quoted} >/dev/null 2>&1 || true; fi"
-        )
-        cleanup_lines.append(f"  {command}")
+    host_uid = getattr(os, "getuid", None)
+    host_gid = getattr(os, "getgid", None)
+    if host_uid is not None and host_gid is not None:
+        uid = host_uid()
+        gid = host_gid()
+        for path in paths:
+            quoted = shlex.quote(str(path))
+            command = (
+                f"if [ -e {quoted} ]; then chown -R {uid}:{gid} "
+                f"{quoted} >/dev/null 2>&1 || true; fi"
+            )
+            cleanup_lines.append(f"  {command}")
     cleanup_lines.append("}")
     cleanup_lines.append("trap cleanup EXIT")
     return "\n".join(cleanup_lines)
+
+
+def _validate_runtime_environment(args: argparse.Namespace) -> None:
+    container_cpus = getattr(args, "container_cpus", None)
+    if container_cpus is None:
+        return
+    if shutil.which("docker") is None:
+        raise ValueError("--container-cpus requires docker in PATH.")
+    if sys.platform != "linux":
+        raise ValueError("--container-cpus is currently only supported on Linux.")
 
 
 def _build_container_bootstrap(
@@ -1034,10 +1047,6 @@ def _validate_args(args: argparse.Namespace, variants: list[VariantSpec]) -> Non
     container_cpus = getattr(args, "container_cpus", None)
     if container_cpus is not None and container_cpus <= 0:
         raise ValueError("--container-cpus must be positive.")
-    if container_cpus is not None and shutil.which("docker") is None:
-        raise ValueError("--container-cpus requires docker in PATH.")
-    if container_cpus is not None and sys.platform != "linux":
-        raise ValueError("--container-cpus is currently only supported on Linux.")
     if not getattr(args, "container_image", "").strip():
         raise ValueError("--container-image must not be empty.")
     arcadedb_wheel_path = getattr(args, "arcadedb_wheel_path", None)
@@ -1301,6 +1310,8 @@ def main() -> int:
 
     selected_variants = _selected_variants(args.variants)
     _validate_args(args, selected_variants)
+    if _containerized_jobs_enabled(args) and not args.dry_run:
+        _validate_runtime_environment(args)
 
     scale_preset = SCALE_PRESETS[args.scale]
     run_stamp = _resolve_run_stamp(args.run_stamp)

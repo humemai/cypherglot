@@ -52,7 +52,11 @@ from scripts.benchmarks.common.runtime_shared import (
 try:
     import ladybug
 except ImportError:  # pragma: no cover - optional dependency
-    ladybug = SimpleNamespace()
+    ladybug = SimpleNamespace(
+        __version__=None,
+        Database=None,
+        Connection=None,
+    )
     _LADYBUG_AVAILABLE = False
 else:
     _LADYBUG_AVAILABLE = True
@@ -252,7 +256,7 @@ def _seed_ladybug_from_fixture(
         table_name = node_type.table_name
         csv_path = sqlite_source.table_csv_paths[table_name]
         conn.execute(
-            f'COPY {node_type.name} FROM "{csv_path}" '
+            f'COPY {node_type.name} FROM "{csv_path.as_posix()}" '
             '(header=true, parallel=false)'
         )
 
@@ -265,7 +269,7 @@ def _seed_ladybug_from_fixture(
         )
         for csv_path in csv_paths:
             conn.execute(
-                f'COPY {edge_type.name} FROM "{csv_path}" '
+                f'COPY {edge_type.name} FROM "{csv_path.as_posix()}" '
                 '(header=true, parallel=false)'
             )
 

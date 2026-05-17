@@ -604,17 +604,23 @@ def _sqlglot_import_context(mode: str):
             ignore=shutil.ignore_patterns(
                 "*.so",
                 "*.so.*",
+                "*.pyd",
+                "*.pyd.*",
+                "*.dll",
                 "*__mypyc*.so",
+                "*__mypyc*.pyd",
                 "__pycache__",
             ),
         )
         _purge_sqlglot_modules()
+        importlib.invalidate_caches()
         sys.path.insert(0, str(temp_root))
         try:
             yield
         finally:
             sys.path.pop(0)
             _purge_sqlglot_modules()
+            importlib.invalidate_caches()
             sys.modules.update(saved_modules)
 
 

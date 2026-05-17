@@ -32,6 +32,10 @@ resolve_arcadedb_jvm_args = getattr(
 build_jobs = getattr(run_runtime_matrix, "_build_jobs")
 build_command = getattr(run_runtime_matrix, "_build_command")
 validate_args = getattr(run_runtime_matrix, "_validate_args")
+validate_runtime_environment = getattr(
+    run_runtime_matrix,
+    "_validate_runtime_environment",
+)
 format_progress_snapshot = getattr(
     run_runtime_matrix,
     "_format_progress_snapshot",
@@ -772,7 +776,4 @@ class RunRuntimeMatrixTests(unittest.TestCase):
 
         with patch.object(run_runtime_matrix.shutil, "which", return_value=None):
             with self.assertRaisesRegex(ValueError, "requires docker in PATH"):
-                validate_args(
-                    args,
-                    [run_runtime_matrix.VARIANT_BY_NAME["sqlite-indexed"]],
-                )
+                validate_runtime_environment(args)
