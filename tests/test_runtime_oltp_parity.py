@@ -24,6 +24,7 @@ _BackendRunner = olap_parity._BackendRunner
 _create_managed_directory = olap_parity._create_managed_directory
 _prepare_generated_graph_fixture = olap_parity._prepare_generated_graph_fixture
 _execute_bound_postgresql_sql = olap_parity._execute_bound_postgresql_sql
+_duckdb_available = olap_parity._benchmark_sql_runtime_core._duckdb_available
 _ladybug_available = olap_parity._ladybug_available
 _prepare_ladybug_fixture = olap_parity._prepare_ladybug_fixture
 _rewrite_ladybug_query = olap_parity._rewrite_ladybug_query
@@ -179,6 +180,8 @@ class RuntimeOltpParityTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         super().setUpClass()
+        if not _duckdb_available():
+            raise unittest.SkipTest("duckdb is not installed")
         cls._postgres_dsn = olap_parity.acquire_postgresql_test_dsn()
         cls.graph_schema, cls.edge_plans = _build_graph_schema(SMALL_SCALE)
         cls.schema_context = cypherglot.CompilerSchemaContext.type_aware(

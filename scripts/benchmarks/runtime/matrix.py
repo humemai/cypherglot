@@ -1034,10 +1034,10 @@ def _validate_args(args: argparse.Namespace, variants: list[VariantSpec]) -> Non
     container_cpus = getattr(args, "container_cpus", None)
     if container_cpus is not None and container_cpus <= 0:
         raise ValueError("--container-cpus must be positive.")
-    if container_cpus is not None and sys.platform != "linux":
-        raise ValueError("--container-cpus is currently only supported on Linux.")
     if container_cpus is not None and shutil.which("docker") is None:
         raise ValueError("--container-cpus requires docker in PATH.")
+    if container_cpus is not None and sys.platform != "linux":
+        raise ValueError("--container-cpus is currently only supported on Linux.")
     if not getattr(args, "container_image", "").strip():
         raise ValueError("--container-image must not be empty.")
     arcadedb_wheel_path = getattr(args, "arcadedb_wheel_path", None)

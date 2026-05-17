@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 import platform
-import resource
 import signal
 import sys
 import threading
@@ -21,6 +20,11 @@ from pathlib import Path
 from typing import Any, Callable, TypeVar
 
 import cypherglot
+
+try:
+    import resource
+except ImportError:  # pragma: no cover - Windows
+    resource = None
 
 
 RuntimeProgressCallback = Callable[[dict[str, object]], None]
@@ -352,11 +356,47 @@ def _rss_mib() -> float:
                 rss_kib = int(line.split()[1])
                 return rss_kib / 1024.0
 
-    usage = resource.getrusage(resource.RUSAGE_SELF)
-    rss = float(usage.ru_maxrss)
-    if platform.system() == "Darwin":
-        return rss / (1024.0 * 1024.0)
-    return rss / 1024.0
+    if resource is not None:
+        usage = resource.getrusage(resource.RUSAGE_SELF)
+        rss = float(usage.ru_maxrss)
+        if platform.system() == "Darwin":
+            return rss / (1024.0 * 1024.0)
+        return rss / 1024.0
+
+    if sys.platform == "win32":
+        import ctypes
+        from ctypes import wintypes
+
+        class PROCESS_MEMORY_COUNTERS(ctypes.Structure):
+            _fields_ = [
+                ("cb", wintypes.DWORD),
+                ("PageFaultCount", wintypes.DWORD),
+                ("PeakWorkingSetSize", ctypes.c_size_t),
+                ("WorkingSetSize", ctypes.c_size_t),
+                ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+                ("PagefileUsage", ctypes.c_size_t),
+                ("PeakPagefileUsage", ctypes.c_size_t),
+            ]
+
+        counters = PROCESS_MEMORY_COUNTERS(
+            cb=ctypes.sizeof(PROCESS_MEMORY_COUNTERS)
+        )
+        get_process_memory_info = ctypes.windll.psapi.GetProcessMemoryInfo
+        get_process_memory_info.argtypes = [
+            wintypes.HANDLE,
+            ctypes.POINTER(PROCESS_MEMORY_COUNTERS),
+            wintypes.DWORD,
+        ]
+        get_process_memory_info.restype = wintypes.BOOL
+        process = ctypes.windll.kernel32.GetCurrentProcess()
+        if not get_process_memory_info(process, ctypes.byref(counters), counters.cb):
+            raise ctypes.WinError()
+        return float(counters.WorkingSetSize) / (1024.0 * 1024.0)
+
+    return 0.0
 
 
 def _write_json_atomic(path: Path, payload: dict[str, object]) -> None:

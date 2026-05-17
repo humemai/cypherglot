@@ -22,6 +22,7 @@ import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Callable
 
 import cypherglot
@@ -51,7 +52,10 @@ from scripts.benchmarks.common.runtime_shared import (
 try:
     import ladybug
 except ImportError:  # pragma: no cover - optional dependency
-    ladybug = None
+    ladybug = SimpleNamespace()
+    _LADYBUG_AVAILABLE = False
+else:
+    _LADYBUG_AVAILABLE = True
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -95,11 +99,11 @@ class LadybugFixture:
 
 
 def _ladybug_available() -> bool:
-    return ladybug is not None
+    return _LADYBUG_AVAILABLE
 
 
 def _ladybug_version() -> str | None:
-    if ladybug is None:
+    if not _ladybug_available():
         return None
     version = getattr(ladybug, "__version__", None)
     if version is None:
@@ -108,7 +112,7 @@ def _ladybug_version() -> str | None:
 
 
 def _open_ladybug(db_path: Path) -> tuple[Any, Any]:
-    if ladybug is None:
+    if not _ladybug_available():
         raise ValueError(
             "ladybug is not installed. Install it with `uv pip install ladybug`."
         )

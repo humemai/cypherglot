@@ -21,6 +21,7 @@ import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Callable
 
 import cypherglot
@@ -52,19 +53,14 @@ from scripts.benchmarks.common.runtime_shared import (
 try:
     import arcadedb_embedded as arcadedb
 except ImportError:  # pragma: no cover - optional dependency
-    arcadedb = None
+    arcadedb = SimpleNamespace()
+    _ARCADEDB_AVAILABLE = False
 
-if arcadedb is None:
-    ARCADEDB_QUERY_EXCEPTIONS: tuple[type[BaseException], ...] = (
-        RuntimeError,
-        ValueError,
-    )
+    class ArcadeDBQueryError(RuntimeError):
+        pass
 else:
-    ARCADEDB_QUERY_EXCEPTIONS = (
-        arcadedb.ArcadeDBError,
-        RuntimeError,
-        ValueError,
-    )
+    _ARCADEDB_AVAILABLE = True
+    ArcadeDBQueryError = arcadedb.ArcadeDBError
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -158,16 +154,15 @@ class ArcadeDBFixtureSetupError(RuntimeError):
 
 
 def _arcadedb_available() -> bool:
-    return arcadedb is not None
+    return _ARCADEDB_AVAILABLE
 
 
 def _arcadedb_version() -> str | None:
-    if arcadedb is None:
-        return None
-
     try:
         return importlib.metadata.version("arcadedb-embedded")
     except importlib.metadata.PackageNotFoundError:
+        if not _ARCADEDB_AVAILABLE:
+            return None
         version = getattr(arcadedb, "__version__", None)
         if version is None:
             return None
@@ -175,7 +170,7 @@ def _arcadedb_version() -> str | None:
 
 
 def _open_arcadedb(db_path: Path) -> Any:
-    if arcadedb is None:
+    if not _arcadedb_available():
         raise ValueError(
             "arcadedb-embedded is not installed. Install it with "
             "`uv pip install arcadedb-embedded` or a dev build such as "
@@ -428,7 +423,7 @@ def _create_arcadedb_gav(
 ) -> None:
     try:
         db.command("sql", _arcadedb_gav_statement(graph_schema))
-    except ARCADEDB_QUERY_EXCEPTIONS as exc:
+    except (ArcadeDBQueryError, RuntimeError, ValueError) as exc:
         raise RuntimeError(
             "ArcadeDB Graph Analytical View SQL support is required for the "
             f"OLAP benchmark path: {exc}"
@@ -492,7 +487,7 @@ def _prepare_arcadedb_olap_gav(
 def _rollback_arcadedb_transaction(db: Any) -> None:
     try:
         db.rollback()
-    except ARCADEDB_QUERY_EXCEPTIONS as exc:
+    except (ArcadeDBQueryError, RuntimeError, ValueError) as exc:
         message = str(exc).lower()
         if "not begun" not in message and "no active transaction" not in message:
             raise
@@ -1097,7 +1092,7 @@ def _run_arcadedb_query_worker(spec_path: Path) -> int:
             encoding="utf-8",
         )
         return 0
-    except ARCADEDB_QUERY_EXCEPTIONS as exc:
+    except (ArcadeDBQueryError, RuntimeError, ValueError) as exc:
         result_path.write_text(
             json.dumps(
                 {
@@ -1257,7 +1252,7 @@ def _run_arcadedb_query_worker_server(spec_path: Path) -> int:
                     "end_to_end": _summarize(end_to_end_latencies),
                     "reset": _summarize(reset_latencies),
                 }
-            except ARCADEDB_QUERY_EXCEPTIONS as exc:
+            except (ArcadeDBQueryError, RuntimeError, ValueError) as exc:
                 response = {
                     "name": query.name,
                     "workload": query.workload,
@@ -1874,7 +1869,7 @@ def _measure_query(
             },
             "execution_mode": ARCADEDB_ITERATIVE_EXECUTION_MODE,
         }
-    except ARCADEDB_QUERY_EXCEPTIONS as exc:
+    except (ArcadeDBQueryError, RuntimeError, ValueError) as exc:
         return {
             "name": query.name,
             "workload": query.workload,
@@ -1929,7 +1924,7 @@ def _measure_query(
             },
             "execution_mode": ARCADEDB_ITERATIVE_EXECUTION_MODE,
         }
-    except ARCADEDB_QUERY_EXCEPTIONS as exc:
+    except (ArcadeDBQueryError, RuntimeError, ValueError) as exc:
         return {
             "name": query.name,
             "workload": query.workload,
