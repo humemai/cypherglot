@@ -188,7 +188,7 @@ def _open_arcadedb(db_path: Path) -> Any:
             "`uv pip install arcadedb-embedded` or a dev build such as "
             "`uv pip install arcadedb-embedded==26.4.1.dev3`."
         )
-    db_path_str = str(db_path)
+    db_path_str = db_path.as_posix()
     if database_exists(db_path_str):
         return open_database(db_path_str)
     return create_database(db_path_str)

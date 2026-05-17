@@ -127,151 +127,151 @@ class TestValidate(unittest.TestCase):
             ),
             (
                 "MATCH (u:User) WITH u AS person RETURN type(person) AS rel_type",
-                "supports type\(\.\.\.\) in the WITH subset only over admitted relationship entity bindings",
+                r"supports type\(\.\.\.\) in the WITH subset only over admitted relationship entity bindings",
             ),
             (
                 "MATCH (u:User) WITH u AS person RETURN coalesce(person, 'unknown') AS display_name",
-                "supports coalesce\(\.\.\.\) in the WITH subset only as coalesce\(entity_alias.field, literal_or_parameter\) or coalesce\(scalar_alias, literal_or_parameter\)",
+                r"supports coalesce\(\.\.\.\) in the WITH subset only as coalesce\(entity_alias.field, literal_or_parameter\) or coalesce\(scalar_alias, literal_or_parameter\)",
             ),
             (
                 "MATCH (u:User) WITH u AS person RETURN replace(person, 'A', 'B') AS display_name",
-                "supports replace\(\.\.\.\) in the WITH subset only as replace\(admitted_input, literal_or_parameter, literal_or_parameter\)",
+                r"supports replace\(\.\.\.\) in the WITH subset only as replace\(admitted_input, literal_or_parameter, literal_or_parameter\)",
             ),
             (
                 "MATCH (u:User) WITH u AS person RETURN replace(person.name, person.age, 'B') AS display_name",
-                "supports replace\(\.\.\.\) in the WITH subset only as replace\(admitted_input, literal_or_parameter, literal_or_parameter\)",
+                r"supports replace\(\.\.\.\) in the WITH subset only as replace\(admitted_input, literal_or_parameter, literal_or_parameter\)",
             ),
             (
                 "MATCH (u:User) WITH u AS person RETURN right(person, 2) AS value",
-                "supports left\(\.\.\.\) and right\(\.\.\.\) in the WITH subset only as function\(admitted_input, literal_or_parameter\)",
+                r"supports left\(\.\.\.\) and right\(\.\.\.\) in the WITH subset only as function\(admitted_input, literal_or_parameter\)",
             ),
             (
                 "MATCH (u:User) WITH u AS person RETURN left(person.name, person.age) AS value",
-                "supports left\(\.\.\.\) and right\(\.\.\.\) in the WITH subset only as function\(admitted_input, literal_or_parameter\)",
+                r"supports left\(\.\.\.\) and right\(\.\.\.\) in the WITH subset only as function\(admitted_input, literal_or_parameter\)",
             ),
             (
                 "MATCH (u:User) WITH u AS person RETURN split(person, ' ') AS value",
-                "supports split\(\.\.\.\) in the WITH subset only as split\(admitted_input, literal_or_parameter\)",
+                r"supports split\(\.\.\.\) in the WITH subset only as split\(admitted_input, literal_or_parameter\)",
             ),
             (
                 "MATCH (u:User) WITH u AS person RETURN split(person.name, person.age) AS value",
-                "supports split\(\.\.\.\) in the WITH subset only as split\(admitted_input, literal_or_parameter\)",
+                r"supports split\(\.\.\.\) in the WITH subset only as split\(admitted_input, literal_or_parameter\)",
             ),
             (
                 "MATCH (u:User) WITH u AS person RETURN abs(person) AS magnitude",
-                "supports abs\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
+                r"supports abs\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) WITH u AS person RETURN sign(person) AS age_sign",
-                "supports sign\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
+                r"supports sign\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) WITH u AS person RETURN round(person) AS value",
-                "supports round\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
+                r"supports round\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) WITH u AS person RETURN ceil(person) AS value",
-                "supports ceil\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
+                r"supports ceil\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) WITH u AS person RETURN floor(person) AS value",
-                "supports floor\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
+                r"supports floor\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) WITH u AS person RETURN sqrt(person) AS value",
-                "supports sqrt\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
+                r"supports sqrt\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) WITH u AS person RETURN exp(person) AS value",
-                "supports exp\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
+                r"supports exp\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) WITH u AS person RETURN sin(person) AS value",
-                "supports sin\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
+                r"supports sin\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) WITH u AS person RETURN cos(person) AS value",
-                "supports cos\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
+                r"supports cos\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) WITH u AS person RETURN tan(person) AS value",
-                "supports tan\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
+                r"supports tan\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) WITH u AS person RETURN asin(person) AS value",
-                "supports asin\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
+                r"supports asin\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) WITH u AS person RETURN acos(person) AS value",
-                "supports acos\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
+                r"supports acos\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) WITH u AS person RETURN atan(person) AS value",
-                "supports atan\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
+                r"supports atan\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) WITH u AS person RETURN ln(person) AS value",
-                "supports ln\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
+                r"supports ln\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) WITH u AS person RETURN log(person) AS value",
-                "supports log\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
+                r"supports log\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) WITH u AS person RETURN radians(person) AS value",
-                "supports radians\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
+                r"supports radians\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) WITH u AS person RETURN degrees(person) AS value",
-                "supports degrees\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
+                r"supports degrees\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) WITH u AS person RETURN log10(person) AS value",
-                "supports log10\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
+                r"supports log10\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) WITH u AS person RETURN ltrim(person) AS value",
-                "supports ltrim\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
+                r"supports ltrim\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) WITH u AS person RETURN rtrim(person) AS value",
-                "supports rtrim\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
+                r"supports rtrim\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) WITH u AS person RETURN toString(person) AS text",
-                "supports toString\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
+                r"supports toString\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) WITH u AS person RETURN toInteger(person) AS value",
-                "supports toInteger\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
+                r"supports toInteger\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) WITH u AS person RETURN toFloat(person) AS value",
-                "supports toFloat\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
+                r"supports toFloat\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) WITH u AS person RETURN toBoolean(person) AS value",
-                "supports toBoolean\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
+                r"supports toBoolean\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) WITH u AS person RETURN reverse(person) AS value",
-                "supports reverse\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
+                r"supports reverse\(\.\.\.\) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) WITH u AS person RETURN substring(person, 0, 2) AS value",
-                "supports substring\(\.\.\.\) in the WITH subset only as substring\(admitted_input, literal_or_parameter\) or substring\(admitted_input, literal_or_parameter, literal_or_parameter\)",
+                r"supports substring\(\.\.\.\) in the WITH subset only as substring\(admitted_input, literal_or_parameter\) or substring\(admitted_input, literal_or_parameter, literal_or_parameter\)",
             ),
             (
                 "MATCH (u:User) WITH u AS person RETURN substring(person.name, person.age, 2) AS value",
-                "supports substring\(\.\.\.\) in the WITH subset only as substring\(admitted_input, literal_or_parameter\) or substring\(admitted_input, literal_or_parameter, literal_or_parameter\)",
+                r"supports substring\(\.\.\.\) in the WITH subset only as substring\(admitted_input, literal_or_parameter\) or substring\(admitted_input, literal_or_parameter, literal_or_parameter\)",
             ),
             (
                 "MATCH (u:User) WITH u AS person RETURN size(person) AS n",
-                "supports size\(\.\.\.\) in the WITH subset only over admitted entity-field projections, admitted id/type outputs, scalar bindings, or scalar literal/parameter inputs",
+                r"supports size\(\.\.\.\) in the WITH subset only over admitted entity-field projections, admitted id/type outputs, scalar bindings, or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) WITH u AS person RETURN size(type(person)) AS n",
-                "supports size\(\.\.\.\) in the WITH subset only over admitted entity-field projections, admitted id/type outputs, scalar bindings, or scalar literal/parameter inputs",
+                r"supports size\(\.\.\.\) in the WITH subset only over admitted entity-field projections, admitted id/type outputs, scalar bindings, or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) WITH u AS person RETURN 'tag'",
@@ -283,11 +283,11 @@ class TestValidate(unittest.TestCase):
             ),
             (
                 "MATCH (u:User) WITH u AS person RETURN person >= 18 AS adult",
-                "supports predicate RETURN items in the WITH subset only as scalar_alias OP value, entity_alias.field OP value, id\(entity_alias\) OP value, type\(rel_alias\) OP value, or size\(admitted_input\) OP value",
+                r"supports predicate RETURN items in the WITH subset only as scalar_alias OP value, entity_alias.field OP value, id\(entity_alias\) OP value, type\(rel_alias\) OP value, or size\(admitted_input\) OP value",
             ),
             (
                 "MATCH (u:User) WITH u AS person RETURN type(person) = 'User' AS is_user",
-                "supports predicate RETURN items in the WITH subset only as scalar_alias OP literal_or_parameter, entity_alias.field OP literal_or_parameter, id\(entity_alias\) OP literal_or_parameter, type\(rel_alias\) OP literal_or_parameter, or size\(admitted_input\) OP literal_or_parameter",
+                r"supports predicate RETURN items in the WITH subset only as scalar_alias OP literal_or_parameter, entity_alias.field OP literal_or_parameter, id\(entity_alias\) OP literal_or_parameter, type\(rel_alias\) OP literal_or_parameter, or size\(admitted_input\) OP literal_or_parameter",
             ),
             (
                 "MATCH (u:User) WITH u.name RETURN u.name",
@@ -295,27 +295,27 @@ class TestValidate(unittest.TestCase):
             ),
             (
                 "MATCH (u:User) WITH u AS person RETURN count(missing) AS total",
-                "requires count\(\.\.\.\) in the WITH subset to target an admitted binding alias",
+                r"requires count\(\.\.\.\) in the WITH subset to target an admitted binding alias",
             ),
             (
                 "MATCH (u:User) WITH u.name AS name RETURN properties(name) AS props",
-                "supports properties\(\.\.\.\) in the WITH subset only over admitted entity bindings",
+                r"supports properties\(\.\.\.\) in the WITH subset only over admitted entity bindings",
             ),
             (
                 "MATCH (a:User)-[r:KNOWS]->(b:User) WITH r AS rel RETURN labels(rel) AS labels",
-                "supports labels\(\.\.\.\) in the WITH subset only over admitted node entity bindings",
+                r"supports labels\(\.\.\.\) in the WITH subset only over admitted node entity bindings",
             ),
             (
                 "MATCH (u:User) WITH u.name AS name RETURN keys(name) AS keys",
-                "supports keys\(\.\.\.\) in the WITH subset only over admitted entity bindings",
+                r"supports keys\(\.\.\.\) in the WITH subset only over admitted entity bindings",
             ),
             (
                 "MATCH (u:User) WITH u AS person RETURN startNode(person) AS start",
-                "supports startNode\(\.\.\.\) in the WITH subset only over admitted relationship entity bindings",
+                r"supports startNode\(\.\.\.\) in the WITH subset only over admitted relationship entity bindings",
             ),
             (
                 "MATCH (u:User) WITH u AS person RETURN endNode(person) AS ending",
-                "supports endNode\(\.\.\.\) in the WITH subset only over admitted relationship entity bindings",
+                r"supports endNode\(\.\.\.\) in the WITH subset only over admitted relationship entity bindings",
             ),
             (
                 "MATCH (u:User) WITH u AS person, u.name AS name RETURN person AS item, name AS item",
@@ -327,23 +327,23 @@ class TestValidate(unittest.TestCase):
             ),
             (
                 "MATCH (u:User) RETURN properties(missing) AS props",
-                "supports properties\(\.\.\.\) in the supported read subset only over admitted entity or relationship bindings",
+                r"supports properties\(\.\.\.\) in the supported read subset only over admitted entity or relationship bindings",
             ),
             (
                 "MATCH (a:User)-[r:KNOWS]->(b:User) RETURN labels(r) AS labels",
-                "supports labels\(\.\.\.\) in the supported read subset only over admitted node bindings",
+                r"supports labels\(\.\.\.\) in the supported read subset only over admitted node bindings",
             ),
             (
                 "MATCH (u:User) RETURN keys(missing) AS keys",
-                "supports keys\(\.\.\.\) in the supported read subset only over admitted entity or relationship bindings",
+                r"supports keys\(\.\.\.\) in the supported read subset only over admitted entity or relationship bindings",
             ),
             (
                 "MATCH (u:User) RETURN startNode(u) AS start",
-                "supports startNode\(\.\.\.\) in the supported read subset only over admitted relationship bindings",
+                r"supports startNode\(\.\.\.\) in the supported read subset only over admitted relationship bindings",
             ),
             (
                 "MATCH (u:User) RETURN endNode(u) AS ending",
-                "supports endNode\(\.\.\.\) in the supported read subset only over admitted relationship bindings",
+                r"supports endNode\(\.\.\.\) in the supported read subset only over admitted relationship bindings",
             ),
             (
                 "MATCH (a:User)-[r:KNOWS]->(b:User) RETURN a AS item, r AS item",
@@ -351,11 +351,11 @@ class TestValidate(unittest.TestCase):
             ),
             (
                 "MATCH (u:User) RETURN count(missing) AS total",
-                "requires count\(\.\.\.\) in the supported read subset to target an admitted binding alias",
+                r"requires count\(\.\.\.\) in the supported read subset to target an admitted binding alias",
             ),
             (
                 "MATCH (u:User) WITH u AS person RETURN sum(person) AS total",
-                "supports sum\(\.\.\.\), avg\(\.\.\.\), min\(\.\.\.\), and max\(\.\.\.\) in the WITH subset only over admitted scalar bindings",
+                r"supports sum\(\.\.\.\), avg\(\.\.\.\), min\(\.\.\.\), and max\(\.\.\.\) in the WITH subset only over admitted scalar bindings",
             ),
             (
                 "MATCH (u:User) RETURN 'tag'",
@@ -363,151 +363,151 @@ class TestValidate(unittest.TestCase):
             ),
             (
                 "MATCH (u:User) RETURN coalesce(u, 'unknown') AS display_name",
-                "supports coalesce\(\.\.\.\) in the supported read subset only as coalesce\(alias.field, literal_or_parameter\) over admitted bindings",
+                r"supports coalesce\(\.\.\.\) in the supported read subset only as coalesce\(alias.field, literal_or_parameter\) over admitted bindings",
             ),
             (
                 "MATCH (u:User) RETURN replace(u, 'A', 'B') AS display_name",
-                "supports replace\(\.\.\.\) in the supported read subset only as replace\(admitted_input, literal_or_parameter, literal_or_parameter\)",
+                r"supports replace\(\.\.\.\) in the supported read subset only as replace\(admitted_input, literal_or_parameter, literal_or_parameter\)",
             ),
             (
                 "MATCH (u:User) RETURN replace(u.name, u.age, 'B') AS display_name",
-                "supports replace\(\.\.\.\) in the supported read subset only as replace\(admitted_input, literal_or_parameter, literal_or_parameter\)",
+                r"supports replace\(\.\.\.\) in the supported read subset only as replace\(admitted_input, literal_or_parameter, literal_or_parameter\)",
             ),
             (
                 "MATCH (u:User) RETURN right(u, 2) AS value",
-                "supports left\(\.\.\.\) and right\(\.\.\.\) in the supported read subset only as function\(admitted_input, literal_or_parameter\)",
+                r"supports left\(\.\.\.\) and right\(\.\.\.\) in the supported read subset only as function\(admitted_input, literal_or_parameter\)",
             ),
             (
                 "MATCH (u:User) RETURN left(u.name, u.age) AS value",
-                "supports left\(\.\.\.\) and right\(\.\.\.\) in the supported read subset only as function\(admitted_input, literal_or_parameter\)",
+                r"supports left\(\.\.\.\) and right\(\.\.\.\) in the supported read subset only as function\(admitted_input, literal_or_parameter\)",
             ),
             (
                 "MATCH (u:User) RETURN split(u, ' ') AS value",
-                "supports split\(\.\.\.\) in the supported read subset only as split\(admitted_input, literal_or_parameter\)",
+                r"supports split\(\.\.\.\) in the supported read subset only as split\(admitted_input, literal_or_parameter\)",
             ),
             (
                 "MATCH (u:User) RETURN split(u.name, u.age) AS value",
-                "supports split\(\.\.\.\) in the supported read subset only as split\(admitted_input, literal_or_parameter\)",
+                r"supports split\(\.\.\.\) in the supported read subset only as split\(admitted_input, literal_or_parameter\)",
             ),
             (
                 "MATCH (u:User) RETURN abs(u) AS magnitude",
-                "supports abs\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
+                r"supports abs\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) RETURN sign(u) AS age_sign",
-                "supports sign\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
+                r"supports sign\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) RETURN round(u) AS value",
-                "supports round\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
+                r"supports round\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) RETURN ceil(u) AS value",
-                "supports ceil\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
+                r"supports ceil\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) RETURN floor(u) AS value",
-                "supports floor\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
+                r"supports floor\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) RETURN sqrt(u) AS value",
-                "supports sqrt\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
+                r"supports sqrt\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) RETURN exp(u) AS value",
-                "supports exp\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
+                r"supports exp\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) RETURN sin(u) AS value",
-                "supports sin\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
+                r"supports sin\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) RETURN cos(u) AS value",
-                "supports cos\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
+                r"supports cos\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) RETURN tan(u) AS value",
-                "supports tan\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
+                r"supports tan\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) RETURN asin(u) AS value",
-                "supports asin\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
+                r"supports asin\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) RETURN acos(u) AS value",
-                "supports acos\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
+                r"supports acos\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) RETURN atan(u) AS value",
-                "supports atan\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
+                r"supports atan\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) RETURN ln(u) AS value",
-                "supports ln\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
+                r"supports ln\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) RETURN log(u) AS value",
-                "supports log\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
+                r"supports log\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) RETURN radians(u) AS value",
-                "supports radians\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
+                r"supports radians\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) RETURN degrees(u) AS value",
-                "supports degrees\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
+                r"supports degrees\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) RETURN log10(u) AS value",
-                "supports log10\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
+                r"supports log10\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) RETURN ltrim(u) AS value",
-                "supports lower\(\.\.\.\), upper\(\.\.\.\), trim\(\.\.\.\), ltrim\(\.\.\.\), rtrim\(\.\.\.\), and reverse\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
+                r"supports lower\(\.\.\.\), upper\(\.\.\.\), trim\(\.\.\.\), ltrim\(\.\.\.\), rtrim\(\.\.\.\), and reverse\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) RETURN rtrim(u) AS value",
-                "supports lower\(\.\.\.\), upper\(\.\.\.\), trim\(\.\.\.\), ltrim\(\.\.\.\), rtrim\(\.\.\.\), and reverse\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
+                r"supports lower\(\.\.\.\), upper\(\.\.\.\), trim\(\.\.\.\), ltrim\(\.\.\.\), rtrim\(\.\.\.\), and reverse\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) RETURN toString(u) AS text",
-                "supports toString\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
+                r"supports toString\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) RETURN toInteger(u) AS value",
-                "supports toInteger\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
+                r"supports toInteger\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) RETURN toFloat(u) AS value",
-                "supports toFloat\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
+                r"supports toFloat\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) RETURN toBoolean(u) AS value",
-                "supports toBoolean\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
+                r"supports toBoolean\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) RETURN reverse(u) AS value",
-                "supports lower\(\.\.\.\), upper\(\.\.\.\), trim\(\.\.\.\), ltrim\(\.\.\.\), rtrim\(\.\.\.\), and reverse\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
+                r"supports lower\(\.\.\.\), upper\(\.\.\.\), trim\(\.\.\.\), ltrim\(\.\.\.\), rtrim\(\.\.\.\), and reverse\(\.\.\.\) in the supported read subset only over admitted field projections or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) RETURN substring(u, 0, 2) AS value",
-                "supports substring\(\.\.\.\) in the supported read subset only as substring\(admitted_input, literal_or_parameter\) or substring\(admitted_input, literal_or_parameter, literal_or_parameter\)",
+                r"supports substring\(\.\.\.\) in the supported read subset only as substring\(admitted_input, literal_or_parameter\) or substring\(admitted_input, literal_or_parameter, literal_or_parameter\)",
             ),
             (
                 "MATCH (u:User) RETURN substring(u.name, u.age, 2) AS value",
-                "supports substring\(\.\.\.\) in the supported read subset only as substring\(admitted_input, literal_or_parameter\) or substring\(admitted_input, literal_or_parameter, literal_or_parameter\)",
+                r"supports substring\(\.\.\.\) in the supported read subset only as substring\(admitted_input, literal_or_parameter\) or substring\(admitted_input, literal_or_parameter, literal_or_parameter\)",
             ),
             (
                 "MATCH (u:User) RETURN size(u) AS n",
-                "supports size\(\.\.\.\) in the supported read subset only over admitted field projections, admitted id/type outputs, or scalar literal/parameter inputs",
+                r"supports size\(\.\.\.\) in the supported read subset only over admitted field projections, admitted id/type outputs, or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) RETURN size(type(u)) AS n",
-                "supports size\(\.\.\.\) in the supported read subset only over admitted field projections, admitted id/type outputs, or scalar literal/parameter inputs",
+                r"supports size\(\.\.\.\) in the supported read subset only over admitted field projections, admitted id/type outputs, or scalar literal/parameter inputs",
             ),
             (
                 "MATCH (u:User) RETURN type(u) AS t",
-                "supports type\(\.\.\.\) in the supported read subset only over admitted relationship bindings",
+                r"supports type\(\.\.\.\) in the supported read subset only over admitted relationship bindings",
             ),
             (
                 "MATCH (u:User) RETURN u.age >= 18",
@@ -515,19 +515,19 @@ class TestValidate(unittest.TestCase):
             ),
             (
                 "MATCH (u:User) RETURN u >= 18 AS adult",
-                "supports predicate RETURN items in the supported read subset only as alias.field OP value, id\(alias\) OP value, type\(rel_alias\) OP value, or size\(admitted_input\) OP value over admitted bindings",
+                r"supports predicate RETURN items in the supported read subset only as alias.field OP value, id\(alias\) OP value, type\(rel_alias\) OP value, or size\(admitted_input\) OP value over admitted bindings",
             ),
             (
                 "MATCH (u:User) RETURN type(u) = 'User' AS is_user",
-                "supports predicate RETURN items in the supported read subset only as alias.field OP value, id\(alias\) OP value, type\(rel_alias\) OP value, or size\(admitted_input\) OP value over admitted bindings",
+                r"supports predicate RETURN items in the supported read subset only as alias.field OP value, id\(alias\) OP value, type\(rel_alias\) OP value, or size\(admitted_input\) OP value over admitted bindings",
             ),
             (
                 "MATCH (u:User) WITH u AS person WHERE person = 'Alice' RETURN person",
-                "supports WITH WHERE items shaped as scalar_alias OP value, entity_alias.field OP value, id\(entity_alias\) OP value, type\(rel_alias\) OP value, or size\(admitted_input\) OP value",
+                r"supports WITH WHERE items shaped as scalar_alias OP value, entity_alias.field OP value, id\(entity_alias\) OP value, type\(rel_alias\) OP value, or size\(admitted_input\) OP value",
             ),
             (
                 "MATCH (u:User) WITH u AS person WHERE type(person) = 'User' RETURN person",
-                "supports WITH WHERE type\(rel_alias\) only for relationship entity bindings",
+                r"supports WITH WHERE type\(rel_alias\) only for relationship entity bindings",
             ),
             (
                 "UNWIND [1, 2, 3] AS x RETURN x.value",

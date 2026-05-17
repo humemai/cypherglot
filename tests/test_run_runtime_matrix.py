@@ -675,13 +675,17 @@ class RunRuntimeMatrixTests(unittest.TestCase):
         self.assertIn("trap cleanup EXIT", shell_command)
         self.assertIn(str(job.output_path), shell_command)
         self.assertIn(str(job.db_root_dir), shell_command)
-        self.assertIn(
-            (
-                f"chown -R {run_runtime_matrix.os.getuid()}"
-                f":{run_runtime_matrix.os.getgid()}"
-            ),
-            shell_command,
-        )
+        if hasattr(run_runtime_matrix.os, "getuid") and hasattr(
+            run_runtime_matrix.os,
+            "getgid",
+        ):
+            self.assertIn(
+                (
+                    f"chown -R {run_runtime_matrix.os.getuid()}"
+                    f":{run_runtime_matrix.os.getgid()}"
+                ),
+                shell_command,
+            )
         self.assertIn("uv pip install --system --upgrade", shell_command)
         self.assertIn(
             "python -m scripts.benchmarks.runtime.arcadedb_embedded",

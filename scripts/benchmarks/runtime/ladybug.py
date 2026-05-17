@@ -122,8 +122,9 @@ def _open_ladybug(db_path: Path) -> tuple[Any, Any]:
         raise ValueError(
             "ladybug is not installed. Install it with `uv pip install ladybug`."
         )
+    db_path_str = db_path.as_posix()
     database = database_ctor(
-        str(db_path),
+        db_path_str,
         max_db_size=LADYBUG_MAX_DB_SIZE_BYTES,
     )
     connection = connection_ctor(database)
