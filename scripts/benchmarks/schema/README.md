@@ -18,26 +18,24 @@ Typical usage from the repo root:
 python -m scripts.benchmarks.schema.sqlite_shapes
 python -m scripts.benchmarks.schema.matrix --scale small --repeats 3 --workers 2
 python -m scripts.benchmarks.schema.matrix --scale medium --repeats 3 --workers 2
-python -m scripts.benchmarks.schema.matrix --scale large --repeats 2 --workers 1
+python -m scripts.benchmarks.schema.matrix --scale large --repeats 3 --workers 1
 python -m scripts.benchmarks.schema.summarize_results --no-queries
 ```
 
-Schema matrix presets use `small`, `medium`, and `large` names and now follow
-the same progression style as the runtime matrix:
+Schema matrix presets use `small`, `medium`, and `large` names and match the
+runtime dataset sizes directly:
 
 - `small`: `4` node types, `4` edge types, `1000` nodes per type
-- `medium`: `6` node types, `8` edge types, `5000` nodes per type
-- `large`: `10` node types, `10` edge types, `100000` nodes per type
-
-The schema path keeps denser graph-shape experimentation tractable, so these
-presets follow the runtime naming model without matching every runtime scale
-parameter exactly.
+- `medium`: `6` node types, `8` edge types, `100000` nodes per type
+- `large`: `10` node types, `10` edge types, `1000000` nodes per type
 
 Output conventions:
 
 - single-run schema JSON baselines live in `scripts/benchmarks/results/schema/`
 - repeated-run manifests and per-job logs live in
   `scripts/benchmarks/results/schema-matrix/`
+- the current checked-in repeated-run summary lives as a Markdown artifact
+  under `scripts/benchmarks/results/`
 
 This benchmark path is for physical-schema experiments, not compiler or
 backend-comparison runtime measurements. The schema query set still covers both

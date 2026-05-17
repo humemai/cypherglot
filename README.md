@@ -171,6 +171,21 @@ The most useful admitted families are:
 Vector-aware `CALL db.index.vector.queryNodes(...)` shapes are validated and
 normalized for host runtimes, but they are not compiled into SQLGlot output yet.
 
+## Benchmark evidence
+
+Current checked-in benchmark artifacts live under `scripts/benchmarks/results/`.
+The current repo evidence set includes:
+
+- a checked-in compiler summary Markdown artifact
+- a checked-in large runtime matrix summary Markdown artifact across the current
+  `11` backend/index paths
+- a checked-in repeated schema-shape summary Markdown artifact across the
+  small, medium, and large presets
+
+See the benchmark guide for methodology, result interpretation, and the
+important caveat that SQLite, DuckDB, and PostgreSQL are compile-plus-execute
+paths while Neo4j, ArcadeDB Embedded, and LadybugDB are direct Cypher runtimes.
+
 ## Public API at a glance
 
 The stable entrypoints are:

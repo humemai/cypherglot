@@ -29,6 +29,8 @@ Script:
 Supporting files:
 
 - `scripts/benchmarks/results/schema/sqlite_schema_shape_benchmark.json`
+- the checked-in repeated-run schema summary Markdown artifact under
+  `scripts/benchmarks/results/`
 
 ### Schema scope
 
@@ -174,12 +176,14 @@ existing schema query set:
 - OLAP-leaning: multi-hop traversal, relationship aggregate, and relationship
   projection queries
 
-### Schema output and baseline
+### Schema output and current evidence
 
-The single-run schema-shape baseline now defaults to
-`scripts/benchmarks/results/schema/sqlite_schema_shape_benchmark.json`.
+The single-run schema-shape entrypoint still defaults to
+`scripts/benchmarks/results/schema/sqlite_schema_shape_benchmark.json`, but the
+current repository-level evidence is the checked-in repeated-run schema summary
+Markdown artifact under `scripts/benchmarks/results/`.
 
-That output records:
+The single-run JSON records:
 
 - benchmark entrypoint and run status metadata
 - benchmark controls such as iterations, warmup, batch size, and selected schemas
@@ -191,30 +195,39 @@ That output records:
 - pooled execute summaries
 - per-query timing summaries for each schema shape
 
-For current result interpretation, prioritize:
+For current interpretation, prioritize the repeated-run summary over any one
+single JSON file. It captures run-to-run means and sample standard deviations
+for setup cost, RSS, database size, pooled latency, and per-query latency.
 
-- per-schema setup cost (`connect`, `schema`, `ingest`, `index`, `analyze`)
-- per-schema RSS checkpoints and database size
-- pooled execute `mean`, `p50`, `p95`, and `p99`
-- representative query `mean`, `p50`, `p95`, and `p99`
-- repeat-level consistency from the matrix summarizer
+The checked-in repeated-run results currently show the same ordering across the
+small, medium, and large datasets: the generated type-aware layout is both the
+best general-purpose storage contract and the smallest on-disk shape, while the
+typed-property layout remains the expensive middle path that the repo no longer
+targets.
 
-Schema setup is now timed in the more standard order:
+Representative large-dataset results from the checked-in summary:
 
-- `connect`
-- `schema`
-- `ingest`
-- `index`
-- `analyze`
+- Type-aware size is about `16050.43 MiB`, versus about `27521.76 MiB` for
+  generic JSON and about `88688.90 MiB` for typed-property.
+- Type-aware pooled `p50` is about `885.31 ms`, versus about `1385.39 ms` for
+  generic JSON and about `3764.79 ms` for typed-property.
+- Type-aware `relationship_projection` `p50` is about `9497.18 ms`, versus
+  about `24110.96 ms` for generic JSON and about `33892.63 ms` for
+  typed-property.
+- The typed-property layout remains especially poor for ordered top-k queries:
+  large `top_active_score` lands at about `2216.44 ms` `p50`, versus about
+  `0.02 ms` for generic JSON and about `0.01 ms` for type-aware.
 
-That means `ingest` reflects row loading before query indexes exist, while
-`index` captures the post-load index build step explicitly.
+Schema setup is timed in the standard order
+`connect -> schema -> ingest -> index -> analyze`, so `ingest` reflects row
+loading before query indexes exist and `index` captures the post-load index
+build step explicitly.
 
-The schema benchmark still remains primarily a comparative storage-layout
-experiment rather than a tail-latency benchmark. The percentile summaries are
-useful for compatibility with the other benchmark scripts, but in practice
-explicit `repeats` still matter more here than driving single-run `iterations`
-to runtime-benchmark levels.
+The schema benchmark is still primarily a comparative storage-layout experiment
+rather than a tail-latency benchmark. The percentile summaries are useful for
+compatibility with the other benchmark scripts, but in practice explicit
+`repeats` matter more here than driving single-run `iterations` to
+runtime-benchmark levels.
 
 ## Compiler benchmark
 
@@ -227,6 +240,8 @@ Supporting files:
 - `scripts/benchmarks/corpora/compiler_benchmark_corpus.json`
 - `scripts/benchmarks/corpora/compiler_sqlglot_benchmark_corpus.json`
 - `scripts/benchmarks/results/compiler_benchmark.json`
+- the checked-in compiler summary Markdown artifact under
+  `scripts/benchmarks/results/`
 - `scripts/benchmarks/compiler/summarize_results.py`
 
 ### Compiler scope
@@ -283,7 +298,7 @@ From the repo root:
 ```bash
 python -m scripts.benchmarks.compiler.benchmark --iterations 10000 --warmup 200
 python -m scripts.benchmarks.compiler.summarize_results
-python -m scripts.benchmarks.compiler.summarize_results --output scripts/benchmarks/results/compiler-results.md
+python -m scripts.benchmarks.compiler.summarize_results --output scripts/benchmarks/results/compiler-summary.md
 ```
 
 The default compiler run uses:
@@ -293,26 +308,26 @@ The default compiler run uses:
 - both the installed and pure-Python SQLGlot package layouts for the
   PostgreSQL-to-SQLite comparison
 
-### Compiler output and baseline
+### Compiler output and current evidence
 
-The checked-in compiler baseline lives at
-`scripts/benchmarks/results/compiler_benchmark.json`.
+The default compiler entrypoint still writes
+`scripts/benchmarks/results/compiler_benchmark.json`, while the current
+checked-in human-readable summary lives as a Markdown artifact under
+`scripts/benchmarks/results/`.
 
-The current checked-in baseline was produced from a `22`-query CypherGlot
-compiler corpus and a matching `22`-query SQLGlot comparison corpus.
-
-The benchmark schema metadata baked into the checked-in run is the current
-type-aware contract used by the harness itself:
+The checked-in compiler artifacts currently reflect a `22`-query CypherGlot
+compiler corpus and a matching `22`-query SQLGlot comparison corpus over the
+current type-aware contract:
 
 - node types: `User`, `Company`, `Person`
 - edge types: `KNOWS`, `WORKS_AT`, `INTRODUCED`
 
-That baseline records:
+Those artifacts record:
 
 - a `benchmark_sections` block that declares how to read the result file
 - `shared_entrypoint_results` for backend-neutral public compiler entrypoints
-- `backend_entrypoint_results` for backend-dependent public compiler
-  entrypoints measured once per SQL backend
+- `backend_entrypoint_results` for backend-dependent public compiler entrypoints
+  measured once per SQL backend
 - per-query summaries across the mixed admitted-subset corpus
 - backend-aware IR-build, bind, lower, render, and end-to-end summaries for
   SQLite, DuckDB, and PostgreSQL
@@ -320,13 +335,13 @@ That baseline records:
 - SQLGlot comparison results for compiled and pure-Python installs when enabled,
   including version and module-layout metadata
 
-Shared compiler entrypoint summary from the current checked-in run:
+Shared compiler entrypoint summary from the checked-in summary:
 
 | Entrypoint | p50 | p95 | p99 |
 | --- | ---: | ---: | ---: |
-| `parse_cypher_text(...)` | `0.55 ms` | `0.91 ms` | `0.95 ms` |
-| `validate_cypher_text(...)` | `0.64 ms` | `1.00 ms` | `1.05 ms` |
-| `normalize_cypher_text(...)` | `0.71 ms` | `1.15 ms` | `1.26 ms` |
+| `parse_cypher_text(...)` | `0.54 ms` | `0.90 ms` | `0.93 ms` |
+| `validate_cypher_text(...)` | `0.64 ms` | `1.01 ms` | `1.04 ms` |
+| `normalize_cypher_text(...)` | `0.70 ms` | `1.14 ms` | `1.20 ms` |
 
 ### Compiler result summarizer
 
@@ -350,72 +365,50 @@ Backend-dependent public entrypoint summary from the same run:
 
 | Entrypoint | SQLite p50 | DuckDB p50 | PostgreSQL p50 | SQLite p95 | DuckDB p95 | PostgreSQL p95 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `to_sqlglot_ast(...)` | `0.96 ms` | `0.94 ms` | `0.93 ms` | `1.28 ms` | `1.26 ms` | `1.26 ms` |
-| `to_sql(...)` | `1.08 ms` | `1.07 ms` | `1.07 ms` | `1.39 ms` | `1.41 ms` | `1.38 ms` |
-| `to_sqlglot_program(...)` | `0.83 ms` | `0.83 ms` | `0.83 ms` | `1.25 ms` | `1.24 ms` | `1.24 ms` |
-| `render_cypher_program_text(...)` | `0.95 ms` | `0.94 ms` | `0.94 ms` | `1.38 ms` | `1.40 ms` | `1.37 ms` |
+| `to_sqlglot_ast(...)` | `0.94 ms` | `0.96 ms` | `0.95 ms` | `1.28 ms` | `1.29 ms` | `1.27 ms` |
+| `to_sql(...)` | `1.08 ms` | `1.07 ms` | `1.08 ms` | `1.39 ms` | `1.43 ms` | `1.41 ms` |
+| `to_sqlglot_program(...)` | `0.85 ms` | `0.85 ms` | `0.85 ms` | `1.27 ms` | `1.27 ms` | `1.27 ms` |
+| `render_cypher_program_text(...)` | `0.97 ms` | `0.96 ms` | `0.96 ms` | `1.42 ms` | `1.42 ms` | `1.40 ms` |
 
 Backend pipeline summary from the same run:
 
 | Backend | IR build p50 | Bind p50 | Lower p50 | Render p50 | End-to-end p50 | End-to-end p95 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| SQLite | `2.87 us` | `0.37 us` | `63.85 us` | `64.14 us` | `0.95 ms` | `1.41 ms` |
-| DuckDB | `2.89 us` | `0.37 us` | `64.20 us` | `63.69 us` | `0.94 ms` | `1.40 ms` |
-| PostgreSQL | `2.86 us` | `0.37 us` | `63.69 us` | `63.91 us` | `0.95 ms` | `1.38 ms` |
+| SQLite | `2.93 us` | `0.38 us` | `65.82 us` | `67.99 us` | `0.96 ms` | `1.44 ms` |
+| DuckDB | `2.95 us` | `0.38 us` | `67.28 us` | `67.48 us` | `0.96 ms` | `1.46 ms` |
+| PostgreSQL | `2.93 us` | `0.37 us` | `65.87 us` | `66.78 us` | `0.96 ms` | `1.42 ms` |
 
-The key current result changed after the render-path update and the SQLGlot
-`30.6.0` rerun: the compiler benchmark no longer shows a DuckDB-specific render
-penalty. Shared entrypoints, backend-dependent public entrypoints, and the
-lowering-layer summaries are now tightly clustered across SQLite, DuckDB, and
-PostgreSQL.
+The current compiler result remains the same at a higher confidence level than
+the older single-run tables: SQLite, DuckDB, and PostgreSQL are tightly
+clustered in the compiler-only path, and the earlier DuckDB-specific render
+gap is not present in the checked-in summary.
 
-What the current compiler run shows:
+What the checked-in compiler summary shows:
 
-- DuckDB is no longer materially behind in the compiler-only path.
-- `to_sql(...)` now lands at about `1.07 ms` p50 for DuckDB, versus about
-  `1.08 ms` for SQLite and about `1.07 ms` for PostgreSQL.
-- `render_cypher_program_text(...)` now lands at about `0.94 ms` p50 for
-  DuckDB, versus about `0.95 ms` for SQLite and about `0.94 ms` for
-  PostgreSQL.
-- The backend-lowering table shows the same convergence below the public API:
-  DuckDB `render_program` p50 is now about `63.69 us`, essentially aligned
-  with SQLite and PostgreSQL.
-- This means the old compiler-only DuckDB gap was largely in render-path setup
-  behavior, not in IR build, backend binding, or backend lowering.
-
-Known DuckDB follow-up note:
-
-- The previous DuckDB render blow-up seen in older compiler baselines is not
-  present in this rerun with SQLGlot `30.6.0` and CypherGlot's renderer reuse.
-- CypherGlot now reuses the SQLGlot renderer object for dialect-driven render
-  calls. That is not query-result caching or SQL-string memoization; each query
-  is still parsed, lowered, and rendered on every call. It only avoids
-  rebuilding the same dialect printer object every time.
-- Runtime benchmarks remain the place to watch for any DuckDB-specific engine
-  cost or memory behavior, because they measure compile plus execute and had a
-  separate RSS-accounting bug in older harness versions.
-- This section should still be revisited after future SQLGlot upgrades, but
-  the current compiler baseline no longer supports the older claim that DuckDB
-  render remains materially slower than SQLite and PostgreSQL.
+- Shared frontend entrypoints remain sub-millisecond at `p50`.
+- Backend-dependent public entrypoints stay tightly grouped around
+  `0.85 ms` to `1.08 ms` `p50` across SQLite, DuckDB, and PostgreSQL.
+- The lowerer-plus-renderer path below the public API remains similarly close:
+  backend `end_to_end` `p50` is about `0.96 ms` for all three SQL targets.
+- Any remaining backend skew is small enough that runtime benchmarks are the
+  more meaningful place to look for backend-specific behavior.
 
 SQLGlot PostgreSQL-to-SQLite comparison summary from the same run:
 
 | Implementation | Method | Queries | p50 | p95 | p99 |
 | --- | --- | ---: | ---: | ---: | ---: |
-| compiled (`sqlglotc`, `30.6.0`) | `tokenize(...)` | 22 | `12.16 us` | `26.40 us` | `31.44 us` |
-| compiled (`sqlglotc`, `30.6.0`) | `parse_one(...)` | 22 | `34.26 us` | `80.43 us` | `91.24 us` |
-| compiled (`sqlglotc`, `30.6.0`) | `parse_one(...).sql(...)` | 22 | `95.29 us` | `224.52 us` | `255.07 us` |
-| compiled (`sqlglotc`, `30.6.0`) | `transpile(...)` | 22 | `59.14 us` | `135.50 us` | `147.21 us` |
-| pure Python (`30.6.0`) | `tokenize(...)` | 22 | `45.28 us` | `116.72 us` | `148.39 us` |
-| pure Python (`30.6.0`) | `parse_one(...)` | 22 | `116.76 us` | `292.52 us` | `346.94 us` |
-| pure Python (`30.6.0`) | `parse_one(...).sql(...)` | 22 | `210.71 us` | `520.06 us` | `620.75 us` |
-| pure Python (`30.6.0`) | `transpile(...)` | 22 | `160.77 us` | `397.67 us` | `463.10 us` |
+| compiled (`sqlglotc`) | `tokenize(...)` | 22 | `12.26 us` | `26.31 us` | `31.97 us` |
+| compiled (`sqlglotc`) | `parse_one(...)` | 22 | `34.63 us` | `82.33 us` | `95.17 us` |
+| compiled (`sqlglotc`) | `parse_one(...).sql(...)` | 22 | `100.27 us` | `252.18 us` | `290.36 us` |
+| compiled (`sqlglotc`) | `transpile(...)` | 22 | `61.30 us` | `142.93 us` | `166.39 us` |
+| pure Python | `tokenize(...)` | 22 | `45.58 us` | `148.63 us` | `167.35 us` |
+| pure Python | `parse_one(...)` | 22 | `129.49 us` | `345.77 us` | `390.37 us` |
+| pure Python | `parse_one(...).sql(...)` | 22 | `230.01 us` | `615.92 us` | `705.77 us` |
+| pure Python | `transpile(...)` | 22 | `166.30 us` | `441.03 us` | `475.67 us` |
 
-Compiled SQLGlot is still clearly faster than the pure-Python build, but the
-current compiler baseline no longer shows a DuckDB-specific render bottleneck
-on the compiled path. In this rerun, the compiler-only results point to the
-older gap having been largely a version- and render-setup-sensitive issue
-rather than persistent CypherGlot lowering debt.
+Compiled SQLGlot is still clearly faster than the pure-Python build. That gap
+remains materially larger than any compiler-side difference between CypherGlot's
+SQL backends.
 
 ## Runtime benchmark
 
@@ -596,11 +589,51 @@ The ArcadeDB-only worker-startup tables also report `open` timing from the raw
 `worker_startup` payloads. Worker close time is not currently recorded, so the
 report cannot show it yet.
 
-### Small runtime dataset
+### Current checked-in repeated-run report
 
-### Medium runtime dataset
+The current checked-in repeated-run runtime summary lives at
+the runtime summary Markdown artifact under `scripts/benchmarks/results/`.
 
-### Large runtime dataset
+That report aggregates `99` completed JSON result files into `33` grouped
+configurations for the large runtime preset. The checked-in large dataset uses:
+
+- `10,000,000` total nodes
+- `77,790,000` total edges
+- `10` node types and `10` edge types
+- `61` total property fields across the schema
+- `11` backend/index combinations across SQLite, DuckDB, PostgreSQL, Neo4j,
+  ArcadeDB Embedded, and LadybugDB
+
+Representative large-dataset findings from the checked-in summary:
+
+- Indexed OLTP `p50` is best for direct runtimes, with ArcadeDB Embedded at
+  about `0.09 ms` and Neo4j at about `0.25 ms`; among the compile-plus-execute
+  SQL paths, SQLite lands at about `1.27 ms`, PostgreSQL at about `1.54 ms`,
+  and DuckDB at about `3.37 ms`.
+- Indexed OLAP `p50` is strongest on DuckDB among the SQL backends at about
+  `566.42 ms`; LadybugDB lands at about `746.38 ms` on its direct-Cypher path,
+  ArcadeDB Embedded at about `3259.27 ms`, SQLite at about `4117.93 ms`,
+  PostgreSQL at about `6493.17 ms`, and Neo4j at about `6902.01 ms`.
+- The unindexed OLTP penalty is severe for SQLite, PostgreSQL, Neo4j, and
+  ArcadeDB Embedded, but much smaller for DuckDB: about `5.80 ms` unindexed
+  versus about `3.37 ms` indexed.
+- Large-run wall-clock time is dominated by setup and ingest cost. DuckDB
+  finishes in roughly `35` minutes, SQLite and PostgreSQL in multiple hours,
+  Neo4j and ArcadeDB in roughly `4` to `6.5` hours, and LadybugDB in roughly
+  `38` hours.
+- Large-run RSS diverges sharply by engine: SQLite remains in the hundreds of
+  MiB, PostgreSQL is roughly in the `0.5` to `1.2 GiB` range, DuckDB is around
+  `5.7` to `7.1 GiB`, while ArcadeDB Embedded and LadybugDB both reach into the
+  tens of GiB.
+
+For cross-engine interpretation, keep the runtime split explicit:
+
+- SQLite, DuckDB, and PostgreSQL numbers are compile-plus-execute timings
+  through CypherGlot.
+- Neo4j, ArcadeDB Embedded, and LadybugDB numbers are direct Cypher execution
+  timings.
+- The repeated-run summary therefore answers both backend-comparison and
+  methodology questions, but it is not a single apples-to-apples leaderboard.
 
 ### Runtime caveats
 
@@ -625,6 +658,9 @@ ArcadeDB release may make that workaround unnecessary.
 
 ## Notes
 
+- The current checked-in experiment summaries were produced on a Linux
+  workstation built around a Ryzen 9 7950X. Treat that hardware note as result
+  provenance, not as part of the public-facing benchmark naming.
 - Percentiles are computed from raw per-iteration latency samples using linear
   interpolation.
 - The measured loop disables Python GC to reduce avoidable collection noise.

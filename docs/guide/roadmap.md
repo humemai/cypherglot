@@ -1,6 +1,6 @@
 # Roadmap
 
-The live roadmap is maintained in `things-to-do.md`.
+This page is the live high-level roadmap for CypherGlot.
 
 The high-level sequence is:
 

@@ -26,6 +26,8 @@ Output conventions:
 - single-run runtime JSON baselines live in `scripts/benchmarks/results/runtime/`
 - repeated-run manifests and per-job logs live in
   `scripts/benchmarks/results/runtime-matrix/`
+- the current checked-in repeated-run summary lives as a Markdown artifact
+  under `scripts/benchmarks/results/`
 
 Use the matrix runner for repeated runs. Keep the leaf scripts focused on one
 benchmark execution per invocation.

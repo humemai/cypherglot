@@ -17,13 +17,15 @@ python -m scripts.benchmarks.compiler.benchmark
 python -m scripts.benchmarks.compiler.benchmark --iterations 10 --warmup 2
 python -m scripts.benchmarks.compiler.benchmark --output scripts/benchmarks/results/compiler_benchmark.json
 python -m scripts.benchmarks.compiler.summarize_results
-python -m scripts.benchmarks.compiler.summarize_results --output scripts/benchmarks/results/compiler-results.md
+python -m scripts.benchmarks.compiler.summarize_results --output scripts/benchmarks/results/compiler-summary.md
 ```
 
 Default single-run output:
 
 - `scripts/benchmarks/results/compiler_benchmark.json`
-- `scripts/benchmarks/results/compiler-results.md` when you run the summarizer
+- `scripts/benchmarks/results/compiler-summary.md` when you run the summarizer
+- a checked-in compiler summary Markdown artifact under
+  `scripts/benchmarks/results/`
 
 For broader methodology and result interpretation, see
 `docs/guide/benchmarks.md`.

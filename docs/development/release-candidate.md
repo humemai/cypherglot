@@ -27,7 +27,7 @@ The release candidate is centered on:
 - SQLGlot-backed single-statement and multi-step compilation helpers
 - a practical mainstream single-hop, read-heavy onboarding subset
 - refreshed documentation and README positioning
-- a checked-in benchmark harness and baseline
+- a checked-in benchmark harness plus current summary artifacts
 
 ## Changelog summary
 
@@ -41,7 +41,7 @@ Recommended first-release flow:
 1. Confirm the release candidate is still green locally.
 2. Confirm CI is green on `main`, especially `test.yml` and `build-docs.yml`.
 3. Re-run the generated frontend check if parser artifacts changed: `scripts/dev/regenerate_cypher_frontend_docker.sh --check`.
-4. Ensure the checked-in benchmark baseline still reflects the intended release state.
+4. Ensure the checked-in benchmark artifacts still reflect the intended release state.
 5. Create the annotated Git tag `v0.1.0` from the release commit.
 6. Let `publish-pypi.yml` publish the package from that tag.
 7. Let `deploy-docs.yml` publish the versioned docs and set the `latest` alias if appropriate.
@@ -57,8 +57,8 @@ read-heavy subset for Neo4j-style onboarding rather than full Cypher parity.
 It includes repo-owned parsing, admitted-subset validation, normalization, and
 public compilation helpers for single-statement reads and narrow multi-step
 writes. The release also ships refreshed docs, a clearer public contract, and a
-checked-in benchmark harness with a baseline corpus for future regression
-tracking.
+checked-in benchmark harness with baseline corpora and current repeated-run
+summaries for future regression tracking.
 
 Notably out of scope for `v0.1.0` are broader `MERGE` semantics beyond the
 narrow admitted idempotent subset, broader variable-length path semantics

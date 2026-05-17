@@ -37,6 +37,8 @@ Typical workflow:
 - use the matrix runners for repeated fresh-process runs
 - feed repeated JSON outputs into the matching summarizer to produce Markdown
   tables
+- treat the checked-in Markdown summaries under `results/` as the current repo
+  evidence set and refresh them when the benchmark story materially changes
 - keep corpora and helper code stable so single-run scripts stay narrow and
   easy to compare across revisions
 
