@@ -175,16 +175,23 @@ def _arcadedb_version() -> str | None:
 
 
 def _open_arcadedb(db_path: Path) -> Any:
-    if not _arcadedb_available():
+    database_exists = getattr(arcadedb, "database_exists", None)
+    open_database = getattr(arcadedb, "open_database", None)
+    create_database = getattr(arcadedb, "create_database", None)
+    if not (
+        callable(database_exists)
+        and callable(open_database)
+        and callable(create_database)
+    ):
         raise ValueError(
             "arcadedb-embedded is not installed. Install it with "
             "`uv pip install arcadedb-embedded` or a dev build such as "
             "`uv pip install arcadedb-embedded==26.4.1.dev3`."
         )
     db_path_str = str(db_path)
-    if arcadedb.database_exists(db_path_str):
-        return arcadedb.open_database(db_path_str)
-    return arcadedb.create_database(db_path_str)
+    if database_exists(db_path_str):
+        return open_database(db_path_str)
+    return create_database(db_path_str)
 
 
 def _recursive_file_size_mib(path: Path) -> float:

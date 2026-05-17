@@ -116,15 +116,17 @@ def _ladybug_version() -> str | None:
 
 
 def _open_ladybug(db_path: Path) -> tuple[Any, Any]:
-    if not _ladybug_available():
+    database_ctor = getattr(ladybug, "Database", None)
+    connection_ctor = getattr(ladybug, "Connection", None)
+    if not callable(database_ctor) or not callable(connection_ctor):
         raise ValueError(
             "ladybug is not installed. Install it with `uv pip install ladybug`."
         )
-    database = ladybug.Database(
+    database = database_ctor(
         str(db_path),
         max_db_size=LADYBUG_MAX_DB_SIZE_BYTES,
     )
-    connection = ladybug.Connection(database)
+    connection = connection_ctor(database)
     return database, connection
 
 
