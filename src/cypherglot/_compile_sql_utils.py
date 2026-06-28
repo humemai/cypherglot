@@ -16,6 +16,31 @@ _AGGREGATE_SQL_NAMES: dict[str, str] = {
 }
 
 
+def _group_disjunct_predicates(compiled: list[tuple[int, str]]) -> list[str]:
+    """Combine compiled predicates that carry a ``disjunct_index`` into WHERE
+    parts: predicates sharing a disjunct are AND-ed together, and the disjuncts
+    are OR-ed. A single disjunct returns its parts unwrapped so they AND with any
+    surrounding structural conditions (label filters, join keys)."""
+    if not compiled:
+        return []
+    disjuncts: dict[int, list[str]] = {}
+    order: list[int] = []
+    for index, sql in compiled:
+        if index not in disjuncts:
+            disjuncts[index] = []
+            order.append(index)
+        disjuncts[index].append(sql)
+    if len(order) == 1:
+        return disjuncts[order[0]]
+    return [
+        "("
+        + " OR ".join(
+            "(" + " AND ".join(disjuncts[index]) + ")" for index in order
+        )
+        + ")"
+    ]
+
+
 def _compile_in_predicate(
     expression: str,
     value: CypherValue | tuple[CypherValue, ...],

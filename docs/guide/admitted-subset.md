@@ -73,6 +73,9 @@ CypherGlot currently admits:
   `alias.field IN [literal_or_parameter, ...]` (and `id(alias) IN [...]`) over
   inline list literals; an empty list `IN []` is always false, matching Cypher
   semantics
+- admitted `WHERE` predicates may be combined with `AND` and `OR`, including
+  parenthesised groups such as `a AND (b OR c)`; these lower to a disjunctive
+  normal form (`NOT` is not yet admitted)
 - that same ordinary-read and narrow-optional `WHERE` slice also admits narrow
   nested `size(...)` field predicates over compile-safe property inputs:
   `size(alias.field) OP literal_or_parameter`, `size(alias.field) IS NULL`, and

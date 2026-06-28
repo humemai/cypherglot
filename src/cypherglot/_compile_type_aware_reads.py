@@ -3,6 +3,7 @@ from __future__ import annotations
 from ._compile_sql_utils import (
     _AGGREGATE_SQL_NAMES,
     _assemble_select_sql,
+    _group_disjunct_predicates,
     _sql_literal,
 )
 from ._compile_type_aware_common import (
@@ -68,20 +69,25 @@ def _compile_type_aware_match_node_sql(
             )
         )
 
+    predicate_parts: list[tuple[int, str]] = []
     for predicate in statement.predicates:
         if predicate.alias != alias:
             raise ValueError(
                 "Type-aware lowering currently supports only single-node "
                 "predicates on the matched node alias."
             )
-        where_parts.append(
-            _compile_type_aware_match_node_predicate(
-                alias,
-                node_type,
-                predicate,
-                backend=backend,
+        predicate_parts.append(
+            (
+                predicate.disjunct_index,
+                _compile_type_aware_match_node_predicate(
+                    alias,
+                    node_type,
+                    predicate,
+                    backend=backend,
+                ),
             )
         )
+    where_parts.extend(_group_disjunct_predicates(predicate_parts))
 
     select_parts: list[str] = []
     for item in statement.returns:
@@ -209,34 +215,44 @@ def _compile_type_aware_match_relationship_sql(
             )
         )
 
+    predicate_parts: list[tuple[int, str]] = []
     for predicate in statement.predicates:
         if predicate.alias == left_alias:
-            where_parts.append(
-                _compile_type_aware_match_node_predicate(
-                    left_alias,
-                    left_type,
-                    predicate,
-                    backend=backend,
+            predicate_parts.append(
+                (
+                    predicate.disjunct_index,
+                    _compile_type_aware_match_node_predicate(
+                        left_alias,
+                        left_type,
+                        predicate,
+                        backend=backend,
+                    ),
                 )
             )
             continue
         if predicate.alias == right_alias:
-            where_parts.append(
-                _compile_type_aware_match_node_predicate(
-                    right_alias,
-                    right_type,
-                    predicate,
-                    backend=backend,
+            predicate_parts.append(
+                (
+                    predicate.disjunct_index,
+                    _compile_type_aware_match_node_predicate(
+                        right_alias,
+                        right_type,
+                        predicate,
+                        backend=backend,
+                    ),
                 )
             )
             continue
         if predicate.alias == relationship_alias:
-            where_parts.append(
-                _compile_type_aware_match_relationship_predicate(
-                    relationship_alias,
-                    edge_type,
-                    predicate,
-                    backend=backend,
+            predicate_parts.append(
+                (
+                    predicate.disjunct_index,
+                    _compile_type_aware_match_relationship_predicate(
+                        relationship_alias,
+                        edge_type,
+                        predicate,
+                        backend=backend,
+                    ),
                 )
             )
             continue
@@ -244,6 +260,7 @@ def _compile_type_aware_match_relationship_sql(
             "Type-aware lowering currently supports only one-hop predicates on "
             "the matched node and relationship aliases."
         )
+    where_parts.extend(_group_disjunct_predicates(predicate_parts))
 
     if not distinct_endpoints:
         where_parts.append(f"{relationship_alias}.from_id = {relationship_alias}.to_id")

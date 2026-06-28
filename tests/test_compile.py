@@ -756,6 +756,35 @@ class CompileTests(unittest.TestCase):
             'ORDER BY with_q."__cg_with_scalar_name" ASC',
         )
 
+    def test_compile_type_aware_where_or_lowers_as_disjunction(self) -> None:
+        # Regression: OR predicates were previously flattened into AND, silently
+        # producing wrong results. They must lower as a disjunction.
+        expression = cypherglot.compile_cypher_text(
+            "MATCH (u:User) WHERE u.age < 18 OR u.age > 65 "
+            "RETURN u.name AS name ORDER BY name",
+            schema_context=_public_api_schema_context(),
+            backend="sqlite",
+        )
+        self.assertEqual(
+            expression.sql(dialect="sqlite"),
+            'SELECT u.name AS "name" FROM cg_node_user AS u '
+            "WHERE ((u.age < 18) OR (u.age > 65)) ORDER BY u.name ASC",
+        )
+
+    def test_compile_type_aware_where_mixed_and_or_expands_to_dnf(self) -> None:
+        expression = cypherglot.compile_cypher_text(
+            "MATCH (u:User) WHERE u.age > 18 AND (u.name = 'Al' OR u.name = 'Bo') "
+            "RETURN u.name AS name ORDER BY name",
+            schema_context=_public_api_schema_context(),
+            backend="sqlite",
+        )
+        self.assertEqual(
+            expression.sql(dialect="sqlite"),
+            'SELECT u.name AS "name" FROM cg_node_user AS u '
+            "WHERE ((u.age > 18 AND u.name = 'Al') OR (u.age > 18 AND u.name = 'Bo')) "
+            "ORDER BY u.name ASC",
+        )
+
     def test_compile_type_aware_match_node_direct_aggregates(self) -> None:
         count_expression = cypherglot.compile_cypher_text(
             "MATCH (u:User) RETURN count(u) AS total",
