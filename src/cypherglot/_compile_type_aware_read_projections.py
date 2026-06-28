@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from typing import Callable
 
-from ._compile_sql_utils import _AGGREGATE_SQL_NAMES, _sql_literal, _sql_value
+from ._compile_sql_utils import (
+    _AGGREGATE_SQL_NAMES,
+    _aggregate_sql_name,
+    _sql_literal,
+    _sql_value,
+)
 from ._compile_type_aware_common import (
     _compile_type_aware_numeric_coercion_expression,
     _compile_type_aware_size_expression,
@@ -137,7 +142,7 @@ def _compile_type_aware_aggregate_expression(
         and kind in _TYPE_AWARE_NUMERIC_AGGREGATE_KINDS_REQUIRING_COERCION
     ):
         inner = _compile_type_aware_numeric_coercion_expression(inner, backend)
-    return f"{_AGGREGATE_SQL_NAMES[kind]}({inner})"
+    return f"{_aggregate_sql_name(kind, backend)}({inner})"
 
 
 def _is_type_aware_constant_projection(item: object) -> bool:

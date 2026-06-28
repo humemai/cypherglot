@@ -785,6 +785,30 @@ class CompileTests(unittest.TestCase):
             "ORDER BY u.name ASC",
         )
 
+    def test_compile_type_aware_collect_aggregation(self) -> None:
+        ctx = _public_api_schema_context()
+        # SQLite renders collect() as json_group_array; DuckDB/Postgres as array_agg.
+        sqlite_expr = cypherglot.compile_cypher_text(
+            "MATCH (u:User) RETURN u.active AS active, collect(u.name) AS names "
+            "ORDER BY active",
+            schema_context=ctx,
+            backend="sqlite",
+        )
+        self.assertEqual(
+            sqlite_expr.sql(dialect="sqlite"),
+            'SELECT u.active AS "active", JSON_GROUP_ARRAY(u.name) AS "names" '
+            "FROM cg_node_user AS u GROUP BY u.active ORDER BY u.active ASC",
+        )
+
+        duckdb_expr = cypherglot.compile_cypher_text(
+            "MATCH (u:User) RETURN u.active AS active, collect(u.name) AS names "
+            "ORDER BY active",
+            schema_context=ctx,
+            backend="duckdb",
+        )
+        self.assertIn("ARRAY_AGG(u.name)", duckdb_expr.sql(dialect="duckdb"))
+        self.assertIn("GROUP BY u.active", duckdb_expr.sql(dialect="duckdb"))
+
     def test_compile_type_aware_match_node_direct_aggregates(self) -> None:
         count_expression = cypherglot.compile_cypher_text(
             "MATCH (u:User) RETURN count(u) AS total",

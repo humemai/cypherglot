@@ -68,7 +68,7 @@ def _parse_return_items(text: str) -> tuple[ReturnItem, ...]:
             continue
 
         aggregate_match = re.fullmatch(
-            rf"(?P<func>sum|avg|min|max)\s*\(\s*(?P<alias>{_IDENTIFIER})\.(?P<field>{_IDENTIFIER})\s*\)",
+            rf"(?P<func>sum|avg|min|max|collect)\s*\(\s*(?P<alias>{_IDENTIFIER})\.(?P<field>{_IDENTIFIER})\s*\)",
             expression_text,
             flags=re.IGNORECASE,
         )
@@ -78,7 +78,7 @@ def _parse_return_items(text: str) -> tuple[ReturnItem, ...]:
                     alias=aggregate_match.group("alias"),
                     field=aggregate_match.group("field"),
                     kind=cast(
-                        Literal["sum", "avg", "min", "max"],
+                        Literal["sum", "avg", "min", "max", "collect"],
                         aggregate_match.group("func").lower(),
                     ),
                     output_alias=output_alias,

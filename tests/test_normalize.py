@@ -64,6 +64,16 @@ class TestNormalize(unittest.TestCase):
         self.assertEqual(empty_normalized.predicates[0].operator, "IN")
         self.assertEqual(empty_normalized.predicates[0].value, ())
 
+    def test_normalize_cypher_text_normalizes_collect(self) -> None:
+        normalized = cypherglot.normalize_cypher_text(
+            "MATCH (u:User) RETURN u.dept AS dept, collect(u.name) AS names "
+            "ORDER BY dept"
+        )
+
+        collect_item = next(r for r in normalized.returns if r.kind == "collect")
+        self.assertEqual(collect_item.alias, "u")
+        self.assertEqual(collect_item.field, "name")
+
     def test_normalize_cypher_text_normalizes_with_distinct(self) -> None:
         normalized = cypherglot.normalize_cypher_text(
             "MATCH (u:User) WITH DISTINCT u.name AS name RETURN name ORDER BY name"

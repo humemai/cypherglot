@@ -13,7 +13,27 @@ _AGGREGATE_SQL_NAMES: dict[str, str] = {
     "avg": "AVG",
     "min": "MIN",
     "max": "MAX",
+    # `collect` builds a list; the value here is the default rendering
+    # (array_agg, used by DuckDB/PostgreSQL). Backends whose dialect differs are
+    # overridden in _AGGREGATE_SQL_NAME_OVERRIDES below.
+    "collect": "array_agg",
 }
+
+# Per-backend aggregate SQL-name overrides, keyed by SQLBackend value to avoid
+# importing the enum here. Membership/grouping logic uses _AGGREGATE_SQL_NAMES;
+# only the emitted function name is overridden.
+_AGGREGATE_SQL_NAME_OVERRIDES: dict[str, dict[str, str]] = {
+    "sqlite": {"collect": "json_group_array"},
+    "clickhouse": {"collect": "groupArray"},
+}
+
+
+def _aggregate_sql_name(kind: str, backend: object) -> str:
+    backend_value = getattr(backend, "value", backend)
+    overrides = _AGGREGATE_SQL_NAME_OVERRIDES.get(str(backend_value))
+    if overrides is not None and kind in overrides:
+        return overrides[kind]
+    return _AGGREGATE_SQL_NAMES[kind]
 
 
 def _group_disjunct_predicates(compiled: list[tuple[int, str]]) -> list[str]:

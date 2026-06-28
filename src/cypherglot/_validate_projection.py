@@ -14,7 +14,7 @@ from ._normalize_support import (
 )
 
 
-_AGGREGATE_RETURN_KINDS = {"count", "sum", "avg", "min", "max"}
+_AGGREGATE_RETURN_KINDS = {"count", "sum", "avg", "min", "max", "collect"}
 _UNARY_FUNCTION_NAMES = {
     "lower",
     "upper",
@@ -195,7 +195,7 @@ def _validate_plain_return_item(
             return "aggregate"
         if item.alias not in allowed_aliases or item.field is None:
             raise ValueError(
-                "CypherGlot currently supports sum(...), avg(...), min(...), and max(...) in the supported read subset only over admitted entity or relationship fields."
+                "CypherGlot currently supports sum(...), avg(...), min(...), max(...), and collect(...) in the supported read subset only over admitted entity or relationship fields."
             )
         return "aggregate"
 

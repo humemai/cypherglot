@@ -63,7 +63,7 @@ class RelationshipPattern:
 class ReturnItem:
     alias: str
     field: str | None = None
-    kind: Literal["field", "entity", "count", "sum", "avg", "min", "max", "scalar", "size", "predicate", "id", "type", "properties", "labels", "keys", "start_node", "end_node", "lower", "upper", "trim", "ltrim", "rtrim", "reverse", "coalesce", "replace", "left", "right", "split", "abs", "sign", "round", "ceil", "floor", "sqrt", "exp", "sin", "cos", "tan", "asin", "acos", "atan", "ln", "log", "log10", "radians", "degrees", "to_string", "to_integer", "to_float", "to_boolean", "substring", "case"] = "field"
+    kind: Literal["field", "entity", "count", "sum", "avg", "min", "max", "collect", "scalar", "size", "predicate", "id", "type", "properties", "labels", "keys", "start_node", "end_node", "lower", "upper", "trim", "ltrim", "rtrim", "reverse", "coalesce", "replace", "left", "right", "split", "abs", "sign", "round", "ceil", "floor", "sqrt", "exp", "sin", "cos", "tan", "asin", "acos", "atan", "ln", "log", "log10", "radians", "degrees", "to_string", "to_integer", "to_float", "to_boolean", "substring", "case"] = "field"
     operator: Literal[
         "=",
         "<",
@@ -92,7 +92,7 @@ class ReturnItem:
             if self.alias == "*":
                 return "count(*)"
             return f"count({self.alias})"
-        if self.kind in {"sum", "avg", "min", "max"}:
+        if self.kind in {"sum", "avg", "min", "max", "collect"}:
             assert self.field is not None
             return f"{self.kind}({self.alias}.{self.field})"
         if self.kind == "id":

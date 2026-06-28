@@ -25,8 +25,10 @@ That includes:
   `ON` clause (not the outer `WHERE`) to preserve that semantics
 - narrow `MATCH ... WITH ... RETURN` rebinding flows
 - narrow standalone `UNWIND ... RETURN`
-- grouped `count(...)`, `count(*)`, `sum(...)`, `avg(...)`, `min(...)`, and
-  `max(...)` aggregation slices
+- grouped `count(...)`, `count(*)`, `sum(...)`, `avg(...)`, `min(...)`,
+  `max(...)`, and `collect(alias.field)` aggregation slices in ordinary `RETURN`
+  (`collect` renders per backend: `array_agg` on DuckDB/PostgreSQL,
+  `json_group_array` on SQLite; not yet admitted in the `WITH` aggregation slice)
 - common projection families over admitted field, scalar-binding, or literal
   inputs: `size(...)`, `id(...)`, `type(...)`, searched `CASE`,
   `properties(...)`, `labels(...)`, `keys(...)`, `startNode(...)`,

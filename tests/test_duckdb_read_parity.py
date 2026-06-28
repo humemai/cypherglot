@@ -121,6 +121,8 @@ class DuckDBReadParityTests(unittest.TestCase):
             "RETURN u.name AS name ORDER BY name",
             "MATCH (u:User) RETURN DISTINCT u.name AS name ORDER BY name",
             "MATCH (u:User) WITH DISTINCT u.name AS name RETURN name ORDER BY name",
+            "MATCH (u:User) RETURN u.active AS active, collect(u.name) AS names "
+            "ORDER BY active",
             # OPTIONAL MATCH: every user row survives; non-matching get NULL friend.
             "MATCH (a:User) OPTIONAL MATCH (a)-[:KNOWS]->(b:User) "
             "RETURN a.name AS name, b.name AS friend ORDER BY name, friend",
