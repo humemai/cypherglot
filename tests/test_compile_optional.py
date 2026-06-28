@@ -110,6 +110,74 @@ class CompileTests(unittest.TestCase):
             'GROUP BY u.id, \'User\', u.name ORDER BY "total" DESC',
         )
 
+    def test_compile_type_aware_match_optional_match_relationship(self) -> None:
+        expression = cypherglot.compile_cypher_text(
+            "MATCH (a:User {name: 'Alice'}) OPTIONAL MATCH (a)-[r:KNOWS]->(b:User) "
+            "RETURN a.name AS n, b.name AS friend ORDER BY friend",
+            schema_context=_public_api_schema_context(),
+            backend="sqlite",
+        )
+        self.assertEqual(
+            expression.sql(dialect="sqlite"),
+            'SELECT a.name AS "n", b.name AS "friend" FROM cg_node_user AS a '
+            "LEFT JOIN cg_edge_knows AS r ON r.from_id = a.id "
+            "LEFT JOIN cg_node_user AS b ON b.id = r.to_id "
+            "WHERE a.name = 'Alice' ORDER BY b.name ASC",
+        )
+
+    def test_compile_match_optional_match_reverse_direction(self) -> None:
+        expression = cypherglot.compile_cypher_text(
+            "MATCH (a:User {name: 'Alice'}) OPTIONAL MATCH (a)<-[r:KNOWS]-(b:User) "
+            "RETURN a.name AS n, b.name AS friend ORDER BY friend",
+            schema_context=_public_api_schema_context(),
+            backend="sqlite",
+        )
+        # `<-` swaps the endpoint columns.
+        self.assertEqual(
+            expression.sql(dialect="sqlite"),
+            'SELECT a.name AS "n", b.name AS "friend" FROM cg_node_user AS a '
+            "LEFT JOIN cg_edge_knows AS r ON r.to_id = a.id "
+            "LEFT JOIN cg_node_user AS b ON b.id = r.from_id "
+            "WHERE a.name = 'Alice' ORDER BY b.name ASC",
+        )
+
+    def test_compile_match_optional_match_where_goes_into_on_clause(self) -> None:
+        # OPTIONAL MATCH WHERE must land in the LEFT JOIN ON (not the outer WHERE)
+        # so unmatched source rows survive.
+        expression = cypherglot.compile_cypher_text(
+            "MATCH (a:User {name: 'Alice'}) OPTIONAL MATCH (a)-[r:KNOWS]->(b:User) "
+            "WHERE b.age > 30 RETURN a.name AS n, b.name AS friend ORDER BY friend",
+            schema_context=_public_api_schema_context(),
+            backend="sqlite",
+        )
+        self.assertEqual(
+            expression.sql(dialect="sqlite"),
+            'SELECT a.name AS "n", b.name AS "friend" FROM cg_node_user AS a '
+            "LEFT JOIN cg_edge_knows AS r ON r.from_id = a.id "
+            "LEFT JOIN cg_node_user AS b ON b.id = r.to_id AND b.age > 30 "
+            "WHERE a.name = 'Alice' ORDER BY b.name ASC",
+        )
+
+    def test_compile_match_optional_match_rejects_variable_length(self) -> None:
+        with self.assertRaisesRegex(
+            ValueError, "does not support variable-length"
+        ):
+            cypherglot.compile_cypher_text(
+                "MATCH (a:User {name: 'Alice'}) "
+                "OPTIONAL MATCH (a)-[r:KNOWS*1..2]->(b:User) RETURN a.name AS n",
+                schema_context=_public_api_schema_context(),
+                backend="sqlite",
+            )
+
+    def test_compile_match_optional_match_rejects_alias_mismatch(self) -> None:
+        with self.assertRaisesRegex(ValueError, "must reuse the MATCH node alias"):
+            cypherglot.compile_cypher_text(
+                "MATCH (a:User {name: 'Alice'}) "
+                "OPTIONAL MATCH (c)-[r:KNOWS]->(b:User) RETURN a.name AS n",
+                schema_context=_public_api_schema_context(),
+                backend="sqlite",
+            )
+
     def test_compile_rejects_vector_aware_query_nodes_for_now(self) -> None:
         with self.assertRaisesRegex(ValueError, "does not yet compile vector-aware CALL queries"):
             cypherglot.compile_cypher_program_text(

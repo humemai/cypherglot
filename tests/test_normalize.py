@@ -1193,6 +1193,21 @@ class TestNormalize(unittest.TestCase):
         self.assertEqual(normalized.on_match_assignments[0].field, "age")
         self.assertEqual(normalized.on_match_assignments[0].value, 2)
 
+    def test_normalize_cypher_text_normalizes_match_optional_match(self) -> None:
+        normalized = cypherglot.normalize_cypher_text(
+            "MATCH (a:User {name: 'Alice'}) OPTIONAL MATCH (a)-[r:KNOWS]->(b:User) "
+            "WHERE b.name = 'Bob' RETURN a.name AS n, b.name AS friend ORDER BY friend"
+        )
+
+        self.assertEqual(type(normalized).__name__, "NormalizedMatchOptionalMatchReturn")
+        self.assertEqual(normalized.source.node.alias, "a")
+        self.assertEqual(normalized.source.node.properties, (("name", "Alice"),))
+        self.assertEqual(normalized.relationship.type_name, "KNOWS")
+        self.assertEqual(normalized.right.alias, "b")
+        # OPTIONAL MATCH WHERE lives in optional_predicates (-> LEFT JOIN ON).
+        self.assertEqual(len(normalized.optional_predicates), 1)
+        self.assertEqual(normalized.optional_predicates[0].alias, "b")
+
     def test_normalize_cypher_text_normalizes_match_merge_relationship(self) -> None:
         normalized = cypherglot.normalize_cypher_text(
             "MATCH (a:User), (b:User {name: 'Bob'}) MERGE (a)-[:KNOWS]->(b)"

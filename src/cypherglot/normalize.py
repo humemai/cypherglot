@@ -299,6 +299,26 @@ class NormalizedOptionalMatchNode:
 
 
 @dataclass(frozen=True, slots=True)
+class NormalizedMatchOptionalMatchReturn:
+    kind: Literal["match_optional_match"]
+    # Mandatory MATCH (single node); its WHERE lives in source.predicates and
+    # drives the outer rows.
+    source: NormalizedMatchNode
+    # OPTIONAL MATCH one-hop pattern; relationship.alias / right reused. The left
+    # endpoint is source.node (alias enforced equal at normalize time).
+    relationship: RelationshipPattern
+    right: NodePattern
+    # OPTIONAL MATCH WHERE predicates — lowered into the LEFT JOIN ON clause, not
+    # the outer WHERE, to preserve unmatched source rows.
+    optional_predicates: tuple[Predicate, ...] = ()
+    returns: tuple[ReturnItem, ...] = ()
+    order_by: tuple[OrderItem, ...] = ()
+    limit: int | None = None
+    distinct: bool = False
+    skip: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class NormalizedMatchWithReturn:
     kind: Literal["with"]
     source: NormalizedMatchNode | NormalizedMatchRelationship | NormalizedMatchChain
@@ -471,6 +491,7 @@ NormalizedCypherStatement = (
     | NormalizedMatchRelationship
     | NormalizedMatchChain
     | NormalizedOptionalMatchNode
+    | NormalizedMatchOptionalMatchReturn
     | NormalizedMatchWithReturn
     | NormalizedUnwind
     | NormalizedQueryNodesVectorSearch
@@ -604,6 +625,21 @@ def normalize_cypher_parse_result(
                 extra={"statement_kind": type(statement).__name__},
             )
             return statement
+
+    if (
+        len(reading_clauses) == 2
+        and reading_clauses[0].oC_Match() is not None
+        and reading_clauses[0].oC_Match().OPTIONAL() is None
+        and reading_clauses[1].oC_Match() is not None
+        and reading_clauses[1].oC_Match().OPTIONAL() is not None
+        and single_part_query.oC_Return() is not None
+    ):
+        statement = _normalize_match_optional_match_return(result, single_part_query)
+        logger.debug(
+            "Normalized parsed Cypher result",
+            extra={"statement_kind": type(statement).__name__},
+        )
+        return statement
 
     if reading_clauses and reading_clauses[0].oC_Unwind() is not None:
         statement = _normalize_unwind_query(result, single_part_query)
@@ -1295,6 +1331,84 @@ def _normalize_optional_match_node(
         pattern_kind="node",
         node=node,
         predicates=predicates,
+        returns=returns,
+        order_by=order_by,
+        limit=limit,
+        distinct=distinct,
+        skip=skip,
+    )
+
+
+def _normalize_match_optional_match_return(
+    result: CypherParseResult,
+    single_part_query,
+) -> NormalizedMatchOptionalMatchReturn:
+    reading_clauses = single_part_query.oC_ReadingClause()
+    mandatory_ctx = reading_clauses[0].oC_Match()
+    optional_ctx = reading_clauses[1].oC_Match()
+    assert mandatory_ctx is not None and optional_ctx is not None
+
+    source = _normalize_match_source(result, mandatory_ctx)
+    if not isinstance(source, NormalizedMatchNode):
+        raise ValueError(
+            "CypherGlot currently supports MATCH ... OPTIONAL MATCH only when the "
+            "mandatory MATCH is a single node pattern."
+        )
+
+    optional_pattern_text = _context_text(result, optional_ctx.oC_Pattern())
+    if not _looks_like_relationship_pattern(optional_pattern_text):
+        raise ValueError(
+            "CypherGlot currently supports OPTIONAL MATCH after MATCH only for a "
+            "single directed relationship pattern."
+        )
+    left_text, relationship_text, right_text, direction = _split_relationship_pattern(
+        optional_pattern_text
+    )
+    left = _parse_node_pattern(left_text, default_alias="__humem_optional_left_node")
+    if left.alias != source.node.alias:
+        raise ValueError(
+            "CypherGlot OPTIONAL MATCH must reuse the MATCH node alias as the left "
+            "endpoint of the optional relationship."
+        )
+    relationship = _parse_relationship_pattern(relationship_text, direction)
+    if relationship.type_name is None:
+        raise ValueError(
+            "CypherGlot OPTIONAL MATCH requires an explicit relationship type."
+        )
+    if relationship.min_hops != 1 or relationship.max_hops != 1:
+        raise ValueError(
+            "CypherGlot OPTIONAL MATCH does not support variable-length "
+            "relationships."
+        )
+    right = _parse_node_pattern(
+        right_text,
+        require_label=True,
+        default_alias="__humem_optional_right_node",
+    )
+
+    optional_predicates: tuple[Predicate, ...] = ()
+    optional_where = optional_ctx.oC_Where()
+    if optional_where is not None:
+        optional_predicates = _parse_predicates(
+            _context_text(result, optional_where.oC_Expression())
+        )
+    allowed = {source.node.alias: "node", right.alias: "node"}
+    if relationship.alias is not None:
+        allowed[relationship.alias] = "relationship"
+    _validate_normalized_match_predicates(optional_predicates, alias_kinds=allowed)
+
+    return_ctx = single_part_query.oC_Return()
+    assert return_ctx is not None
+    projection_text = _context_text(result, return_ctx.oC_ProjectionBody())
+    return_text, order_by, limit, distinct, skip = _split_return_clause(projection_text)
+    returns = _parse_return_items(return_text)
+
+    return NormalizedMatchOptionalMatchReturn(
+        kind="match_optional_match",
+        source=source,
+        relationship=relationship,
+        right=right,
+        optional_predicates=optional_predicates,
         returns=returns,
         order_by=order_by,
         limit=limit,

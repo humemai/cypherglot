@@ -15,6 +15,7 @@ from ._validate_projection import (
 from ._validate_shape_helpers import (
     _extract_single_match_source_nodes as _extract_single_match_source_nodes_impl,
     _validate_match_pattern_shape as _validate_match_pattern_shape_impl,
+    _validate_match_optional_match_shape as _validate_match_optional_match_shape_impl,
     _validate_optional_match_shape as _validate_optional_match_shape_impl,
     _validate_query_nodes_vector_shape as _validate_query_nodes_vector_shape_impl,
     _validate_traversal_write_endpoints as _validate_traversal_write_endpoints_impl,
@@ -134,6 +135,16 @@ def _validate_optional_match_shape(result: CypherParseResult, single_part_query_
     )
 
 
+def _validate_match_optional_match_shape(
+    result: CypherParseResult, single_part_query_ctx
+) -> None:
+    _validate_match_optional_match_shape_impl(
+        result,
+        single_part_query_ctx,
+        validate_plain_read_projection_shape=_validate_plain_read_projection_shape,
+    )
+
+
 def _validate_plain_read_projection_shape(
     projection_text: str,
     *,
@@ -213,6 +224,18 @@ def validate_cypher_parse_result(result: CypherParseResult):
         if match_ctx.OPTIONAL() is not None:
             _validate_optional_match_shape(result, single_part_query_ctx)
             return single_part_query_ctx
+
+    if (
+        len(reading_clauses) == 2
+        and not updating_clauses
+        and return_ctx is not None
+        and reading_clauses[0].oC_Match() is not None
+        and reading_clauses[0].oC_Match().OPTIONAL() is None
+        and reading_clauses[1].oC_Match() is not None
+        and reading_clauses[1].oC_Match().OPTIONAL() is not None
+    ):
+        _validate_match_optional_match_shape(result, single_part_query_ctx)
+        return single_part_query_ctx
 
     if reading_clauses and reading_clauses[0].oC_Unwind() is not None:
         _validate_unwind_shape(result, single_part_query_ctx)

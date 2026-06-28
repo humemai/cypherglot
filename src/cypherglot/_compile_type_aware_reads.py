@@ -3,6 +3,7 @@ from __future__ import annotations
 from ._compile_sql_utils import (
     _AGGREGATE_SQL_NAMES,
     _assemble_select_sql,
+    _edge_endpoint_column,
     _group_disjunct_predicates,
     _sql_literal,
 )
@@ -401,6 +402,175 @@ def _compile_type_aware_optional_match_node_sql(
         from_sql="FROM (SELECT 1 AS __cg_seed) AS seed",
         joins=[f"LEFT JOIN {node_type.table_name} AS {alias} ON {' AND '.join(on_parts)}"],
         where_parts=[],
+        group_sql=group_sql,
+        order_sql=order_sql,
+        limit=statement.limit,
+        skip=statement.skip,
+    )
+
+
+def _compile_type_aware_match_optional_match_relationship_sql(
+    statement: GraphRelationalReadIR,
+    graph_schema: GraphSchema,
+    backend: SQLBackend,
+) -> str:
+    source_node, right = statement.nodes
+    relationship = statement.relationships[0]
+    if (
+        source_node.label is None
+        or right.label is None
+        or relationship.type_name is None
+    ):
+        raise ValueError(
+            "Type-aware OPTIONAL MATCH lowering requires explicit endpoint labels "
+            "and a relationship type."
+        )
+    if relationship.min_hops != 1 or relationship.max_hops != 1:
+        raise ValueError(
+            "Type-aware OPTIONAL MATCH lowering does not support variable-length "
+            "relationships."
+        )
+
+    a_alias = source_node.alias
+    b_alias = right.alias
+    r_alias = relationship.alias or "__cg_opt_edge"
+    a_type = graph_schema.node_type(source_node.label)
+    b_type = graph_schema.node_type(right.label)
+    edge_type = graph_schema.edge_type(relationship.type_name)
+
+    source_label = source_node.label
+    target_label = right.label
+    if relationship.direction == "in":
+        source_label, target_label = target_label, source_label
+    if source_label != edge_type.source_type or target_label != edge_type.target_type:
+        raise ValueError(
+            "Type-aware OPTIONAL MATCH relationship endpoint labels must match the "
+            "schema contract."
+        )
+
+    a_col = _edge_endpoint_column(relationship.direction, "left")
+    b_col = _edge_endpoint_column(relationship.direction, "right")
+
+    alias_specs: dict[str, _TypeAwareAliasSpec] = {
+        a_alias: _TypeAwareAliasSpec(a_alias, "node", a_type),
+        b_alias: _TypeAwareAliasSpec(b_alias, "node", b_type),
+    }
+    if relationship.alias is not None:
+        alias_specs[r_alias] = _TypeAwareAliasSpec(
+            r_alias,
+            "relationship",
+            edge_type,
+            start_node_alias=a_alias,
+            end_node_alias=b_alias,
+        )
+
+    # Outer WHERE carries only the mandatory source predicates (these are meant
+    # to remove source rows).
+    where_parts: list[str] = []
+    for field, value in source_node.properties:
+        where_parts.append(
+            _compile_type_aware_predicate(
+                field_expression=_compile_type_aware_node_field_expression(
+                    a_alias, a_type, field
+                ),
+                operator="=",
+                value=value,
+                backend=backend,
+            )
+        )
+    source_predicate_parts: list[tuple[int, str]] = []
+    for predicate in statement.predicates:
+        if predicate.alias != a_alias:
+            raise ValueError(
+                "Type-aware OPTIONAL MATCH lowering supports mandatory WHERE "
+                "predicates only on the matched source alias."
+            )
+        source_predicate_parts.append(
+            (
+                predicate.disjunct_index,
+                _compile_type_aware_match_node_predicate(
+                    a_alias, a_type, predicate, backend=backend
+                ),
+            )
+        )
+    where_parts.extend(_group_disjunct_predicates(source_predicate_parts))
+
+    # Optional-side predicates (pattern properties + OPTIONAL MATCH WHERE) go in
+    # the LEFT JOIN ON clauses so unmatched source rows survive with NULLs.
+    edge_on = [f"{r_alias}.{a_col} = {a_alias}.id"]
+    for field, value in relationship.properties:
+        edge_on.append(
+            _compile_type_aware_predicate(
+                field_expression=_compile_type_aware_edge_field_expression(
+                    r_alias, edge_type, field
+                ),
+                operator="=",
+                value=value,
+                backend=backend,
+            )
+        )
+    right_on = [f"{b_alias}.id = {r_alias}.{b_col}"]
+    for field, value in right.properties:
+        right_on.append(
+            _compile_type_aware_predicate(
+                field_expression=_compile_type_aware_node_field_expression(
+                    b_alias, b_type, field
+                ),
+                operator="=",
+                value=value,
+                backend=backend,
+            )
+        )
+    for predicate in statement.optional_predicates:
+        if predicate.alias == b_alias:
+            right_on.append(
+                _compile_type_aware_match_node_predicate(
+                    b_alias, b_type, predicate, backend=backend
+                )
+            )
+        elif predicate.alias == r_alias:
+            edge_on.append(
+                _compile_type_aware_match_relationship_predicate(
+                    r_alias, edge_type, predicate, backend=backend
+                )
+            )
+        elif predicate.alias == a_alias:
+            edge_on.append(
+                _compile_type_aware_match_node_predicate(
+                    a_alias, a_type, predicate, backend=backend
+                )
+            )
+        else:
+            raise ValueError(
+                "Type-aware OPTIONAL MATCH WHERE may reference only the optional "
+                "pattern aliases."
+            )
+
+    select_parts: list[str] = []
+    for item in statement.returns:
+        for expression, output_name in _compile_type_aware_chain_select_expressions(
+            item, alias_specs, backend=backend
+        ):
+            select_parts.append(f'{expression} AS "{output_name}"')
+    select_sql = ", ".join(select_parts)
+    order_sql = _compile_type_aware_chain_order_by(
+        statement.order_by, statement.returns, alias_specs, backend=backend
+    )
+    group_sql = _compile_type_aware_chain_group_by(
+        statement.returns, alias_specs, backend=backend
+    )
+
+    return _assemble_select_sql(
+        select_sql=select_sql,
+        distinct=statement.distinct,
+        from_sql=f"FROM {a_type.table_name} AS {a_alias}",
+        joins=[
+            f"LEFT JOIN {edge_type.table_name} AS {r_alias} "
+            f"ON {' AND '.join(edge_on)}",
+            f"LEFT JOIN {b_type.table_name} AS {b_alias} "
+            f"ON {' AND '.join(right_on)}",
+        ],
+        where_parts=where_parts,
         group_sql=group_sql,
         order_sql=order_sql,
         limit=statement.limit,

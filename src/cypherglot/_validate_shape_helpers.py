@@ -387,3 +387,47 @@ def _validate_optional_match_shape(
 		},
 		allowed_relationship_aliases=set(),
 	)
+
+
+def _validate_match_optional_match_shape(
+	result: CypherParseResult,
+	single_part_query_ctx,
+	*,
+	validate_plain_read_projection_shape,
+) -> None:
+	reading_clauses = single_part_query_ctx.oC_ReadingClause()
+	return_ctx = single_part_query_ctx.oC_Return()
+	mandatory_ctx = reading_clauses[0].oC_Match()
+	optional_ctx = reading_clauses[1].oC_Match()
+	assert mandatory_ctx is not None and optional_ctx is not None and return_ctx is not None
+
+	mandatory_parts = mandatory_ctx.oC_Pattern().oC_PatternPart()
+	mandatory_element = mandatory_parts[0].oC_AnonymousPatternPart().oC_PatternElement()
+	if len(mandatory_parts) != 1 or mandatory_element.oC_PatternElementChain():
+		raise ValueError(
+			"CypherGlot currently admits only a single-node mandatory MATCH before "
+			"OPTIONAL MATCH."
+		)
+
+	optional_parts = optional_ctx.oC_Pattern().oC_PatternPart()
+	optional_element = optional_parts[0].oC_AnonymousPatternPart().oC_PatternElement()
+	if len(optional_parts) != 1 or len(optional_element.oC_PatternElementChain()) != 1:
+		raise ValueError(
+			"CypherGlot currently admits only one directed relationship pattern in "
+			"OPTIONAL MATCH after MATCH."
+		)
+
+	mandatory_text = _context_text(result, mandatory_ctx.oC_Pattern())
+	optional_text = _context_text(result, optional_ctx.oC_Pattern())
+	allowed_aliases = set(
+		re.findall(r"\(\s*([A-Za-z_][A-Za-z0-9_]*)", mandatory_text + " " + optional_text)
+	)
+	allowed_relationship_aliases = set(
+		re.findall(r"\[\s*([A-Za-z_][A-Za-z0-9_]*)", optional_text)
+	)
+	projection_text = _context_text(result, return_ctx.oC_ProjectionBody())
+	validate_plain_read_projection_shape(
+		projection_text,
+		allowed_aliases=allowed_aliases,
+		allowed_relationship_aliases=allowed_relationship_aliases,
+	)

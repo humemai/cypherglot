@@ -18,6 +18,11 @@ That includes:
 
 - ordinary `MATCH ... RETURN` reads over one connected pattern
 - narrow standalone `OPTIONAL MATCH ... RETURN`
+- `MATCH (a:Label) ... OPTIONAL MATCH (a)-[r:TYPE]->(b:Label) ... RETURN` — one
+  mandatory single node followed by one optional one-hop relationship (left
+  endpoint reuses the matched alias); lowered as a `LEFT JOIN` so unmatched
+  source rows survive with NULLs. The OPTIONAL MATCH `WHERE` lands in the join
+  `ON` clause (not the outer `WHERE`) to preserve that semantics
 - narrow `MATCH ... WITH ... RETURN` rebinding flows
 - narrow standalone `UNWIND ... RETURN`
 - grouped `count(...)`, `count(*)`, `sum(...)`, `avg(...)`, `min(...)`, and
@@ -542,6 +547,17 @@ CypherGlot currently rejects these families explicitly:
 - broader `UNWIND` semantics beyond the narrow admitted subset
 - broader `MERGE` semantics beyond the narrow admitted subset
 - broader multi-part queries
+
+## Design non-goals
+
+- **Multi-label nodes** (`(n:User:Admin)`) are a deliberate non-goal, not a
+  temporary gap. The schema is one stored type per physical node table, which is
+  load-bearing for type-local (columnar-friendly) scans; node ids are per-table
+  sequences, so a node cannot hold one identity across type tables. Graphs that
+  rely on arbitrary cross-cutting labels are out of scope. The common
+  supertype/hierarchy case could be served in the future by compile-time label
+  aliasing (lowering `MATCH (n:Supertype)` to a `UNION ALL` over the declaring
+  type tables) without any storage change.
 
 ## Narrow vector-aware subset
 

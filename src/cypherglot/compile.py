@@ -31,6 +31,7 @@ from ._compile_type_aware_common import (
 from ._compile_type_aware_reads import (
     _create_relationship_uses_distinct_nodes,
     _compile_type_aware_match_chain_sql,
+    _compile_type_aware_match_optional_match_relationship_sql,
     _compile_type_aware_match_node_sql,
     _compile_type_aware_match_relationship_sql,
     _compile_type_aware_optional_match_node_sql,
@@ -276,6 +277,16 @@ def _compile_graph_relational_backend_program(
         assert read_query is not None
         return _single_statement_program(
             _compile_type_aware_optional_match_node_sql(
+                read_query,
+                graph_schema,
+                backend=backend_ir.backend,
+            )
+        )
+
+    if family == "match-optional-match":
+        assert read_query is not None
+        return _single_statement_program(
+            _compile_type_aware_match_optional_match_relationship_sql(
                 read_query,
                 graph_schema,
                 backend=backend_ir.backend,

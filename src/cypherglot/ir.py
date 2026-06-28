@@ -39,6 +39,7 @@ from .normalize import (
     NormalizedMatchMergeRelationshipFromTraversal,
     NormalizedMatchMergeRelationshipOnNode,
     NormalizedMatchNode,
+    NormalizedMatchOptionalMatchReturn,
     NormalizedMatchRelationship,
     NormalizedMatchWithReturn,
     NormalizedOptionalMatchNode,
@@ -222,11 +223,16 @@ GraphRelationalWriteIR = (
 
 @dataclass(frozen=True, slots=True)
 class GraphRelationalReadIR:
-    match_kind: Literal["match", "optional-match", "with", "unwind"]
+    match_kind: Literal[
+        "match", "optional-match", "optional-match-relationship", "with", "unwind"
+    ]
     source_kind: Literal["node", "relationship", "relationship-chain", "unwind"]
     nodes: tuple[NodePattern, ...] = ()
     relationships: tuple[RelationshipPattern, ...] = ()
     predicates: tuple[ReadPredicate, ...] = ()
+    # Predicates from an OPTIONAL MATCH part — lowered into the LEFT JOIN ON
+    # clause rather than the outer WHERE, so unmatched source rows survive.
+    optional_predicates: tuple[ReadPredicate, ...] = ()
     returns: tuple[ReadReturnItem, ...] = ()
     order_by: tuple[ReadOrderItem, ...] = ()
     bindings: tuple[WithBinding, ...] = ()
@@ -396,6 +402,7 @@ def _statement_family(statement: NormalizedCypherStatement) -> str:
     family_by_type = {
         NormalizedMatchNode: "match-node",
         NormalizedOptionalMatchNode: "optional-match-node",
+        NormalizedMatchOptionalMatchReturn: "match-optional-match",
         NormalizedMatchRelationship: "match-relationship",
         NormalizedMatchChain: "match-chain",
         NormalizedMatchWithReturn: "match-with-return",
@@ -492,6 +499,20 @@ def _build_read_ir(
             source_kind="node",
             nodes=(statement.node,),
             predicates=statement.predicates,
+            returns=statement.returns,
+            order_by=statement.order_by,
+            distinct=statement.distinct,
+            limit=statement.limit,
+            skip=statement.skip,
+        )
+    if isinstance(statement, NormalizedMatchOptionalMatchReturn):
+        return GraphRelationalReadIR(
+            match_kind="optional-match-relationship",
+            source_kind="relationship",
+            nodes=(statement.source.node, statement.right),
+            relationships=(statement.relationship,),
+            predicates=statement.source.predicates,
+            optional_predicates=statement.optional_predicates,
             returns=statement.returns,
             order_by=statement.order_by,
             distinct=statement.distinct,
