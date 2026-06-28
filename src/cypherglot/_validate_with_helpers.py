@@ -61,14 +61,13 @@ def _validate_with_shape(result: CypherParseResult, multi_part_query_ctx) -> Non
     with_ctx = multi_part_query_ctx.oC_With()[0]
     projection_body = with_ctx.oC_ProjectionBody()
     if (
-        projection_body.DISTINCT() is not None
-        or projection_body.oC_Order() is not None
+        projection_body.oC_Order() is not None
         or projection_body.oC_Skip() is not None
         or projection_body.oC_Limit() is not None
     ):
         raise ValueError(
             "CypherGlot currently admits only simple WITH passthrough items "
-            "without DISTINCT, ORDER BY, SKIP/OFFSET, or LIMIT."
+            "without ORDER BY, SKIP/OFFSET, or LIMIT."
         )
     projection_items = projection_body.oC_ProjectionItems().oC_ProjectionItem()
     if not projection_items:

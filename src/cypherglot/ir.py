@@ -229,6 +229,7 @@ class GraphRelationalReadIR:
     order_by: tuple[ReadOrderItem, ...] = ()
     bindings: tuple[WithBinding, ...] = ()
     distinct: bool = False
+    source_distinct: bool = False
     limit: int | None = None
     skip: int | None = None
     source: GraphRelationalReadIR | None = None
@@ -535,6 +536,7 @@ def _build_read_ir(
             order_by=statement.order_by,
             bindings=statement.bindings,
             distinct=statement.distinct,
+            source_distinct=statement.source_distinct,
             limit=statement.limit,
             skip=statement.skip,
             source=source,

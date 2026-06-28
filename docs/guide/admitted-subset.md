@@ -420,7 +420,11 @@ The admitted `OPTIONAL MATCH` slice is currently narrow:
   `MATCH`, including grouped field or whole-entity projections
 - null-preserving lowering through a left-join-style compiled shape for unmatched rows
 
-CypherGlot does not yet admit broader `WITH` semantics such as `WITH DISTINCT`,
+CypherGlot admits `RETURN DISTINCT` on ordinary `MATCH` reads and `WITH DISTINCT`
+to deduplicate the piped stream before the final `RETURN`.
+
+CypherGlot does not yet admit broader `WITH` semantics such as `WITH ... ORDER BY`
+or `WITH ... LIMIT`,
 broader aggregation forms beyond narrow admitted `count(binding_alias)` and `count(*)`, broader expression projections beyond narrow admitted `id(...)`, `type(...)`, `lower(...)`, `upper(...)`, `trim(...)`, `ltrim(...)`, `rtrim(...)`, `reverse(...)`, `coalesce(...)`, `replace(...)`, `left(...)`, `right(...)`, `split(...)`, `abs(...)`, `sign(...)`, `round(...)`, `ceil(...)`, `floor(...)`, `sqrt(...)`, `exp(...)`, `sin(...)`, `cos(...)`, `tan(...)`, `toString(...)`, `toInteger(...)`, `toFloat(...)`, and `toBoolean(...)` outputs in the
 final `RETURN`, broader ordinary-read expression projections beyond narrow admitted literal, parameter, `size(...)`, `lower(...)`, `upper(...)`, `trim(...)`, `ltrim(...)`, `rtrim(...)`, `reverse(...)`, `coalesce(...)`, `replace(...)`, `left(...)`, `right(...)`, `split(...)`, two-arg or three-arg `substring(...)`, `abs(...)`, `sign(...)`, `round(...)`, `ceil(...)`, `floor(...)`, `sqrt(...)`, `exp(...)`, `sin(...)`, `cos(...)`, `tan(...)`, `toString(...)`, `toInteger(...)`, `toFloat(...)`, `toBoolean(...)`, simple predicate, `id(...)`, and `type(...)` outputs, broader `WITH` final-RETURN expression projections beyond narrow admitted scalar literal/parameter, predicate, `size(...)`, `lower(...)`, `upper(...)`, `trim(...)`, `ltrim(...)`, `rtrim(...)`, `reverse(...)`, `coalesce(...)`, `replace(...)`, `left(...)`, `right(...)`, `split(...)`, two-arg or three-arg `substring(...)`, `abs(...)`, `sign(...)`, `round(...)`, `ceil(...)`, `floor(...)`, `sqrt(...)`, `exp(...)`, `sin(...)`, `cos(...)`, `tan(...)`, `toString(...)`, `toInteger(...)`, `toFloat(...)`, `toBoolean(...)`, `id(...)`, and `type(...)` outputs, or
 multi-stage `WITH ... WITH ...` flows.

@@ -97,6 +97,8 @@ def _normalize_match_with_return(
     returns = _parse_with_return_items(return_text, bindings)
     with_order_by = _parse_with_order_items(order_by, bindings, returns)
 
+    source_distinct = with_ctx.oC_ProjectionBody().DISTINCT() is not None
+
     return NormalizedMatchWithReturn(
         kind="with",
         source=source,
@@ -106,6 +108,7 @@ def _normalize_match_with_return(
         order_by=with_order_by,
         limit=limit,
         distinct=distinct,
+        source_distinct=source_distinct,
         skip=skip,
     )
 
@@ -196,14 +199,13 @@ def _parse_with_bindings(
 ) -> tuple[WithBinding, ...]:
     projection_body = with_ctx.oC_ProjectionBody()
     if (
-        projection_body.DISTINCT() is not None
-        or projection_body.oC_Order() is not None
+        projection_body.oC_Order() is not None
         or projection_body.oC_Skip() is not None
         or projection_body.oC_Limit() is not None
     ):
         raise ValueError(
             "HumemCypher v0 WITH support currently admits only simple passthrough "
-            "projection items without DISTINCT, ORDER BY, SKIP/OFFSET, or LIMIT."
+            "projection items without ORDER BY, SKIP/OFFSET, or LIMIT."
         )
 
     bindings: list[WithBinding] = []

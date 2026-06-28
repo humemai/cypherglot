@@ -119,6 +119,8 @@ class DuckDBReadParityTests(unittest.TestCase):
             "RETURN u.name AS name ORDER BY name",
             "MATCH (u:User) WHERE u.age IN [] "
             "RETURN u.name AS name ORDER BY name",
+            "MATCH (u:User) RETURN DISTINCT u.name AS name ORDER BY name",
+            "MATCH (u:User) WITH DISTINCT u.name AS name RETURN name ORDER BY name",
         )
 
         for query in queries:

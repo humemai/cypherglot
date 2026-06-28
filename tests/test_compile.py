@@ -730,6 +730,32 @@ class CompileTests(unittest.TestCase):
             "WHERE 1 = 0 ORDER BY u.name ASC",
         )
 
+    def test_compile_type_aware_return_distinct(self) -> None:
+        expression = cypherglot.compile_cypher_text(
+            "MATCH (u:User) RETURN DISTINCT u.name AS name ORDER BY name",
+            schema_context=_public_api_schema_context(),
+            backend="sqlite",
+        )
+        self.assertEqual(
+            expression.sql(dialect="sqlite"),
+            'SELECT DISTINCT u.name AS "name" FROM cg_node_user AS u '
+            "ORDER BY u.name ASC",
+        )
+
+    def test_compile_type_aware_with_distinct(self) -> None:
+        expression = cypherglot.compile_cypher_text(
+            "MATCH (u:User) WITH DISTINCT u.name AS name RETURN name ORDER BY name",
+            schema_context=_public_api_schema_context(),
+            backend="sqlite",
+        )
+        self.assertEqual(
+            expression.sql(dialect="sqlite"),
+            'SELECT with_q."__cg_with_scalar_name" AS "name" FROM '
+            '(SELECT DISTINCT * FROM (SELECT u.name AS "__cg_with_scalar_name" '
+            "FROM cg_node_user AS u) AS with_src) AS with_q "
+            'ORDER BY with_q."__cg_with_scalar_name" ASC',
+        )
+
     def test_compile_type_aware_match_node_direct_aggregates(self) -> None:
         count_expression = cypherglot.compile_cypher_text(
             "MATCH (u:User) RETURN count(u) AS total",

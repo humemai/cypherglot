@@ -22,6 +22,11 @@ def _compile_type_aware_match_with_return_sql(
         graph_schema,
         backend=backend,
     )
+    if statement.source_distinct:
+        # `WITH DISTINCT` deduplicates the piped stream. The stream columns are
+        # exactly the projected WITH bindings, so a DISTINCT over the whole inner
+        # projection is the correct lowering (and composes with the outer RETURN).
+        inner_sql = f"SELECT DISTINCT * FROM ({inner_sql}) AS with_src"
     select_sql = _compile_type_aware_with_select_list(
         statement.returns,
         binding_specs,

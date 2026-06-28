@@ -308,6 +308,9 @@ class NormalizedMatchWithReturn:
     order_by: tuple[WithOrderItem, ...] = ()
     limit: int | None = None
     distinct: bool = False
+    # `distinct` is the final RETURN's DISTINCT; `source_distinct` is the
+    # intermediate `WITH DISTINCT` that deduplicates the piped stream.
+    source_distinct: bool = False
     skip: int | None = None
 
 
