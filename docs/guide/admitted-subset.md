@@ -514,11 +514,14 @@ multiple SQLGlot-backed statements.
 
 The admitted standalone `MERGE` shapes are:
 
-- one labeled node pattern, matched-or-created idempotently
+- one labeled node pattern, matched-or-created idempotently, optionally with
+  `ON CREATE SET ...` and/or `ON MATCH SET ...` actions (lowered to a guarded
+  INSERT carrying the ON CREATE assignments, preceded by an ON MATCH UPDATE so
+  each action applies only in its case)
 - or one directed relationship pattern whose endpoint node patterns are both
   labeled, matched-or-created idempotently as one guarded pattern
-- no `ON CREATE` / `ON MATCH` actions and no broader full-pattern `MERGE`
-  semantics beyond that narrow subset
+- `ON CREATE` / `ON MATCH` actions are not yet admitted on relationship `MERGE`,
+  and no broader full-pattern `MERGE` semantics beyond that narrow subset
 
 ## Deferred clause families
 

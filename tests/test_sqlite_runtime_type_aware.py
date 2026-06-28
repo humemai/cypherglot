@@ -46,6 +46,33 @@ class TypeAwareSQLiteRuntimeTests(TypeAwareSQLiteRuntimeTestCase):
 
         self.assertEqual(users, [(1, "Alice", 30), (2, "Bob", 25)])
 
+    def test_type_aware_merge_node_actions_execute_on_sqlite(self) -> None:
+        self._seed_type_aware_graph()
+
+        # Existing node: ON MATCH SET applies, ON CREATE SET does not.
+        on_match_program = cypherglot.render_cypher_program_text(
+            "MERGE (u:User {name: 'Alice'}) ON CREATE SET u.age = 1 "
+            "ON MATCH SET u.age = 99",
+            backend="sqlite",
+            schema_context=self._type_aware_schema_context(),
+        )
+        self._execute_program(on_match_program)
+        self._execute_program(on_match_program)
+
+        # New node: ON CREATE SET applies, ON MATCH SET does not.
+        on_create_program = cypherglot.render_cypher_program_text(
+            "MERGE (u:User {name: 'Zoe'}) ON CREATE SET u.age = 7 "
+            "ON MATCH SET u.age = 99",
+            backend="sqlite",
+            schema_context=self._type_aware_schema_context(),
+        )
+        self._execute_program(on_create_program)
+
+        users = self.conn.execute(
+            "SELECT name, age FROM cg_node_user ORDER BY name"
+        ).fetchall()
+        self.assertEqual(users, [("Alice", 99), ("Bob", 25), ("Zoe", 7)])
+
     def test_type_aware_merge_relationship_program_executes_on_sqlite(self) -> None:
         self._seed_type_aware_graph()
 

@@ -382,6 +382,8 @@ class NormalizedMergeNode:
     kind: Literal["merge"]
     pattern_kind: Literal["node"]
     node: NodePattern
+    on_create_assignments: tuple[SetItem, ...] = ()
+    on_match_assignments: tuple[SetItem, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -530,6 +532,28 @@ def _validate_normalized_match_predicates(
                 "HumemCypher v0 currently supports only equality predicates for "
                 "relationship field 'type'."
             )
+
+
+def _parse_merge_actions(
+    result: CypherParseResult,
+    merge_ctx,
+) -> tuple[tuple[SetItem, ...], tuple[SetItem, ...]]:
+    """Return (on_create_assignments, on_match_assignments) for a MERGE."""
+    on_create: tuple[SetItem, ...] = ()
+    on_match: tuple[SetItem, ...] = ()
+    for action_ctx in merge_ctx.oC_MergeAction():
+        set_ctx = action_ctx.oC_Set()
+        assignments = _parse_set_items(
+            ", ".join(
+                _context_text(result, item_ctx)
+                for item_ctx in set_ctx.oC_SetItem()
+            )
+        )
+        if action_ctx.CREATE() is not None:
+            on_create = on_create + assignments
+        else:
+            on_match = on_match + assignments
+    return on_create, on_match
 
 
 def normalize_cypher_text(text: str) -> NormalizedCypherStatement:
@@ -1058,6 +1082,11 @@ def normalize_cypher_parse_result(
                 _split_relationship_pattern(pattern_text)
             )
             if merge_ctx is not None:
+                if merge_ctx.oC_MergeAction():
+                    raise ValueError(
+                        "HumemCypher v0 ON CREATE / ON MATCH actions are currently "
+                        "supported only on single-node MERGE, not relationship MERGE."
+                    )
                 return NormalizedMergeRelationship(
                     kind="merge",
                     pattern_kind="relationship",
@@ -1090,6 +1119,9 @@ def normalize_cypher_parse_result(
             )
 
         if merge_ctx is not None:
+            on_create_assignments, on_match_assignments = _parse_merge_actions(
+                result, merge_ctx
+            )
             return NormalizedMergeNode(
                 kind="merge",
                 pattern_kind="node",
@@ -1098,6 +1130,8 @@ def normalize_cypher_parse_result(
                     require_label=True,
                     default_alias="__humem_merge_node",
                 ),
+                on_create_assignments=on_create_assignments,
+                on_match_assignments=on_match_assignments,
             )
 
         return NormalizedCreateNode(

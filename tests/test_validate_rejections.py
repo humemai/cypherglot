@@ -82,13 +82,23 @@ class TestValidate(unittest.TestCase):
         self.assertEqual(type(variable_length_grouped_entity).__name__, "OC_SinglePartQueryContext")
         self.assertEqual(type(variable_length_grouped_scalar).__name__, "OC_SinglePartQueryContext")
 
-    def test_validate_cypher_text_rejects_merge_actions_for_now(self) -> None:
+    def test_validate_cypher_text_accepts_node_merge_actions(self) -> None:
+        # Node MERGE with ON CREATE / ON MATCH SET is supported.
+        cypherglot.validate_cypher_text(
+            "MERGE (u:User {name: 'Alice'}) ON CREATE SET u.age = 1 "
+            "ON MATCH SET u.age = 2"
+        )
+
+    def test_validate_cypher_text_rejects_relationship_merge_actions_for_now(
+        self,
+    ) -> None:
         with self.assertRaisesRegex(
             ValueError,
-            "validates MERGE only without ON CREATE or ON MATCH actions",
+            "only on single-node MERGE, not relationship MERGE",
         ):
             cypherglot.validate_cypher_text(
-                "MERGE (u:User {name: 'Alice'}) ON CREATE SET u.created = true"
+                "MERGE (a:User {name: 'Alice'})-[:KNOWS]->(b:User {name: 'Bob'}) "
+                "ON CREATE SET a.age = 1"
             )
 
     def test_validate_cypher_text_rejects_deferred_clause_families(self) -> None:

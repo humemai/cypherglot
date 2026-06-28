@@ -114,13 +114,33 @@ def _compile_merge_node_program(
     graph_schema: GraphSchema,
     backend: SQLBackend,
 ) -> CompiledCypherProgram:
-    from .compile import _compile_type_aware_merge_node_sql
+    from .compile import (
+        _compile_type_aware_merge_node_on_match_update_sql,
+        _compile_type_aware_merge_node_sql,
+    )
 
-    return _single_statement_program(
-        _compile_type_aware_merge_node_sql(
-            statement.node,
-            graph_schema,
-            backend=backend,
+    insert_sql = _compile_type_aware_merge_node_sql(
+        statement.node,
+        graph_schema,
+        backend=backend,
+        on_create_assignments=statement.on_create_assignments,
+    )
+    if not statement.on_match_assignments:
+        return _single_statement_program(insert_sql)
+
+    # ON MATCH SET must run before the guarded INSERT so it only updates a row
+    # that already existed; the INSERT then adds (and ON-CREATE-initialises) a
+    # row only when none matched.
+    update_sql = _compile_type_aware_merge_node_on_match_update_sql(
+        statement.node,
+        graph_schema,
+        backend=backend,
+        on_match_assignments=statement.on_match_assignments,
+    )
+    return CompiledCypherProgram(
+        steps=(
+            CompiledCypherStatement(sql=parse_one(update_sql)),
+            CompiledCypherStatement(sql=parse_one(insert_sql)),
         )
     )
 

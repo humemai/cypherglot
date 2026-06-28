@@ -47,13 +47,13 @@ def _validate_standalone_write_shape(
     if merge_ctx is None:
         return
 
-    if merge_ctx.oC_MergeAction():
-        raise ValueError(
-            "CypherGlot currently validates MERGE only without ON CREATE or ON MATCH actions."
-        )
-
     merge_pattern_text = _context_text(result, merge_ctx.oC_PatternPart())
     if _looks_like_relationship_pattern(merge_pattern_text):
+        if merge_ctx.oC_MergeAction():
+            raise ValueError(
+                "CypherGlot currently validates ON CREATE / ON MATCH actions only "
+                "on single-node MERGE, not relationship MERGE."
+            )
         left_text, relationship_text, right_text, direction = _split_relationship_pattern(
             merge_pattern_text
         )

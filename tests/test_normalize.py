@@ -1179,6 +1179,20 @@ class TestNormalize(unittest.TestCase):
         self.assertEqual(normalized.node.label, "User")
         self.assertEqual(normalized.node.properties, (("name", "Alice"),))
 
+    def test_normalize_cypher_text_normalizes_merge_node_actions(self) -> None:
+        normalized = cypherglot.normalize_cypher_text(
+            "MERGE (u:User {name: 'Alice'}) ON CREATE SET u.age = 1 "
+            "ON MATCH SET u.age = 2"
+        )
+
+        self.assertEqual(type(normalized).__name__, "NormalizedMergeNode")
+        self.assertEqual(len(normalized.on_create_assignments), 1)
+        self.assertEqual(normalized.on_create_assignments[0].field, "age")
+        self.assertEqual(normalized.on_create_assignments[0].value, 1)
+        self.assertEqual(len(normalized.on_match_assignments), 1)
+        self.assertEqual(normalized.on_match_assignments[0].field, "age")
+        self.assertEqual(normalized.on_match_assignments[0].value, 2)
+
     def test_normalize_cypher_text_normalizes_match_merge_relationship(self) -> None:
         normalized = cypherglot.normalize_cypher_text(
             "MATCH (a:User), (b:User {name: 'Bob'}) MERGE (a)-[:KNOWS]->(b)"

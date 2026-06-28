@@ -864,6 +864,7 @@ def _compile_type_aware_merge_node_sql(
     node: NodePattern,
     graph_schema: GraphSchema,
     backend: SQLBackend,
+    on_create_assignments: tuple[SetItem, ...] = (),
 ) -> str:
     if node.label is None:
         raise ValueError(
@@ -894,16 +895,59 @@ def _compile_type_aware_merge_node_sql(
         limit=1,
         skip=None,
     )
+    # The inserted row carries the MERGE pattern properties plus any ON CREATE SET
+    # assignments; when a field appears in both, ON CREATE SET wins.
+    insert_fields: dict[str, CypherValue] = {field: value for field, value in node.properties}
+    for assignment in on_create_assignments:
+        insert_fields[assignment.field] = assignment.value
     insert_columns = ", ".join(
         _resolve_type_aware_property_column(node_type, field)
-        for field, _ in node.properties
+        for field in insert_fields
     )
-    insert_values = ", ".join(_sql_value(value) for _, value in node.properties)
+    insert_values = ", ".join(_sql_value(value) for value in insert_fields.values())
     return _compile_guarded_insert_select_sql(
         target_sql=f"INSERT INTO {node_type.table_name} ({insert_columns})",
         select_sql=f"SELECT {insert_values}",
         from_sql="FROM (SELECT 1) AS merge_guard",
         exists_sql=exists_sql,
+    )
+
+
+def _compile_type_aware_merge_node_on_match_update_sql(
+    node: NodePattern,
+    graph_schema: GraphSchema,
+    backend: SQLBackend,
+    on_match_assignments: tuple[SetItem, ...],
+) -> str:
+    if node.label is None:
+        raise ValueError(
+            "Type-aware MERGE node lowering requires an explicit node label."
+        )
+
+    node_type = graph_schema.node_type(node.label)
+    where_parts = [
+        _compile_type_aware_predicate(
+            field_expression=_compile_type_aware_node_field_expression(
+                node.alias,
+                node_type,
+                field,
+            ),
+            operator="=",
+            value=value,
+            backend=backend,
+        )
+        for field, value in node.properties
+    ]
+    assignments_sql = _compile_type_aware_set_assignments(
+        entity_type=node_type,
+        assignments=on_match_assignments,
+    )
+    return _assemble_update_sql(
+        target_sql=f"UPDATE {node_type.table_name} AS {node.alias}",
+        assignments_sql=assignments_sql,
+        from_sql=None,
+        where_parts=where_parts,
+        assignment_prefix=None,
     )
 
 

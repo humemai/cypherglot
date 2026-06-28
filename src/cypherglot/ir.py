@@ -104,6 +104,8 @@ class GraphRelationalCreateRelationshipFromSeparatePatternsWriteIR:
 @dataclass(frozen=True, slots=True)
 class GraphRelationalMergeNodeWriteIR:
     node: NodePattern
+    on_create_assignments: tuple[SetItem, ...] = ()
+    on_match_assignments: tuple[SetItem, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -576,7 +578,11 @@ def _build_write_ir(
             right=statement.right,
         )
     if isinstance(statement, NormalizedMergeNode):
-        return GraphRelationalMergeNodeWriteIR(node=statement.node)
+        return GraphRelationalMergeNodeWriteIR(
+            node=statement.node,
+            on_create_assignments=statement.on_create_assignments,
+            on_match_assignments=statement.on_match_assignments,
+        )
     if isinstance(statement, NormalizedMergeRelationship):
         return GraphRelationalMergeRelationshipWriteIR(
             left=statement.left,
