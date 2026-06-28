@@ -59,6 +59,18 @@ def _compile_type_aware_match_node_predicate(
     predicate: Predicate,
     backend: SQLBackend,
 ) -> str:
+    sql = _compile_type_aware_match_node_predicate_unnegated(
+        alias, node_type, predicate, backend=backend
+    )
+    return f"NOT ({sql})" if predicate.negated else sql
+
+
+def _compile_type_aware_match_node_predicate_unnegated(
+    alias: str,
+    node_type: object,
+    predicate: Predicate,
+    backend: SQLBackend,
+) -> str:
     if predicate.field.startswith(_SIZE_PREDICATE_FIELD_PREFIX):
         inner_field = predicate.field.removeprefix(_SIZE_PREDICATE_FIELD_PREFIX)
         expression = _compile_type_aware_node_field_expression(
@@ -106,6 +118,18 @@ def _compile_type_aware_match_node_predicate(
 
 
 def _compile_type_aware_match_relationship_predicate(
+    alias: str,
+    edge_type: object,
+    predicate: Predicate,
+    backend: SQLBackend,
+) -> str:
+    sql = _compile_type_aware_match_relationship_predicate_unnegated(
+        alias, edge_type, predicate, backend=backend
+    )
+    return f"NOT ({sql})" if predicate.negated else sql
+
+
+def _compile_type_aware_match_relationship_predicate_unnegated(
     alias: str,
     edge_type: object,
     predicate: Predicate,

@@ -132,6 +132,8 @@ class DuckDBReadParityTests(unittest.TestCase):
             "RETURN u.name AS name, u.age AS age ORDER BY name, age",
             "MATCH (u:User) WHERE u.age > 18 AND (u.name = 'Alice' OR u.name = 'Cara') "
             "RETURN u.name AS name, u.age AS age ORDER BY name, age",
+            "MATCH (u:User) WHERE NOT u.age IN [25, 30] "
+            "RETURN u.name AS name, u.age AS age ORDER BY name, age",
         )
 
         for query in queries:

@@ -83,7 +83,10 @@ CypherGlot currently admits:
   semantics
 - admitted `WHERE` predicates may be combined with `AND` and `OR`, including
   parenthesised groups such as `a AND (b OR c)`; these lower to a disjunctive
-  normal form (`NOT` is not yet admitted)
+  normal form. A single comparison may be prefixed with `NOT`
+  (e.g. `NOT u.age = 30`, `NOT u.name IN [...]`), lowered as SQL `NOT (...)`
+  which preserves Cypher's three-valued semantics. `NOT` over a parenthesised
+  group (De Morgan) is not yet admitted
 - that same ordinary-read and narrow-optional `WHERE` slice also admits narrow
   nested `size(...)` field predicates over compile-safe property inputs:
   `size(alias.field) OP literal_or_parameter`, `size(alias.field) IS NULL`, and

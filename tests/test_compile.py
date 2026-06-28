@@ -773,6 +773,43 @@ class CompileTests(unittest.TestCase):
             'ORDER BY with_q."__cg_with_scalar_name" ASC',
         )
 
+    def test_compile_type_aware_where_not_wraps_predicate(self) -> None:
+        ctx = _public_api_schema_context()
+        negated = cypherglot.compile_cypher_text(
+            "MATCH (u:User) WHERE NOT u.age = 30 RETURN u.name AS name ORDER BY name",
+            schema_context=ctx,
+            backend="sqlite",
+        )
+        self.assertEqual(
+            negated.sql(dialect="sqlite"),
+            'SELECT u.name AS "name" FROM cg_node_user AS u '
+            "WHERE NOT (u.age = 30) ORDER BY u.name ASC",
+        )
+
+        and_not = cypherglot.compile_cypher_text(
+            "MATCH (u:User) WHERE u.active = true AND NOT u.name IN ['Al', 'Bo'] "
+            "RETURN u.name AS name ORDER BY name",
+            schema_context=ctx,
+            backend="sqlite",
+        )
+        self.assertEqual(
+            and_not.sql(dialect="sqlite"),
+            'SELECT u.name AS "name" FROM cg_node_user AS u '
+            "WHERE u.active = TRUE AND NOT (u.name IN ('Al', 'Bo')) "
+            "ORDER BY u.name ASC",
+        )
+
+    def test_compile_type_aware_where_not_over_group_rejected(self) -> None:
+        with self.assertRaisesRegex(
+            ValueError, "does not yet admit NOT over parenthesised groups"
+        ):
+            cypherglot.compile_cypher_text(
+                "MATCH (u:User) WHERE NOT (u.age = 30 OR u.age = 25) "
+                "RETURN u.name AS name",
+                schema_context=_public_api_schema_context(),
+                backend="sqlite",
+            )
+
     def test_compile_type_aware_where_or_lowers_as_disjunction(self) -> None:
         # Regression: OR predicates were previously flattened into AND, silently
         # producing wrong results. They must lower as a disjunction.

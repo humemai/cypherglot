@@ -40,6 +40,9 @@ class Predicate:
     # single scalar literal or parameter.
     value: CypherValue | tuple[CypherValue, ...]
     disjunct_index: int = 0
+    # True when the comparison is prefixed with NOT; lowered as SQL NOT(...),
+    # which preserves Cypher's three-valued (NULL) semantics.
+    negated: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -200,6 +203,10 @@ _REL_PATTERN_RE = re.compile(
 _RETURN_ITEM_RE = re.compile(rf"^(?P<alias>{_IDENTIFIER})\.(?P<field>{_IDENTIFIER})$")
 _SCALAR_ITEM_RE = re.compile(rf"^(?P<alias>{_IDENTIFIER})$")
 _SIZE_PREDICATE_FIELD_PREFIX = "__size__:"
+# Internal sentinel marking a NOT-negated WHERE comparison between the boolean
+# parser and predicate parsing. Uses control characters so it cannot collide
+# with user input.
+_NOT_PREDICATE_PREFIX = "\x00not\x00 "
 _NODE_FUNCTION_RETURN_ITEM_RE = re.compile(
     rf"^(?P<function>startNode|endNode)\s*\(\s*(?P<alias>{_IDENTIFIER})\s*\)(?:\.(?P<field>{_IDENTIFIER}))?$",
     flags=re.IGNORECASE,
@@ -563,6 +570,9 @@ def _parse_predicates(text: str) -> tuple[Predicate, ...]:
 
     for disjunct_index, disjunct in enumerate(_parse_boolean_predicate_groups(text)):
         for item in disjunct:
+            negated = item.startswith(_NOT_PREDICATE_PREFIX)
+            if negated:
+                item = item[len(_NOT_PREDICATE_PREFIX):]
             try:
                 left_text, operator, value_text = _split_predicate_comparison(item)
             except ValueError as exc:
@@ -596,6 +606,7 @@ def _parse_predicates(text: str) -> tuple[Predicate, ...]:
                         operator=operator,
                         disjunct_index=disjunct_index,
                         value=parsed_value,
+                        negated=negated,
                     )
                 )
                 continue
@@ -613,6 +624,7 @@ def _parse_predicates(text: str) -> tuple[Predicate, ...]:
                         operator=operator,
                         disjunct_index=disjunct_index,
                         value=parsed_value,
+                        negated=negated,
                     )
                 )
                 continue
@@ -636,6 +648,7 @@ def _parse_predicates(text: str) -> tuple[Predicate, ...]:
                         operator=operator,
                         disjunct_index=disjunct_index,
                         value=parsed_value,
+                        negated=negated,
                     )
                 )
                 continue
@@ -652,6 +665,7 @@ def _parse_predicates(text: str) -> tuple[Predicate, ...]:
                     operator=operator,
                     disjunct_index=disjunct_index,
                     value=parsed_value,
+                    negated=negated,
                 )
             )
 
@@ -721,10 +735,22 @@ class _BooleanPredicateParser:
             self._index += 1
             return groups
 
+        negated = False
+        if token.upper() == "NOT":
+            self._index += 1
+            if self._peek() == "(":
+                raise ValueError(
+                    "HumemCypher v0 does not yet admit NOT over parenthesised "
+                    "groups; apply NOT to a single comparison."
+                )
+            negated = True
+
         comparison_tokens: list[str] = []
         while self.has_more_tokens():
             current = self._peek()
             assert current is not None
+            # Note: do NOT break on a "NOT" token here — "IS NOT NULL" contains
+            # one. A prefix NOT is handled above at the start of the primary.
             if current in ("(", ")") or current.upper() in ("AND", "OR"):
                 break
             comparison_tokens.append(current)
@@ -734,7 +760,10 @@ class _BooleanPredicateParser:
             raise ValueError(
                 "HumemCypher v0 WHERE items must look like alias.field OP value."
             )
-        return [[" ".join(comparison_tokens)]]
+        comparison = " ".join(comparison_tokens)
+        if negated:
+            comparison = f"{_NOT_PREDICATE_PREFIX}{comparison}"
+        return [[comparison]]
 
     def _peek(self) -> str | None:
         if not self.has_more_tokens():
