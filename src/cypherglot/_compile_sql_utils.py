@@ -16,6 +16,20 @@ _AGGREGATE_SQL_NAMES: dict[str, str] = {
 }
 
 
+def _compile_in_predicate(
+    expression: str,
+    value: CypherValue | tuple[CypherValue, ...],
+) -> str:
+    if not isinstance(value, tuple):
+        raise ValueError("IN predicate values must be a list literal.")
+    if not value:
+        # `x IN []` is always false in Cypher; emit a constant-false predicate
+        # rather than the syntactically invalid `IN ()`.
+        return "1 = 0"
+    rendered = ", ".join(_sql_value(item) for item in value)
+    return f"{expression} IN ({rendered})"
+
+
 def _compile_stream_predicate(
     expression: str,
     type_expression: str | None,
@@ -30,9 +44,12 @@ def _compile_stream_predicate(
         "CONTAINS",
         "IS NULL",
         "IS NOT NULL",
+        "IN",
     ],
-    value: CypherValue,
+    value: CypherValue | tuple[CypherValue, ...],
 ) -> str:
+    if operator == "IN":
+        return _compile_in_predicate(expression, value)
     if operator == "IS NULL":
         if type_expression is None:
             return f"{expression} IS NULL"

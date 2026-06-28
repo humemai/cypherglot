@@ -40,6 +40,30 @@ class TestNormalize(unittest.TestCase):
         self.assertEqual(type_normalized.predicates[0].field, "type")
         self.assertEqual(type_normalized.predicates[0].operator, "=")
 
+    def test_normalize_cypher_text_normalizes_match_where_in_filter(self) -> None:
+        normalized = cypherglot.normalize_cypher_text(
+            "MATCH (u:User) WHERE u.age IN [18, 21, 25] RETURN u.name AS name ORDER BY name"
+        )
+
+        self.assertEqual(type(normalized).__name__, "NormalizedMatchNode")
+        self.assertEqual(len(normalized.predicates), 1)
+        self.assertEqual(normalized.predicates[0].field, "age")
+        self.assertEqual(normalized.predicates[0].operator, "IN")
+        self.assertEqual(normalized.predicates[0].value, (18, 21, 25))
+
+    def test_normalize_cypher_text_normalizes_match_where_in_string_and_empty(self) -> None:
+        string_normalized = cypherglot.normalize_cypher_text(
+            "MATCH (u:User) WHERE u.name IN ['Al', 'Bo'] RETURN u.name AS name ORDER BY name"
+        )
+        empty_normalized = cypherglot.normalize_cypher_text(
+            "MATCH (u:User) WHERE u.age IN [] RETURN u.name AS name ORDER BY name"
+        )
+
+        self.assertEqual(string_normalized.predicates[0].operator, "IN")
+        self.assertEqual(string_normalized.predicates[0].value, ("Al", "Bo"))
+        self.assertEqual(empty_normalized.predicates[0].operator, "IN")
+        self.assertEqual(empty_normalized.predicates[0].value, ())
+
     def test_normalize_cypher_text_normalizes_aliased_match_return(self) -> None:
         normalized = cypherglot.normalize_cypher_text(
             "MATCH (u:User) RETURN u.name AS name ORDER BY name LIMIT 1"

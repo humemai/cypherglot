@@ -69,6 +69,10 @@ CypherGlot currently admits:
   field null predicates `IS NULL` and `IS NOT NULL`; in admitted one-hop
   relationship reads, those same field string/null predicates also apply to
   relationship property fields such as `r.note`
+- that same `WHERE` slice also admits list-membership predicates
+  `alias.field IN [literal_or_parameter, ...]` (and `id(alias) IN [...]`) over
+  inline list literals; an empty list `IN []` is always false, matching Cypher
+  semantics
 - that same ordinary-read and narrow-optional `WHERE` slice also admits narrow
   nested `size(...)` field predicates over compile-safe property inputs:
   `size(alias.field) OP literal_or_parameter`, `size(alias.field) IS NULL`, and

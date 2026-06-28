@@ -683,6 +683,53 @@ class CompileTests(unittest.TestCase):
             'ORDER BY u.name ASC LIMIT 1',
         )
 
+    def test_compile_type_aware_match_node_where_in_predicate(self) -> None:
+        ctx = _public_api_schema_context()
+        numeric = cypherglot.compile_cypher_text(
+            "MATCH (u:User) WHERE u.age IN [18, 21, 25] RETURN u.name AS name ORDER BY name",
+            schema_context=ctx,
+            backend="sqlite",
+        )
+        self.assertEqual(
+            numeric.sql(dialect="sqlite"),
+            'SELECT u.name AS "name" FROM cg_node_user AS u '
+            "WHERE u.age IN (18, 21, 25) ORDER BY u.name ASC",
+        )
+
+        string_in = cypherglot.compile_cypher_text(
+            "MATCH (u:User) WHERE u.name IN ['Al', 'Bo'] RETURN u.name AS name ORDER BY name",
+            schema_context=ctx,
+            backend="sqlite",
+        )
+        self.assertEqual(
+            string_in.sql(dialect="sqlite"),
+            'SELECT u.name AS "name" FROM cg_node_user AS u '
+            "WHERE u.name IN ('Al', 'Bo') ORDER BY u.name ASC",
+        )
+
+        id_in = cypherglot.compile_cypher_text(
+            "MATCH (u:User) WHERE id(u) IN [1, 2, 3] RETURN u.name AS name ORDER BY name",
+            schema_context=ctx,
+            backend="sqlite",
+        )
+        self.assertEqual(
+            id_in.sql(dialect="sqlite"),
+            'SELECT u.name AS "name" FROM cg_node_user AS u '
+            "WHERE u.id IN (1, 2, 3) ORDER BY u.name ASC",
+        )
+
+    def test_compile_type_aware_match_node_where_in_empty_is_false(self) -> None:
+        empty = cypherglot.compile_cypher_text(
+            "MATCH (u:User) WHERE u.age IN [] RETURN u.name AS name ORDER BY name",
+            schema_context=_public_api_schema_context(),
+            backend="sqlite",
+        )
+        self.assertEqual(
+            empty.sql(dialect="sqlite"),
+            'SELECT u.name AS "name" FROM cg_node_user AS u '
+            "WHERE 1 = 0 ORDER BY u.name ASC",
+        )
+
     def test_compile_type_aware_match_node_direct_aggregates(self) -> None:
         count_expression = cypherglot.compile_cypher_text(
             "MATCH (u:User) RETURN count(u) AS total",

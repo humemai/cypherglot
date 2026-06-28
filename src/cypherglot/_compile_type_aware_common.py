@@ -3,7 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-from ._compile_sql_utils import _compile_stream_predicate, _sql_literal, _sql_value
+from ._compile_sql_utils import (
+    _compile_in_predicate,
+    _compile_stream_predicate,
+    _sql_literal,
+    _sql_value,
+)
 from .ir import BACKEND_CAPABILITIES, BackendCapabilities, SQLBackend
 from ._normalize_support import (
     _SIZE_PREDICATE_FIELD_PREFIX,
@@ -73,6 +78,8 @@ def _compile_type_aware_match_node_predicate(
             raise ValueError(
                 "Type-aware lowering does not support null predicates on id."
             )
+        if predicate.operator == "IN":
+            return _compile_in_predicate(f"{alias}.id", predicate.value)
         return f"{alias}.id {predicate.operator} {_sql_value(predicate.value)}"
 
     if predicate.field == "label":
@@ -121,6 +128,8 @@ def _compile_type_aware_match_relationship_predicate(
             raise ValueError(
                 "Type-aware lowering does not support null predicates on id."
             )
+        if predicate.operator == "IN":
+            return _compile_in_predicate(f"{alias}.id", predicate.value)
         return f"{alias}.id {predicate.operator} {_sql_value(predicate.value)}"
 
     if predicate.field == "type":
@@ -341,11 +350,14 @@ def _compile_type_aware_predicate(
         "CONTAINS",
         "IS NULL",
         "IS NOT NULL",
+        "IN",
     ],
-    value: CypherValue,
+    value: CypherValue | tuple[CypherValue, ...],
     backend: SQLBackend,
     is_statically_numeric: bool = False,
 ) -> str:
+    if operator == "IN":
+        return _compile_in_predicate(field_expression, value)
     if operator == "IS NULL":
         return f"{field_expression} IS NULL"
     if operator == "IS NOT NULL":

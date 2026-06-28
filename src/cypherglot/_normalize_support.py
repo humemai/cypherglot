@@ -34,8 +34,11 @@ class Predicate:
         "CONTAINS",
         "IS NULL",
         "IS NOT NULL",
+        "IN",
     ]
-    value: CypherValue
+    # For "IN" the value is a tuple of scalar literals/parameters; otherwise a
+    # single scalar literal or parameter.
+    value: CypherValue | tuple[CypherValue, ...]
     disjunct_index: int = 0
 
 
@@ -567,13 +570,16 @@ def _parse_predicates(text: str) -> tuple[Predicate, ...]:
                     "HumemCypher v0 WHERE items must look like alias.field OP value, id(alias) OP value, or type(rel_alias) OP value."
                 ) from exc
             left_text = left_text.strip()
+            parsed_value: CypherValue | tuple[CypherValue, ...]
             if operator in {"IS NULL", "IS NOT NULL"}:
                 if value_text.strip():
                     raise ValueError(
                         "HumemCypher v0 null predicates cannot include a trailing "
                         "literal value."
                     )
-                parsed_value: CypherValue = None
+                parsed_value = None
+            elif operator == "IN":
+                parsed_value = _parse_in_list_literal(value_text.strip())
             else:
                 parsed_value = _parse_literal(value_text.strip())
 
@@ -877,6 +883,20 @@ def _parse_literal(text: str) -> CypherValue:
     )
 
 
+def _parse_in_list_literal(text: str) -> tuple[CypherValue, ...]:
+    if not (text.startswith("[") and text.endswith("]")):
+        raise ValueError(
+            "HumemCypher v0 IN predicates require an inline list literal such as "
+            f"alias.field IN [value, ...]; got {text!r}."
+        )
+    inner = text[1:-1].strip()
+    if not inner:
+        return ()
+    return tuple(
+        _parse_literal(item.strip()) for item in _split_comma_separated(inner)
+    )
+
+
 def _looks_like_relationship_pattern(text: str) -> bool:
     return ("-[" in text and "]->" in text) or ("<-[" in text and "]-" in text)
 
@@ -1166,6 +1186,7 @@ def _split_predicate_comparison(
         "CONTAINS",
         "IS NULL",
         "IS NOT NULL",
+        "IN",
     ],
     str,
 ]:
@@ -1203,6 +1224,10 @@ def _split_predicate_comparison(
             return text[:index], "ENDS WITH", text[index + len(" ENDS WITH "):]
         if remaining.startswith(" CONTAINS "):
             return text[:index], "CONTAINS", text[index + len(" CONTAINS "):]
+        if remaining.startswith(" IN ") or remaining.startswith(" IN["):
+            # Keep everything after " IN" (the leading space is stripped later),
+            # so both "x IN [..]" and "x IN[..]" yield the list literal value.
+            return text[:index], "IN", text[index + len(" IN"):]
 
         if text.startswith("<=", index) or text.startswith(">=", index):
             operator = cast(Literal["<=", ">="], text[index:index + 2])

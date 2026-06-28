@@ -111,6 +111,14 @@ class DuckDBReadParityTests(unittest.TestCase):
             ),
             "MATCH (a:User)-[:KNOWS*1..2]->(b:User) WHERE a.name = 'Alice' "
             "RETURN b.name AS friend ORDER BY friend",
+            "MATCH (u:User) WHERE u.age IN [25, 30] "
+            "RETURN u.name AS name ORDER BY name",
+            "MATCH (u:User) WHERE u.name IN ['Alice', 'Cara'] "
+            "RETURN u.name AS name, u.age AS age ORDER BY name, age",
+            "MATCH (u:User) WHERE id(u) IN [1, 3] "
+            "RETURN u.name AS name ORDER BY name",
+            "MATCH (u:User) WHERE u.age IN [] "
+            "RETURN u.name AS name ORDER BY name",
         )
 
         for query in queries:
