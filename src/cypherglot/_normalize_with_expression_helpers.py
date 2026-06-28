@@ -778,7 +778,7 @@ def _parse_with_aggregate_item(
         return WithReturnItem(kind="count", alias=alias, output_alias=output_alias)
 
     aggregate_match = re.fullmatch(
-        r"(?P<func>sum|avg|min|max)\s*\(\s*(?P<alias>[A-Za-z_][A-Za-z0-9_]*)\s*\)",
+        r"(?P<func>sum|avg|min|max|collect)\s*\(\s*(?P<alias>[A-Za-z_][A-Za-z0-9_]*)\s*\)",
         expression_text,
         flags=re.IGNORECASE,
     )
@@ -793,7 +793,7 @@ def _parse_with_aggregate_item(
             )
         return WithReturnItem(
             kind=cast(
-                Literal["sum", "avg", "min", "max"],
+                Literal["sum", "avg", "min", "max", "collect"],
                 aggregate_match.group("func").lower(),
             ),
             alias=alias,
@@ -801,7 +801,7 @@ def _parse_with_aggregate_item(
         )
 
     aggregate_field_match = re.fullmatch(
-        r"(?P<func>sum|avg|min|max)\s*\(\s*"
+        r"(?P<func>sum|avg|min|max|collect)\s*\(\s*"
         r"(?P<alias>[A-Za-z_][A-Za-z0-9_]*)\."
         r"(?P<field>[A-Za-z_][A-Za-z0-9_]*)\s*\)",
         expression_text,
@@ -819,7 +819,7 @@ def _parse_with_aggregate_item(
     )
     return WithReturnItem(
         kind=cast(
-            Literal["sum", "avg", "min", "max"],
+            Literal["sum", "avg", "min", "max", "collect"],
             aggregate_field_match.group("func").lower(),
         ),
         alias=alias,

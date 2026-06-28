@@ -683,6 +683,23 @@ class CompileTests(unittest.TestCase):
             'ORDER BY u.name ASC LIMIT 1',
         )
 
+    def test_compile_type_aware_with_collect_grouped(self) -> None:
+        expression = cypherglot.compile_cypher_text(
+            "MATCH (u:User) WITH u.active AS active, u.name AS n "
+            "RETURN active, collect(n) AS names ORDER BY active",
+            schema_context=_public_api_schema_context(),
+            backend="sqlite",
+        )
+        self.assertEqual(
+            expression.sql(dialect="sqlite"),
+            'SELECT with_q."__cg_with_scalar_active" AS "active", '
+            'JSON_GROUP_ARRAY(with_q."__cg_with_scalar_n") AS "names" FROM '
+            '(SELECT u.active AS "__cg_with_scalar_active", '
+            'u.name AS "__cg_with_scalar_n" FROM cg_node_user AS u) AS with_q '
+            'GROUP BY with_q."__cg_with_scalar_active" '
+            'ORDER BY with_q."__cg_with_scalar_active" ASC',
+        )
+
     def test_compile_type_aware_match_node_where_in_predicate(self) -> None:
         ctx = _public_api_schema_context()
         numeric = cypherglot.compile_cypher_text(

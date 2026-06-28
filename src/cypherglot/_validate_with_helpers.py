@@ -208,7 +208,7 @@ def _validate_with_shape(result: CypherParseResult, multi_part_query_ctx) -> Non
             continue
 
         aggregate_match = re.fullmatch(
-            r"(?P<func>sum|avg|min|max)\s*\(\s*(?P<alias>[A-Za-z_][A-Za-z0-9_]*)\s*\)",
+            r"(?P<func>sum|avg|min|max|collect)\s*\(\s*(?P<alias>[A-Za-z_][A-Za-z0-9_]*)\s*\)",
             expression_text,
             flags=re.IGNORECASE,
         )
@@ -216,7 +216,7 @@ def _validate_with_shape(result: CypherParseResult, multi_part_query_ctx) -> Non
             alias = aggregate_match.group("alias")
             if binding_kinds.get(alias) != "scalar":
                 raise ValueError(
-                    "CypherGlot currently supports sum(...), avg(...), min(...), and max(...) in the WITH subset only over admitted scalar bindings."
+                    "CypherGlot currently supports sum(...), avg(...), min(...), max(...), and collect(...) in the WITH subset only over admitted scalar bindings."
                 )
             output_name = output_alias or expression_text
             if output_name in seen_output_names:
@@ -230,7 +230,7 @@ def _validate_with_shape(result: CypherParseResult, multi_part_query_ctx) -> Non
 
         aggregate_field_match = re.fullmatch(
             (
-                r"(?P<func>sum|avg|min|max)\s*\(\s*"
+                r"(?P<func>sum|avg|min|max|collect)\s*\(\s*"
                 r"(?P<alias>[A-Za-z_][A-Za-z0-9_]*)\."
                 r"(?P<field>[A-Za-z_][A-Za-z0-9_]*)\s*\)"
             ),

@@ -61,7 +61,7 @@ class WithBinding:
 
 @dataclass(frozen=True, slots=True)
 class WithReturnItem:
-    kind: Literal["field", "scalar", "entity", "count", "sum", "avg", "min", "max", "id", "type", "properties", "labels", "keys", "start_node", "end_node", "size", "scalar_value", "predicate", "lower", "upper", "trim", "ltrim", "rtrim", "reverse", "coalesce", "replace", "left", "right", "split", "abs", "sign", "round", "ceil", "floor", "sqrt", "exp", "sin", "cos", "tan", "asin", "acos", "atan", "ln", "log", "log10", "radians", "degrees", "to_string", "to_integer", "to_float", "to_boolean", "substring", "case"]
+    kind: Literal["field", "scalar", "entity", "count", "sum", "avg", "min", "max", "collect", "id", "type", "properties", "labels", "keys", "start_node", "end_node", "size", "scalar_value", "predicate", "lower", "upper", "trim", "ltrim", "rtrim", "reverse", "coalesce", "replace", "left", "right", "split", "abs", "sign", "round", "ceil", "floor", "sqrt", "exp", "sin", "cos", "tan", "asin", "acos", "atan", "ln", "log", "log10", "radians", "degrees", "to_string", "to_integer", "to_float", "to_boolean", "substring", "case"]
     alias: str
     field: str | None = None
     output_alias: str | None = None

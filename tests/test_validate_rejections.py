@@ -365,7 +365,7 @@ class TestValidate(unittest.TestCase):
             ),
             (
                 "MATCH (u:User) WITH u AS person RETURN sum(person) AS total",
-                r"supports sum\(\.\.\.\), avg\(\.\.\.\), min\(\.\.\.\), and max\(\.\.\.\) in the WITH subset only over admitted scalar bindings",
+                r"supports sum\(\.\.\.\), avg\(\.\.\.\), min\(\.\.\.\), max\(\.\.\.\), and collect\(\.\.\.\) in the WITH subset only over admitted scalar bindings",
             ),
             (
                 "MATCH (u:User) RETURN 'tag'",

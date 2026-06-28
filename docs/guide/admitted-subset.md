@@ -27,8 +27,9 @@ That includes:
 - narrow standalone `UNWIND ... RETURN`
 - grouped `count(...)`, `count(*)`, `sum(...)`, `avg(...)`, `min(...)`,
   `max(...)`, and `collect(alias.field)` aggregation slices in ordinary `RETURN`
-  (`collect` renders per backend: `array_agg` on DuckDB/PostgreSQL,
-  `json_group_array` on SQLite; not yet admitted in the `WITH` aggregation slice)
+  and in the `WITH ... RETURN` final-projection aggregate slice (`collect`
+  renders per backend: `array_agg` on DuckDB/PostgreSQL, `json_group_array` on
+  SQLite)
 - common projection families over admitted field, scalar-binding, or literal
   inputs: `size(...)`, `id(...)`, `type(...)`, searched `CASE`,
   `properties(...)`, `labels(...)`, `keys(...)`, `startNode(...)`,
