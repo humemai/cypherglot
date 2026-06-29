@@ -683,6 +683,22 @@ class CompileTests(unittest.TestCase):
             'ORDER BY u.name ASC LIMIT 1',
         )
 
+    def test_compile_type_aware_untyped_relationship_endpoint(self) -> None:
+        # The unlabeled endpoint `b` is inferred from the KNOWS edge's target.
+        expression = cypherglot.compile_cypher_text(
+            "MATCH (a:User)-[:KNOWS]->(b) WHERE a.name = 'Alice' "
+            "RETURN b.name AS friend ORDER BY friend",
+            schema_context=_public_api_schema_context(),
+            backend="sqlite",
+        )
+        self.assertEqual(
+            expression.sql(dialect="sqlite"),
+            'SELECT b.name AS "friend" FROM cg_edge_knows AS edge '
+            "JOIN cg_node_user AS a ON a.id = edge.from_id "
+            "JOIN cg_node_user AS b ON b.id = edge.to_id "
+            "WHERE a.name = 'Alice' ORDER BY b.name ASC",
+        )
+
     def test_compile_type_aware_with_collect_grouped(self) -> None:
         expression = cypherglot.compile_cypher_text(
             "MATCH (u:User) WITH u.active AS active, u.name AS n "

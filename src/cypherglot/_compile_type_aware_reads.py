@@ -143,25 +143,31 @@ def _compile_type_aware_match_relationship_sql(
             backend=backend,
         )
 
-    if (
-        statement.left.label is None
-        or statement.right.label is None
-        or statement.relationship.type_name is None
-    ):
+    if statement.relationship.type_name is None:
         raise ValueError(
-            "Type-aware lowering currently requires explicit endpoint labels and "
-            "a relationship type for one-hop MATCH reads."
+            "Type-aware lowering currently requires an explicit relationship type "
+            "for one-hop MATCH reads."
         )
+
+    edge_type = graph_schema.edge_type(statement.relationship.type_name)
+    # Endpoint labels may be omitted (e.g. `(a:Person)-[:KNOWS]->(b)`); infer the
+    # missing one(s) from the typed edge's source/target contract, accounting for
+    # direction. Explicit labels are still honoured (and contract-checked below).
+    if statement.relationship.direction == "in":
+        left_label = statement.left.label or edge_type.target_type
+        right_label = statement.right.label or edge_type.source_type
+    else:
+        left_label = statement.left.label or edge_type.source_type
+        right_label = statement.right.label or edge_type.target_type
 
     left_alias = statement.left.alias
     right_alias = statement.right.alias
     relationship_alias = statement.relationship.alias or "edge"
-    left_type = graph_schema.node_type(statement.left.label)
-    right_type = graph_schema.node_type(statement.right.label)
-    edge_type = graph_schema.edge_type(statement.relationship.type_name)
+    left_type = graph_schema.node_type(left_label)
+    right_type = graph_schema.node_type(right_label)
 
-    source_label = statement.left.label
-    target_label = statement.right.label
+    source_label = left_label
+    target_label = right_label
     if statement.relationship.direction == "in":
         source_label, target_label = target_label, source_label
     if source_label != edge_type.source_type or target_label != edge_type.target_type:

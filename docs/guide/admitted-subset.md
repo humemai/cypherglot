@@ -16,7 +16,10 @@ the subset should ideally be valid there unchanged, while other Cypher runtimes
 may require small compatibility rewrites around the same core shapes.
 That includes:
 
-- ordinary `MATCH ... RETURN` reads over one connected pattern
+- ordinary `MATCH ... RETURN` reads over one connected pattern. In one-hop
+  relationship reads, an unlabeled endpoint (e.g. `(a:Person)-[:KNOWS]->(b)`) is
+  allowed when the relationship type is explicit — the missing endpoint label is
+  inferred from the edge type's source/target contract
 - narrow standalone `OPTIONAL MATCH ... RETURN`
 - `MATCH (a:Label) ... OPTIONAL MATCH (a)-[r:TYPE]->(b:Label) ... RETURN` — one
   mandatory single node followed by one optional one-hop relationship (left

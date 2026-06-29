@@ -109,6 +109,8 @@ _CONFORMANCE_QUERIES: dict[str, str] = {
     "one_hop": "MATCH (a:User)-[:KNOWS]->(b:User) RETURN a.name AS src, b.name AS dst ORDER BY src, dst",
     "one_hop_where": "MATCH (a:User)-[:KNOWS]->(b:User) WHERE a.name = 'Alice' RETURN b.name AS friend ORDER BY friend",
     "cross_type": "MATCH (u:User)-[:WORKS_AT]->(c:Company) RETURN u.name AS person, c.name AS company ORDER BY person",
+    "untyped_endpoint": "MATCH (a:User)-[:KNOWS]->(b) RETURN a.name AS src, b.name AS dst ORDER BY src, dst",
+    "untyped_cross_type": "MATCH (u:User)-[:WORKS_AT]->(c) RETURN u.name AS person, c.name AS company ORDER BY person",
     "optional_match": "MATCH (a:User) OPTIONAL MATCH (a)-[:KNOWS]->(b:User) RETURN a.name AS name, b.name AS friend ORDER BY name, friend",
     "collect_grouped": "MATCH (a:User)-[:KNOWS]->(b:User) RETURN a.name AS name, collect(b.name) AS friends ORDER BY name",
     "variable_length": "MATCH (a:User)-[:KNOWS*1..2]->(b:User) WHERE a.name = 'Alice' RETURN b.name AS reachable ORDER BY reachable",
