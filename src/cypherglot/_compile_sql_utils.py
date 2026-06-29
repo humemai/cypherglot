@@ -24,6 +24,8 @@ _AGGREGATE_SQL_NAMES: dict[str, str] = {
 # only the emitted function name is overridden.
 _AGGREGATE_SQL_NAME_OVERRIDES: dict[str, dict[str, str]] = {
     "sqlite": {"collect": "json_group_array"},
+    # Turso speaks SQLite's dialect, so it renders aggregates like SQLite.
+    "turso": {"collect": "json_group_array"},
     "clickhouse": {"collect": "groupArray"},
 }
 

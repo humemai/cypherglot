@@ -5,7 +5,7 @@ import re
 from typing import Literal
 
 
-SchemaBackend = Literal["sqlite", "duckdb", "postgresql"]
+SchemaBackend = Literal["sqlite", "duckdb", "postgresql", "turso"]
 
 
 @dataclass(frozen=True)
@@ -22,6 +22,20 @@ class SchemaBackendCapabilities:
 _IDENTIFIER_PART_RE = re.compile(r"[^a-z0-9]+")
 _SCHEMA_BACKEND_CAPABILITIES: dict[SchemaBackend, SchemaBackendCapabilities] = {
     "sqlite": SchemaBackendCapabilities(
+        logical_type_sql={
+            "string": "TEXT",
+            "integer": "INTEGER",
+            "float": "REAL",
+            "boolean": "INTEGER",
+        },
+        boolean_check_constraint=True,
+        needs_foreign_key_pragma=True,
+        needs_sequence_objects=False,
+        reference_id_sql_type="INTEGER",
+        strict_tables=True,
+    ),
+    # Turso Database is SQLite-dialect compatible → identical DDL capabilities.
+    "turso": SchemaBackendCapabilities(
         logical_type_sql={
             "string": "TEXT",
             "integer": "INTEGER",

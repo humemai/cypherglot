@@ -58,6 +58,7 @@ class SQLBackend(StrEnum):
     SQLITE = "sqlite"
     DUCKDB = "duckdb"
     POSTGRESQL = "postgresql"
+    TURSO = "turso"
 
 
 @dataclass(frozen=True, slots=True)
@@ -327,6 +328,15 @@ BACKEND_CAPABILITIES: dict[SQLBackend, BackendCapabilities] = {
         supports_native_boolean=True,
         render_dialect="postgres",
         integer_cast_requires_truncation=True,
+    ),
+    # Turso Database speaks SQLite's SQL dialect, so its capabilities mirror
+    # SQLite exactly (default render dialect = SQLite).
+    SQLBackend.TURSO: BackendCapabilities(
+        backend=SQLBackend.TURSO,
+        supports_returning=True,
+        supports_update_from=False,
+        supports_delete_using=False,
+        supports_native_boolean=False,
     ),
 }
 
