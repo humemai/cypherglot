@@ -5,8 +5,11 @@ shared synthetic graph workload.
 
 Contents:
 
-- `sqlite.py`, `duckdb.py`, `postgresql.py`: SQL-backed compile-plus-execute
-  runtime benchmarks
+- `sqlite.py`, `duckdb.py`, `postgresql.py`, `turso.py`: SQL-backed
+  compile-plus-execute runtime benchmarks (Cypher lowered to SQL, then run).
+  Turso is the Rust SQLite rewrite (driver `pyturso`); it speaks SQLite's dialect,
+  so it runs the same lowered SQL and answers "can the SQLite successor replace
+  SQLite?"
 - `neo4j.py`, `arcadedb_embedded.py`, `ladybug.py`: direct runtime benchmarks
   against non-SQL backends
 - `matrix.py`: repeated fresh-process runtime benchmarking with worker queues
@@ -17,6 +20,7 @@ Typical usage from the repo root:
 ```bash
 python -m scripts.benchmarks.runtime.sqlite
 python -m scripts.benchmarks.runtime.duckdb
+python -m scripts.benchmarks.runtime.turso
 python -m scripts.benchmarks.runtime.matrix --scale small --repeats 3 --workers 2
 python -m scripts.benchmarks.runtime.summarize_results --no-queries
 ```

@@ -43,6 +43,7 @@ CONTAINER_PYTHON_PACKAGES = (
     "psycopg2-binary",
     "neo4j",
     "ladybug",
+    "pyturso",
 )
 
 
@@ -249,6 +250,20 @@ VARIANTS: tuple[VariantSpec, ...] = (
         name="sqlite-unindexed",
         module_name="scripts.benchmarks.runtime.sqlite",
         backend="sqlite",
+        index_mode="unindexed",
+        uses_db_root_dir=True,
+    ),
+    VariantSpec(
+        name="turso-indexed",
+        module_name="scripts.benchmarks.runtime.turso",
+        backend="turso",
+        index_mode="indexed",
+        uses_db_root_dir=True,
+    ),
+    VariantSpec(
+        name="turso-unindexed",
+        module_name="scripts.benchmarks.runtime.turso",
+        backend="turso",
         index_mode="unindexed",
         uses_db_root_dir=True,
     ),

@@ -82,6 +82,18 @@ from scripts.benchmarks.common.runtime_sqlite_backend import (
     _seed_sqlite_from_generated_fixture,
     _sqlite_file_size_mib,
 )
+from scripts.benchmarks.common.runtime_turso_backend import (
+    _analyze_turso,
+    _configure_turso_indexes,
+    _create_turso_connection,
+    _create_turso_schema,
+    _execute_turso_program,
+    _rollback_turso_iteration,
+    _seed_turso_from_generated_fixture,
+    _turso_available,
+    _turso_file_size_mib,
+    _turso_version,
+)
 
 try:
     from psycopg2 import errorcodes as _psycopg2_errorcodes
@@ -115,6 +127,10 @@ DEFAULT_DUCKDB_OUTPUT_PATH = (
 DEFAULT_POSTGRESQL_OUTPUT_PATH = (
     DEFAULT_RUNTIME_RESULTS_DIR
     / "postgresql_runtime_benchmark_baseline.json"
+)
+DEFAULT_TURSO_OUTPUT_PATH = (
+    DEFAULT_RUNTIME_RESULTS_DIR
+    / "turso_runtime_benchmark_baseline.json"
 )
 SQLITE_SAVEPOINT = "benchmark_iteration"
 
@@ -211,6 +227,17 @@ POSTGRESQL_ENTRYPOINT = SQLRuntimeBenchmarkEntrypoint(
     enabled_backends=("postgresql",),
 )
 
+TURSO_ENTRYPOINT = SQLRuntimeBenchmarkEntrypoint(
+    name="turso",
+    description=(
+        "Benchmark Turso-backed OLTP and OLAP runtime over a generated multi-type "
+        "type-aware graph. Turso speaks SQLite's dialect, so this answers whether "
+        "the SQLite successor can run the same lowered SQL."
+    ),
+    default_output_path=DEFAULT_TURSO_OUTPUT_PATH,
+    enabled_backends=("turso",),
+)
+
 
 _edge_out_degree = _shared_edge_out_degree
 
@@ -281,6 +308,48 @@ class _BackendRunner:
             )
             self.rss_snapshots_mib["after_analyze"] = self.capture_rss_snapshot()
             self.db_size_mib, self.wal_size_mib = _sqlite_file_size_mib(db_path)
+            self.rss_snapshots_mib["suite_start"] = self.capture_rss_snapshot()
+            self.artifact_path = db_path
+            return
+
+        if self.backend == "turso":
+            db_path = self.work_dir.path / "runtime.turso"
+            self.connection, connect_ns = _measure_ns(
+                lambda: _create_turso_connection(db_path)
+            )
+            self.setup_metrics["connect_ns"] = connect_ns
+            self.rss_snapshots_mib["after_connect"] = self.capture_rss_snapshot()
+            _, self.setup_metrics["schema_ns"] = _measure_ns(
+                lambda: _create_turso_schema(self.turso, self.graph_schema)
+            )
+            self.rss_snapshots_mib["after_schema"] = self.capture_rss_snapshot()
+            _progress(
+                f"turso/{self.index_mode}: ingesting from generated fixture "
+                f"({self.sqlite_source.csv_dir})"
+            )
+            self.row_counts, self.setup_metrics["ingest_ns"] = _measure_ns(
+                lambda: _seed_turso_from_generated_fixture(
+                    self.turso,
+                    graph_schema=self.graph_schema,
+                    generated_fixture=self.sqlite_source,
+                    ingest_batch_size=5_000,
+                    progress_label=f"turso/{self.index_mode}",
+                )
+            )
+            self.rss_snapshots_mib["after_ingest"] = self.capture_rss_snapshot()
+            _, self.setup_metrics["index_ns"] = _measure_ns(
+                lambda: _configure_turso_indexes(
+                    self.turso,
+                    self.graph_schema,
+                    index_mode=self.index_mode,
+                )
+            )
+            self.rss_snapshots_mib["after_index"] = self.capture_rss_snapshot()
+            _, self.setup_metrics["analyze_ns"] = _measure_ns(
+                lambda: _analyze_turso(self.turso)
+            )
+            self.rss_snapshots_mib["after_analyze"] = self.capture_rss_snapshot()
+            self.db_size_mib, self.wal_size_mib = _turso_file_size_mib(db_path)
             self.rss_snapshots_mib["suite_start"] = self.capture_rss_snapshot()
             self.artifact_path = db_path
             return
@@ -385,6 +454,11 @@ class _BackendRunner:
     def postgresql(self) -> PostgreSQLConnection:
         return self.connection
 
+    @property
+    def turso(self):
+        # pyturso Connection; not in the static union above.
+        return self.connection
+
     def close(self) -> None:
         self.connection.close()
         self.work_dir.close()
@@ -424,6 +498,15 @@ class _BackendRunner:
                         schema_context=self.schema_context,
                     ),
                 )
+            if self.backend == "turso":
+                return PreparedArtifact(
+                    mode="statement",
+                    compiled=cypherglot.to_sql(
+                        query.query,
+                        backend="turso",
+                        schema_context=self.schema_context,
+                    ),
+                )
             return PreparedArtifact(
                 mode="statement",
                 compiled=cypherglot.to_sql(
@@ -452,10 +535,19 @@ class _BackendRunner:
                     schema_context=self.schema_context,
                 ),
             )
+        if self.backend == "turso":
+            return PreparedArtifact(
+                mode="program",
+                compiled=cypherglot.render_cypher_program_text(
+                    query.query,
+                    backend="turso",
+                    schema_context=self.schema_context,
+                ),
+            )
         if self.backend != "sqlite":
             raise ValueError(
                 "Rendered program execution is only supported on SQLite, DuckDB, "
-                "and PostgreSQL."
+                "PostgreSQL, and Turso."
             )
         return PreparedArtifact(
             mode="program",
@@ -485,6 +577,11 @@ class _BackendRunner:
                     if cur.description is not None:
                         cur.fetchall()
                 return
+            if self.backend == "turso":
+                cursor = self.turso.execute(artifact.compiled)
+                if cursor.description is not None:
+                    cursor.fetchall()
+                return
             cursor = self.duck.execute(artifact.compiled)
             if cursor.description is not None:
                 cursor.fetchall()
@@ -499,10 +596,13 @@ class _BackendRunner:
         if self.backend == "duckdb":
             _execute_duckdb_program(self.duck, artifact.compiled)
             return
+        if self.backend == "turso":
+            _execute_turso_program(self.turso, artifact.compiled, commit=False)
+            return
         if self.backend != "sqlite":
             raise ValueError(
                 "Rendered program execution is only supported on SQLite, DuckDB, "
-                "and PostgreSQL."
+                "PostgreSQL, and Turso."
             )
         _execute_sqlite_program(self.sqlite, artifact.compiled, commit=False)
 
@@ -520,6 +620,8 @@ def _run_iteration(
     rss_stages_mib = {"before_compile": runner.capture_rss_snapshot()}
     if query.mutation and runner.backend == "sqlite":
         runner.sqlite.execute(f"SAVEPOINT {SQLITE_SAVEPOINT}")
+    if query.mutation and runner.backend == "turso":
+        runner.turso.execute(f"SAVEPOINT {SQLITE_SAVEPOINT}")
     if query.mutation and runner.backend == "duckdb":
         runner.duck.execute("BEGIN TRANSACTION")
     try:
@@ -538,6 +640,10 @@ def _run_iteration(
         if query.mutation and runner.backend == "sqlite":
             _, reset_ns = _measure_ns(
                 lambda: _rollback_sqlite_iteration(runner.sqlite, SQLITE_SAVEPOINT)
+            )
+        if query.mutation and runner.backend == "turso":
+            _, reset_ns = _measure_ns(
+                lambda: _rollback_turso_iteration(runner.turso, SQLITE_SAVEPOINT)
             )
         if query.mutation and runner.backend == "duckdb":
             _, reset_ns = _measure_ns(lambda: runner.duck.execute("ROLLBACK"))
@@ -1017,6 +1123,12 @@ def _detect_database_versions(
                 raise ValueError("duckdb is not installed.")
             versions[backend] = version
             continue
+        if backend == "turso":
+            version = _turso_version()
+            if version is None:
+                raise ValueError("turso (pyturso) is not installed.")
+            versions[backend] = version
+            continue
         if backend == "postgresql":
             if not postgres_dsn:
                 raise ValueError(
@@ -1067,7 +1179,7 @@ def _load_corpus(path: Path) -> list[CorpusQuery]:
 
         normalized_backends: list[str] = []
         for backend in backends:
-            if backend not in {"sqlite", "duckdb", "postgresql"}:
+            if backend not in {"sqlite", "duckdb", "postgresql", "turso"}:
                 raise ValueError(
                     f"Runtime corpus item {index} has unsupported backend {backend!r}."
                 )
@@ -1177,6 +1289,9 @@ def _benchmark_result(
             sqlite_oltp_queries = [
                 query for query in oltp_queries if "sqlite" in query.backends
             ]
+            turso_oltp_queries = [
+                query for query in oltp_queries if "turso" in query.backends
+            ]
             duckdb_oltp_queries = _filter_duckdb_queries(oltp_queries)
             postgresql_oltp_queries = _filter_postgresql_queries(oltp_queries)
             for mode, fixture in generated_fixtures.items():
@@ -1184,6 +1299,25 @@ def _benchmark_result(
                     workloads["oltp"][f"sqlite_{mode}"] = _run_backend_suite(
                         "sqlite",
                         sqlite_oltp_queries,
+                        iterations=oltp_iterations_value,
+                        warmup=oltp_warmup_value,
+                        graph_schema=graph_schema,
+                        schema_context=schema_context,
+                        sqlite_source=fixture,
+                        db_root_dir=db_root_dir,
+                        **backend_suite_kwargs(
+                            workload="oltp",
+                            timeout_ms=oltp_timeout_ms,
+                        ),
+                    )
+                    if progress_callback is not None:
+                        progress_callback(
+                            {"workloads": workloads, "token_map": token_map}
+                        )
+                if "turso" in enabled_backends and turso_oltp_queries:
+                    workloads["oltp"][f"turso_{mode}"] = _run_backend_suite(
+                        "turso",
+                        turso_oltp_queries,
                         iterations=oltp_iterations_value,
                         warmup=oltp_warmup_value,
                         graph_schema=graph_schema,
@@ -1250,6 +1384,9 @@ def _benchmark_result(
             sqlite_olap_queries = [
                 query for query in olap_queries if "sqlite" in query.backends
             ]
+            turso_olap_queries = [
+                query for query in olap_queries if "turso" in query.backends
+            ]
             postgresql_olap_queries = _filter_postgresql_queries(olap_queries)
             duckdb_olap_queries = _filter_duckdb_queries(olap_queries)
             for mode, fixture in generated_fixtures.items():
@@ -1257,6 +1394,25 @@ def _benchmark_result(
                     workloads["olap"][f"sqlite_{mode}"] = _run_backend_suite(
                         "sqlite",
                         sqlite_olap_queries,
+                        iterations=olap_iterations_value,
+                        warmup=olap_warmup_value,
+                        graph_schema=graph_schema,
+                        schema_context=schema_context,
+                        sqlite_source=fixture,
+                        db_root_dir=db_root_dir,
+                        **backend_suite_kwargs(
+                            workload="olap",
+                            timeout_ms=olap_timeout_ms,
+                        ),
+                    )
+                    if progress_callback is not None:
+                        progress_callback(
+                            {"workloads": workloads, "token_map": token_map}
+                        )
+                if "turso" in enabled_backends and turso_olap_queries:
+                    workloads["olap"][f"turso_{mode}"] = _run_backend_suite(
+                        "turso",
+                        turso_olap_queries,
                         iterations=olap_iterations_value,
                         warmup=olap_warmup_value,
                         graph_schema=graph_schema,

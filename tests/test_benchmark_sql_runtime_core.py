@@ -33,6 +33,7 @@ benchmark_sql_runtime_core = importlib.util.module_from_spec(MODULE_SPEC)
 sys.modules[MODULE_SPEC.name] = benchmark_sql_runtime_core
 MODULE_SPEC.loader.exec_module(benchmark_sql_runtime_core)
 DUCKDB_AVAILABLE = getattr(benchmark_sql_runtime_core, "_duckdb_available")()
+TURSO_AVAILABLE = getattr(benchmark_sql_runtime_core, "_turso_available")()
 
 SMALL_SCALE = benchmark_sql_runtime_core.RuntimeScale(
     node_type_count=3,
@@ -239,6 +240,59 @@ class BenchmarkSQLRuntimeCoreTests(unittest.TestCase):
 
         self.assertIsNotNone(inserted_row)
         self.assertEqual(inserted_row[0], max_id_row[0] + 1)
+
+    @unittest.skipIf(not TURSO_AVAILABLE, "turso (pyturso) is not installed")
+    def test_turso_backend_runner_compiles_and_executes_corpus_read(self) -> None:
+        """Turso shares SQLite's dialect, so the runtime backend must seed the
+        generated fixture and run a lowered read end-to-end through the same
+        _BackendRunner path the orchestration uses."""
+        build_graph_schema = getattr(benchmark_sql_runtime_core, "_build_graph_schema")
+        prepare_fixture = getattr(
+            benchmark_sql_runtime_core,
+            "_prepare_generated_graph_fixture",
+        )
+        backend_runner = getattr(benchmark_sql_runtime_core, "_BackendRunner")
+        managed_directory = getattr(benchmark_sql_runtime_core, "ManagedDirectory")
+        corpus_query = benchmark_sql_runtime_core.CorpusQuery
+
+        graph_schema, edge_plans = build_graph_schema(SMALL_SCALE)
+        schema_context = cypherglot.CompilerSchemaContext.type_aware(graph_schema)
+        fixture = prepare_fixture(
+            scale=SMALL_SCALE,
+            graph_schema=graph_schema,
+            edge_plans=edge_plans,
+            index_mode="indexed",
+        )
+        temp_dir: tempfile.TemporaryDirectory[str] = tempfile.TemporaryDirectory(
+            prefix="turso-bench-test-"
+        )
+        runner = backend_runner(
+            "turso",
+            managed_directory(path=Path(temp_dir.name), temp_dir=temp_dir),
+            graph_schema=graph_schema,
+            schema_context=schema_context,
+            sqlite_source=fixture,
+        )
+        node_label = graph_schema.node_types[0].name
+        query = corpus_query(
+            name="turso_read",
+            workload="oltp",
+            category="read",
+            query=f"MATCH (n:{node_label}) RETURN count(*) AS total",
+            backends=("turso",),
+            mode="statement",
+            mutation=False,
+        )
+        try:
+            artifact = runner.compile_query(query)
+            # Exercise the runtime execute path (fetches + discards), then read
+            # the count directly to confirm the seeded fixture is queryable.
+            runner.execute_query(artifact)
+            count = runner.turso.execute(artifact.compiled).fetchone()[0]
+        finally:
+            runner.close()
+            fixture.close()
+        self.assertEqual(count, SMALL_SCALE.nodes_per_type)
 
     def test_filter_postgresql_queries_requires_explicit_postgresql_backend(
         self,
