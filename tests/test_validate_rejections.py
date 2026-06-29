@@ -132,16 +132,10 @@ class TestValidate(unittest.TestCase):
                 "does not admit disconnected multi-pattern MATCH clauses",
             ),
             (
-                # Regression: UNION used to silently drop all branches but the
-                # first, returning a wrong (partial) result. Must reject.
+                # A UNION branch that is itself unsupported must still be rejected.
                 "MATCH (u:User) RETURN u.name AS name "
-                "UNION MATCH (u:User) RETURN u.name AS name",
-                "does not yet admit UNION",
-            ),
-            (
-                "MATCH (u:User) RETURN u.name AS name "
-                "UNION ALL MATCH (u:User) RETURN u.name AS name",
-                "does not yet admit UNION",
+                "UNION MATCH p = (a:User)-[:KNOWS]->(b:User) RETURN p",
+                "does not admit named path patterns",
             ),
             (
                 "MATCH (u:User) WITH u.name AS name RETURN name.value",
@@ -569,6 +563,16 @@ class TestValidate(unittest.TestCase):
             with self.subTest(query=query):
                 with self.assertRaisesRegex(ValueError, message):
                     cypherglot.validate_cypher_text(query)
+
+    def test_validate_cypher_text_accepts_union(self) -> None:
+        cypherglot.validate_cypher_text(
+            "MATCH (u:User) RETURN u.name AS name "
+            "UNION MATCH (u:User) RETURN u.name AS name"
+        )
+        cypherglot.validate_cypher_text(
+            "MATCH (u:User) RETURN u.name AS name "
+            "UNION ALL MATCH (u:User) RETURN u.name AS name"
+        )
 
     def test_validate_cypher_text_accepts_vector_query_nodes_subset(self) -> None:
         validated = cypherglot.validate_cypher_text(

@@ -683,6 +683,27 @@ class CompileTests(unittest.TestCase):
             'ORDER BY u.name ASC LIMIT 1',
         )
 
+    def test_compile_union_combines_branches(self) -> None:
+        ctx = _public_api_schema_context()
+        distinct = cypherglot.compile_cypher_text(
+            "MATCH (u:User) RETURN u.name AS name "
+            "UNION MATCH (c:Company) RETURN c.name AS name",
+            schema_context=ctx,
+            backend="sqlite",
+        )
+        self.assertEqual(
+            distinct.sql(dialect="sqlite"),
+            'SELECT u.name AS "name" FROM cg_node_user AS u '
+            'UNION SELECT c.name AS "name" FROM cg_node_company AS c',
+        )
+        union_all = cypherglot.compile_cypher_text(
+            "MATCH (u:User) RETURN u.name AS name "
+            "UNION ALL MATCH (c:Company) RETURN c.name AS name",
+            schema_context=ctx,
+            backend="sqlite",
+        )
+        self.assertIn("UNION ALL", union_all.sql(dialect="sqlite"))
+
     def test_compile_type_aware_case_in_return(self) -> None:
         expression = cypherglot.compile_cypher_text(
             "MATCH (u:User) RETURN u.name AS name, "

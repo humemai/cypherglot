@@ -116,6 +116,9 @@ _CONFORMANCE_QUERIES: dict[str, str] = {
     "optional_match": "MATCH (a:User) OPTIONAL MATCH (a)-[:KNOWS]->(b:User) RETURN a.name AS name, b.name AS friend ORDER BY name, friend",
     "collect_grouped": "MATCH (a:User)-[:KNOWS]->(b:User) RETURN a.name AS name, collect(b.name) AS friends ORDER BY name",
     "variable_length": "MATCH (a:User)-[:KNOWS*1..2]->(b:User) WHERE a.name = 'Alice' RETURN b.name AS reachable ORDER BY reachable",
+    "union_distinct": "MATCH (u:User) RETURN u.name AS name UNION MATCH (c:Company) RETURN c.name AS name",
+    "union_dedup": "MATCH (u:User) RETURN u.age AS v UNION MATCH (u2:User) RETURN u2.age AS v",
+    "union_all_keeps": "MATCH (u:User) RETURN u.age AS v UNION ALL MATCH (u2:User) RETURN u2.age AS v",
 }
 
 

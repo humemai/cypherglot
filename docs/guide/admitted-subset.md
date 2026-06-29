@@ -29,6 +29,7 @@ That includes:
 - narrow `MATCH ... WITH ... RETURN` rebinding flows
 - in ordinary `MATCH ... RETURN`, a searched `CASE WHEN <comparison> THEN ... ELSE ... END AS x` projection and a boolean predicate projection (`alias.field OP value AS flag`) are admitted (both require an `AS` alias)
 - narrow standalone `UNWIND ... RETURN`
+- `UNION` / `UNION ALL` of admitted branches (each branch is compiled and combined; `UNION` de-duplicates, `UNION ALL` keeps duplicates, matching Cypher)
 - grouped `count(...)`, `count(*)`, `sum(...)`, `avg(...)`, `min(...)`,
   `max(...)`, and `collect(alias.field)` aggregation slices in ordinary `RETURN`
   and in the `WITH ... RETURN` final-projection aggregate slice (`collect`
@@ -557,7 +558,6 @@ CypherGlot currently rejects these families explicitly:
 - broader `UNWIND` semantics beyond the narrow admitted subset
 - broader `MERGE` semantics beyond the narrow admitted subset
 - broader multi-part queries
-- `UNION` / `UNION ALL` (each branch must be submitted as a separate query)
 
 ## Design non-goals
 

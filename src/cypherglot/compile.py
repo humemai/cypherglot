@@ -83,6 +83,7 @@ from .ir import (
 from .normalize import (
     NormalizedCypherStatement,
     NormalizedQueryNodesVectorSearch,
+    _context_text,
     normalize_cypher_parse_result,
 )
 from .parser import parse_cypher_text
@@ -114,6 +115,56 @@ def compile_cypher_text(
     return expression
 
 
+def _extract_union_branches(result: object) -> list[tuple[bool, str]] | None:
+    """Return ``[(is_union_all, branch_text), ...]`` for a top-level
+    ``UNION`` / ``UNION ALL`` query, or ``None`` when the query has no UNION.
+
+    The first branch's flag is always ``False`` (it has no preceding UNION); each
+    later flag reflects whether *that* join used ``UNION ALL``.
+    """
+    if getattr(result, "has_errors", False):
+        return None
+    statement = result.tree.oC_Statement()
+    query = statement.oC_Query() if statement is not None else None
+    regular = query.oC_RegularQuery() if query is not None else None
+    if regular is None:
+        return None
+    unions = regular.oC_Union()
+    if not unions:
+        return None
+    branches: list[tuple[bool, str]] = [
+        (False, _context_text(result, regular.oC_SingleQuery()))
+    ]
+    for union_ctx in unions:
+        branches.append(
+            (union_ctx.ALL() is not None, _context_text(result, union_ctx.oC_SingleQuery()))
+        )
+    return branches
+
+
+def _compile_union_program(
+    branches: list[tuple[bool, str]],
+    *,
+    schema_context: CompilerSchemaContext | None,
+    backend: SQLBackend | str | None,
+) -> CompiledCypherProgram:
+    combined: exp.Expression | None = None
+    for is_all, branch_text in branches:
+        branch_expression = _require_single_statement_program(
+            compile_cypher_program_text(
+                branch_text,
+                schema_context=schema_context,
+                backend=backend,
+            )
+        )
+        if combined is None:
+            combined = branch_expression
+        else:
+            combined = combined.union(branch_expression, distinct=not is_all)
+    assert combined is not None
+    return CompiledCypherProgram(steps=(CompiledCypherStatement(combined),))
+
+
 def compile_cypher_program_text(
     text: str,
     *,
@@ -121,11 +172,22 @@ def compile_cypher_program_text(
     backend: SQLBackend | str | None = None,
 ) -> CompiledCypherProgram:
     logger.debug("Compiling Cypher program text")
-    program = compile_normalized_cypher_program(
-        normalize_cypher_parse_result(parse_cypher_text(text)),
-        schema_context=schema_context,
-        backend=backend,
-    )
+    parse_result = parse_cypher_text(text)
+    union_branches = _extract_union_branches(parse_result)
+    if union_branches is not None:
+        # Each branch is an independent admitted query; compile them and combine
+        # with SQL UNION / UNION ALL so no branch is silently dropped.
+        program = _compile_union_program(
+            union_branches,
+            schema_context=schema_context,
+            backend=backend,
+        )
+    else:
+        program = compile_normalized_cypher_program(
+            normalize_cypher_parse_result(parse_result),
+            schema_context=schema_context,
+            backend=backend,
+        )
     logger.debug(
         "Compiled Cypher program text",
         extra={"step_count": len(program.steps)},

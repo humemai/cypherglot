@@ -157,12 +157,37 @@ def _validate_plain_read_projection_shape(
         allowed_relationship_aliases=allowed_relationship_aliases,
     )
 
+def _union_branch_texts(result: CypherParseResult) -> list[str] | None:
+    """Return each branch's query text for a top-level UNION query, else None."""
+    if result.has_errors:
+        return None
+    statement = result.tree.oC_Statement()
+    query = statement.oC_Query() if statement is not None else None
+    regular = query.oC_RegularQuery() if query is not None else None
+    if regular is None or not regular.oC_Union():
+        return None
+    texts = [_context_text(result, regular.oC_SingleQuery())]
+    texts.extend(
+        _context_text(result, union_ctx.oC_SingleQuery())
+        for union_ctx in regular.oC_Union()
+    )
+    return texts
+
+
 def validate_cypher_text(text: str):
     """Parse and validate one Cypher statement for the current frontend subset."""
 
     logger.debug("Validating Cypher text")
     try:
-        validated = validate_cypher_parse_result(parse_cypher_text(text))
+        result = parse_cypher_text(text)
+        branch_texts = _union_branch_texts(result)
+        if branch_texts is not None:
+            # UNION: every branch must independently be an admitted query.
+            for branch_text in branch_texts:
+                validate_cypher_parse_result(parse_cypher_text(branch_text))
+            validated = result.tree.oC_Statement().oC_Query().oC_RegularQuery()
+        else:
+            validated = validate_cypher_parse_result(result)
     except Exception:
         logger.debug("Validation failed", exc_info=True)
         raise
