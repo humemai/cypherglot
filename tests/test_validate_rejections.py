@@ -132,6 +132,18 @@ class TestValidate(unittest.TestCase):
                 "does not admit disconnected multi-pattern MATCH clauses",
             ),
             (
+                # Regression: UNION used to silently drop all branches but the
+                # first, returning a wrong (partial) result. Must reject.
+                "MATCH (u:User) RETURN u.name AS name "
+                "UNION MATCH (u:User) RETURN u.name AS name",
+                "does not yet admit UNION",
+            ),
+            (
+                "MATCH (u:User) RETURN u.name AS name "
+                "UNION ALL MATCH (u:User) RETURN u.name AS name",
+                "does not yet admit UNION",
+            ),
+            (
                 "MATCH (u:User) WITH u.name AS name RETURN name.value",
                 "supports RETURN alias.field for entity bindings, RETURN entity_alias for pass-through entity bindings, RETURN scalar_alias for scalar bindings, and optional AS aliases for those projection forms",
             ),

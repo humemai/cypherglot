@@ -553,6 +553,7 @@ CypherGlot currently rejects these families explicitly:
 - broader `UNWIND` semantics beyond the narrow admitted subset
 - broader `MERGE` semantics beyond the narrow admitted subset
 - broader multi-part queries
+- `UNION` / `UNION ALL` (each branch must be submitted as a separate query)
 
 ## Design non-goals
 

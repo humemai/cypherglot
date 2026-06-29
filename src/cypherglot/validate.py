@@ -196,6 +196,12 @@ def validate_cypher_parse_result(result: CypherParseResult):
             "CypherGlot currently validates only regular CREATE, MATCH, and UNWIND queries."
         )
 
+    if regular_query_ctx.oC_Union():
+        raise ValueError(
+            "CypherGlot does not yet admit UNION / UNION ALL queries; submit each "
+            "branch as a separate query."
+        )
+
     single_query_ctx = regular_query_ctx.oC_SingleQuery()
     multi_part_query_ctx = single_query_ctx.oC_MultiPartQuery()
     if multi_part_query_ctx is not None:
