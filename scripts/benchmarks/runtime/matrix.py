@@ -44,6 +44,7 @@ CONTAINER_PYTHON_PACKAGES = (
     "neo4j",
     "ladybug",
     "pyturso",
+    "clickhouse-connect",
 )
 
 
@@ -293,6 +294,15 @@ VARIANTS: tuple[VariantSpec, ...] = (
         module_name="scripts.benchmarks.runtime.postgresql",
         backend="postgresql",
         index_mode="unindexed",
+        uses_db_root_dir=True,
+    ),
+    # ClickHouse is read/OLAP-only with no B-tree index toggle, so it runs a
+    # single (indexed = MergeTree ORDER BY) variant.
+    VariantSpec(
+        name="clickhouse-indexed",
+        module_name="scripts.benchmarks.runtime.clickhouse",
+        backend="clickhouse",
+        index_mode="indexed",
         uses_db_root_dir=True,
     ),
     VariantSpec(

@@ -38,6 +38,22 @@ from scripts.benchmarks.common.postgres_runtime_support import (
     postgresql_benchmark_server_rss_mib,
     release_postgresql_benchmark_dsn,
 )
+from scripts.benchmarks.common.clickhouse_runtime_support import (
+    acquire_clickhouse_benchmark_params,
+    clickhouse_benchmark_server_rss_mib,
+    release_clickhouse_benchmark_params,
+)
+from scripts.benchmarks.common.runtime_clickhouse_backend import (
+    ClickHouseConnectionParams,
+    _clickhouse_available,
+    _clickhouse_server_version,
+    _create_clickhouse_client,
+    _create_clickhouse_schema,
+    _execute_clickhouse_statement,
+    _optimize_clickhouse,
+    _reset_clickhouse_schema,
+    _seed_clickhouse_from_generated_fixture,
+)
 from scripts.benchmarks.common.runtime_duckdb_backend import (
     _analyze_duckdb,
     _configure_duckdb_indexes,
@@ -131,6 +147,10 @@ DEFAULT_POSTGRESQL_OUTPUT_PATH = (
 DEFAULT_TURSO_OUTPUT_PATH = (
     DEFAULT_RUNTIME_RESULTS_DIR
     / "turso_runtime_benchmark_baseline.json"
+)
+DEFAULT_CLICKHOUSE_OUTPUT_PATH = (
+    DEFAULT_RUNTIME_RESULTS_DIR
+    / "clickhouse_runtime_benchmark_baseline.json"
 )
 SQLITE_SAVEPOINT = "benchmark_iteration"
 
@@ -238,6 +258,21 @@ TURSO_ENTRYPOINT = SQLRuntimeBenchmarkEntrypoint(
     enabled_backends=("turso",),
 )
 
+CLICKHOUSE_ENTRYPOINT = SQLRuntimeBenchmarkEntrypoint(
+    name="clickhouse",
+    description=(
+        "Benchmark ClickHouse-backed read/OLAP runtime over a generated multi-type "
+        "type-aware graph. ClickHouse is a columnar engine scoped to reads; this "
+        "tests whether the columnar-OLAP win generalizes beyond DuckDB."
+    ),
+    default_output_path=DEFAULT_CLICKHOUSE_OUTPUT_PATH,
+    enabled_backends=("clickhouse",),
+    # ClickHouse has no B-tree point indexes — the MergeTree ORDER BY key is the
+    # only index — so there is no indexed/unindexed toggle to sweep.
+    default_index_mode="indexed",
+    index_mode_choices=("indexed",),
+)
+
 
 _edge_out_degree = _shared_edge_out_degree
 
@@ -252,6 +287,7 @@ class _BackendRunner:
         schema_context: cypherglot.CompilerSchemaContext,
         sqlite_source: GeneratedGraphFixture,
         postgres_dsn: str | None = None,
+        clickhouse_params: ClickHouseConnectionParams | None = None,
     ) -> None:
         self.backend = backend
         self.work_dir = work_dir
@@ -259,6 +295,7 @@ class _BackendRunner:
         self.schema_context = schema_context
         self.sqlite_source = sqlite_source
         self.postgres_dsn = postgres_dsn
+        self.clickhouse_params = clickhouse_params
         self.setup_metrics: dict[str, int] = {}
         self.row_counts: dict[str, int] = {}
         self.rss_snapshots_mib: dict[str, dict[str, float | None]] = {}
@@ -439,7 +476,51 @@ class _BackendRunner:
             self.artifact_path = None
             return
 
+        if self.backend == "clickhouse":
+            if self.clickhouse_params is None:
+                raise ValueError("ClickHouse backend requires connection params.")
+            self.db_size_mib = 0.0
+            self.wal_size_mib = 0.0
+            self.connection, self.setup_metrics["connect_ns"] = _measure_ns(
+                lambda: _create_clickhouse_client(self.clickhouse_params)
+            )
+            self.rss_snapshots_mib["after_connect"] = self.capture_rss_snapshot()
+            _, self.setup_metrics["schema_ns"] = _measure_ns(
+                lambda: self._reset_and_create_clickhouse_schema()
+            )
+            self.rss_snapshots_mib["after_schema"] = self.capture_rss_snapshot()
+            _progress(
+                f"clickhouse/{self.index_mode}: ingesting from generated fixture "
+                f"({self.sqlite_source.csv_dir})"
+            )
+            self.row_counts, self.setup_metrics["ingest_ns"] = _measure_ns(
+                lambda: _seed_clickhouse_from_generated_fixture(
+                    self.clickhouse,
+                    graph_schema=self.graph_schema,
+                    generated_fixture=self.sqlite_source,
+                    ingest_batch_size=50_000,
+                    progress_label=f"clickhouse/{self.index_mode}",
+                )
+            )
+            self.rss_snapshots_mib["after_ingest"] = self.capture_rss_snapshot()
+            # ClickHouse has no B-tree indexes; the MergeTree ORDER BY key is the
+            # index, so there is no index-mode toggle. We OPTIMIZE FINAL instead of
+            # ANALYZE to stabilize the part layout before measuring.
+            self.setup_metrics["index_ns"] = 0
+            self.rss_snapshots_mib["after_index"] = self.capture_rss_snapshot()
+            _, self.setup_metrics["analyze_ns"] = _measure_ns(
+                lambda: _optimize_clickhouse(self.clickhouse, self.graph_schema)
+            )
+            self.rss_snapshots_mib["after_analyze"] = self.capture_rss_snapshot()
+            self.rss_snapshots_mib["suite_start"] = self.capture_rss_snapshot()
+            self.artifact_path = None
+            return
+
         raise ValueError(f"Unsupported backend {self.backend!r}.")
+
+    def _reset_and_create_clickhouse_schema(self) -> None:
+        _reset_clickhouse_schema(self.clickhouse, self.graph_schema)
+        _create_clickhouse_schema(self.clickhouse, self.graph_schema)
 
     @property
     def sqlite(self) -> sqlite3.Connection:
@@ -459,14 +540,21 @@ class _BackendRunner:
         # pyturso Connection; not in the static union above.
         return self.connection
 
+    @property
+    def clickhouse(self):
+        # clickhouse-connect Client; not in the static union above.
+        return self.connection
+
     def close(self) -> None:
         self.connection.close()
         self.work_dir.close()
 
     def server_rss_mib(self) -> float | None:
-        if self.backend != "postgresql":
-            return None
-        return postgresql_benchmark_server_rss_mib(self.postgres_dsn)
+        if self.backend == "postgresql":
+            return postgresql_benchmark_server_rss_mib(self.postgres_dsn)
+        if self.backend == "clickhouse":
+            return clickhouse_benchmark_server_rss_mib(self.clickhouse_params)
+        return None
 
     def capture_rss_snapshot(self) -> dict[str, float | None]:
         return _capture_rss_snapshot(
@@ -507,6 +595,15 @@ class _BackendRunner:
                         schema_context=self.schema_context,
                     ),
                 )
+            if self.backend == "clickhouse":
+                return PreparedArtifact(
+                    mode="statement",
+                    compiled=cypherglot.to_sql(
+                        query.query,
+                        backend="clickhouse",
+                        schema_context=self.schema_context,
+                    ),
+                )
             return PreparedArtifact(
                 mode="statement",
                 compiled=cypherglot.to_sql(
@@ -543,6 +640,11 @@ class _BackendRunner:
                     backend="turso",
                     schema_context=self.schema_context,
                 ),
+            )
+        if self.backend == "clickhouse":
+            raise ValueError(
+                "ClickHouse is read-only in the benchmark; rendered write programs "
+                "are not supported. Tag only read queries with the clickhouse backend."
             )
         if self.backend != "sqlite":
             raise ValueError(
@@ -582,6 +684,9 @@ class _BackendRunner:
                 if cursor.description is not None:
                     cursor.fetchall()
                 return
+            if self.backend == "clickhouse":
+                _execute_clickhouse_statement(self.clickhouse, artifact.compiled)
+                return
             cursor = self.duck.execute(artifact.compiled)
             if cursor.description is not None:
                 cursor.fetchall()
@@ -599,6 +704,11 @@ class _BackendRunner:
         if self.backend == "turso":
             _execute_turso_program(self.turso, artifact.compiled, commit=False)
             return
+        if self.backend == "clickhouse":
+            raise ValueError(
+                "ClickHouse is read-only in the benchmark; rendered write programs "
+                "are not supported. Tag only read queries with the clickhouse backend."
+            )
         if self.backend != "sqlite":
             raise ValueError(
                 "Rendered program execution is only supported on SQLite, DuckDB, "
@@ -931,6 +1041,7 @@ def _run_backend_suite(
     schema_context: cypherglot.CompilerSchemaContext,
     sqlite_source: GeneratedGraphFixture,
     postgres_dsn: str | None = None,
+    clickhouse_params: ClickHouseConnectionParams | None = None,
     db_root_dir: Path | None = None,
     iteration_progress: bool = False,
     timeout_ms: float | None = None,
@@ -950,6 +1061,7 @@ def _run_backend_suite(
         schema_context=schema_context,
         sqlite_source=sqlite_source,
         postgres_dsn=postgres_dsn,
+        clickhouse_params=clickhouse_params,
     )
     try:
         _progress(
@@ -1111,6 +1223,7 @@ def _build_payload(
 def _detect_database_versions(
     entrypoint: SQLRuntimeBenchmarkEntrypoint,
     postgres_dsn: str | None,
+    clickhouse_params: ClickHouseConnectionParams | None = None,
 ) -> dict[str, str]:
     versions: dict[str, str] = {}
     for backend in entrypoint.enabled_backends:
@@ -1135,6 +1248,16 @@ def _detect_database_versions(
                     "PostgreSQL DSN is required to determine the server version."
                 )
             versions[backend] = _postgresql_server_version(postgres_dsn)
+            continue
+        if backend == "clickhouse":
+            if clickhouse_params is None:
+                raise ValueError(
+                    "ClickHouse params are required to determine the server version."
+                )
+            version = _clickhouse_server_version(clickhouse_params)
+            if version is None:
+                raise ValueError("clickhouse-connect is not installed.")
+            versions[backend] = version
             continue
         raise ValueError(f"Unsupported backend {backend!r}.")
     return versions
@@ -1179,7 +1302,7 @@ def _load_corpus(path: Path) -> list[CorpusQuery]:
 
         normalized_backends: list[str] = []
         for backend in backends:
-            if backend not in {"sqlite", "duckdb", "postgresql", "turso"}:
+            if backend not in {"sqlite", "duckdb", "postgresql", "turso", "clickhouse"}:
                 raise ValueError(
                     f"Runtime corpus item {index} has unsupported backend {backend!r}."
                 )
@@ -1217,6 +1340,14 @@ def _resolve_postgresql_runtime_dsn(
     return acquire_postgresql_benchmark_dsn(), True
 
 
+def _resolve_clickhouse_runtime_params(
+    entrypoint: SQLRuntimeBenchmarkEntrypoint,
+) -> tuple[ClickHouseConnectionParams | None, bool]:
+    if "clickhouse" not in entrypoint.enabled_backends:
+        return None, False
+    return acquire_clickhouse_benchmark_params(), True
+
+
 def _benchmark_result(
     queries: list[CorpusQuery],
     *,
@@ -1228,6 +1359,7 @@ def _benchmark_result(
     olap_warmup: int | None = None,
     entrypoint: SQLRuntimeBenchmarkEntrypoint,
     postgres_dsn: str | None = None,
+    clickhouse_params: ClickHouseConnectionParams | None = None,
     scale: RuntimeScale,
     index_mode: str,
     db_root_dir: Path | None = None,
@@ -1292,6 +1424,9 @@ def _benchmark_result(
             turso_oltp_queries = [
                 query for query in oltp_queries if "turso" in query.backends
             ]
+            clickhouse_oltp_queries = [
+                query for query in oltp_queries if "clickhouse" in query.backends
+            ]
             duckdb_oltp_queries = _filter_duckdb_queries(oltp_queries)
             postgresql_oltp_queries = _filter_postgresql_queries(oltp_queries)
             for mode, fixture in generated_fixtures.items():
@@ -1323,6 +1458,30 @@ def _benchmark_result(
                         graph_schema=graph_schema,
                         schema_context=schema_context,
                         sqlite_source=fixture,
+                        db_root_dir=db_root_dir,
+                        **backend_suite_kwargs(
+                            workload="oltp",
+                            timeout_ms=oltp_timeout_ms,
+                        ),
+                    )
+                    if progress_callback is not None:
+                        progress_callback(
+                            {"workloads": workloads, "token_map": token_map}
+                        )
+                if (
+                    "clickhouse" in enabled_backends
+                    and clickhouse_params
+                    and clickhouse_oltp_queries
+                ):
+                    workloads["oltp"][f"clickhouse_{mode}"] = _run_backend_suite(
+                        "clickhouse",
+                        clickhouse_oltp_queries,
+                        iterations=oltp_iterations_value,
+                        warmup=oltp_warmup_value,
+                        graph_schema=graph_schema,
+                        schema_context=schema_context,
+                        sqlite_source=fixture,
+                        clickhouse_params=clickhouse_params,
                         db_root_dir=db_root_dir,
                         **backend_suite_kwargs(
                             workload="oltp",
@@ -1387,6 +1546,9 @@ def _benchmark_result(
             turso_olap_queries = [
                 query for query in olap_queries if "turso" in query.backends
             ]
+            clickhouse_olap_queries = [
+                query for query in olap_queries if "clickhouse" in query.backends
+            ]
             postgresql_olap_queries = _filter_postgresql_queries(olap_queries)
             duckdb_olap_queries = _filter_duckdb_queries(olap_queries)
             for mode, fixture in generated_fixtures.items():
@@ -1418,6 +1580,30 @@ def _benchmark_result(
                         graph_schema=graph_schema,
                         schema_context=schema_context,
                         sqlite_source=fixture,
+                        db_root_dir=db_root_dir,
+                        **backend_suite_kwargs(
+                            workload="olap",
+                            timeout_ms=olap_timeout_ms,
+                        ),
+                    )
+                    if progress_callback is not None:
+                        progress_callback(
+                            {"workloads": workloads, "token_map": token_map}
+                        )
+                if (
+                    "clickhouse" in enabled_backends
+                    and clickhouse_params
+                    and clickhouse_olap_queries
+                ):
+                    workloads["olap"][f"clickhouse_{mode}"] = _run_backend_suite(
+                        "clickhouse",
+                        clickhouse_olap_queries,
+                        iterations=olap_iterations_value,
+                        warmup=olap_warmup_value,
+                        graph_schema=graph_schema,
+                        schema_context=schema_context,
+                        sqlite_source=fixture,
+                        clickhouse_params=clickhouse_params,
                         db_root_dir=db_root_dir,
                         **backend_suite_kwargs(
                             workload="olap",
@@ -1660,7 +1846,16 @@ def main(entrypoint: SQLRuntimeBenchmarkEntrypoint = SQLITE_ENTRYPOINT) -> int:
         raise ValueError(
             "psycopg2 is not installed. Install it or omit --postgres-dsn."
         )
-    database_versions = _detect_database_versions(entrypoint, postgres_dsn or None)
+    clickhouse_params, acquired_clickhouse_runtime = (
+        _resolve_clickhouse_runtime_params(entrypoint)
+    )
+    if clickhouse_params is not None and not _clickhouse_available():
+        raise ValueError("clickhouse-connect is not installed.")
+    database_versions = _detect_database_versions(
+        entrypoint,
+        postgres_dsn or None,
+        clickhouse_params,
+    )
 
     db_root_dir = None
     if args.db_root_dir is not None:
@@ -1764,6 +1959,7 @@ def main(entrypoint: SQLRuntimeBenchmarkEntrypoint = SQLITE_ENTRYPOINT) -> int:
             olap_warmup=args.olap_warmup,
             entrypoint=entrypoint,
             postgres_dsn=postgres_dsn or None,
+            clickhouse_params=clickhouse_params,
             scale=scale,
             index_mode=args.index_mode,
             db_root_dir=db_root_dir,
@@ -1803,6 +1999,8 @@ def main(entrypoint: SQLRuntimeBenchmarkEntrypoint = SQLITE_ENTRYPOINT) -> int:
     finally:
         if acquired_postgresql_runtime:
             release_postgresql_benchmark_dsn()
+        if acquired_clickhouse_runtime:
+            release_clickhouse_benchmark_params()
 
 
 if __name__ == "__main__":  # pragma: no cover

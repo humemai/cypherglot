@@ -5,7 +5,7 @@ import re
 from typing import Literal
 
 
-SchemaBackend = Literal["sqlite", "duckdb", "postgresql", "turso"]
+SchemaBackend = Literal["sqlite", "duckdb", "postgresql", "turso", "clickhouse"]
 
 
 @dataclass(frozen=True)
@@ -17,6 +17,21 @@ class SchemaBackendCapabilities:
     reference_id_sql_type: str = "BIGINT"
     include_foreign_keys: bool = True
     strict_tables: bool = False
+    # Inline ``id ... PRIMARY KEY`` (sqlite/turso). Backends that use sequence
+    # objects ignore this; ClickHouse sets it False (key lives in ENGINE/ORDER BY).
+    primary_key_inline: bool = True
+    # Wrap nullable property columns as ``Nullable(T)`` (ClickHouse) instead of
+    # relying on a trailing ``NOT NULL``/implicit-nullable column.
+    wrap_nullable_types: bool = False
+    # Emit explicit ``NOT NULL`` constraints. ClickHouse columns are non-null by
+    # default, so it omits them (nullability is expressed via ``Nullable(T)``).
+    emit_not_null_constraints: bool = True
+    # Emit secondary ``CREATE INDEX`` statements. ClickHouse has no B-tree point
+    # indexes — its primary index is the table ``ORDER BY`` key — so it omits them.
+    emit_secondary_indexes: bool = True
+    # Table engine clause appended after the column list, e.g. ``MergeTree`` for
+    # ClickHouse. ``None`` emits a plain ``CREATE TABLE``.
+    table_engine: str | None = None
 
 
 _IDENTIFIER_PART_RE = re.compile(r"[^a-z0-9]+")
@@ -64,6 +79,25 @@ _SCHEMA_BACKEND_CAPABILITIES: dict[SchemaBackend, SchemaBackendCapabilities] = {
             "float": "DOUBLE PRECISION",
             "boolean": "BOOLEAN",
         },
+    ),
+    # ClickHouse is columnar: no sequences, no foreign keys, no B-tree indexes.
+    # Property columns are nullable via ``Nullable(T)``; the table's MergeTree
+    # ``ORDER BY`` key (id for nodes, (from_id, to_id) for edges) is the index.
+    "clickhouse": SchemaBackendCapabilities(
+        logical_type_sql={
+            "string": "String",
+            "integer": "Int64",
+            "float": "Float64",
+            "boolean": "UInt8",
+        },
+        needs_sequence_objects=False,
+        reference_id_sql_type="Int64",
+        include_foreign_keys=False,
+        primary_key_inline=False,
+        wrap_nullable_types=True,
+        emit_not_null_constraints=False,
+        emit_secondary_indexes=False,
+        table_engine="MergeTree",
     ),
 }
 
@@ -138,8 +172,10 @@ class PropertyField:
             )
 
         column_name = self.column_name
+        if capabilities.wrap_nullable_types and self.nullable:
+            sql_type = f"Nullable({sql_type})"
         constraints = [f"{column_name} {sql_type}"]
-        if not self.nullable:
+        if not self.nullable and capabilities.emit_not_null_constraints:
             constraints.append("NOT NULL")
         if capabilities.boolean_check_constraint and self.logical_type == "boolean":
             constraints.append(f"CHECK ({column_name} IN (0, 1))")
@@ -314,9 +350,11 @@ class GraphSchema:
                     node_type.table_name,
                     column_lines,
                     backend,
+                    order_by_key="id",
                 )
             )
-            ddl.extend(self._property_index_ddl(node_type))
+            if capabilities.emit_secondary_indexes:
+                ddl.extend(self._property_index_ddl(node_type))
 
         for edge_type in self.edge_types:
             ddl.extend(self._pre_table_ddl(edge_type.table_name, backend))
@@ -348,25 +386,27 @@ class GraphSchema:
                     edge_type.table_name,
                     column_lines,
                     backend,
+                    order_by_key="(from_id, to_id)",
                 )
             )
-            ddl.append(
-                f"CREATE INDEX idx_{edge_type.table_name}_from_id "
-                f"ON {edge_type.table_name}(from_id);"
-            )
-            ddl.append(
-                f"CREATE INDEX idx_{edge_type.table_name}_to_id "
-                f"ON {edge_type.table_name}(to_id);"
-            )
-            ddl.append(
-                f"CREATE INDEX idx_{edge_type.table_name}_from_to "
-                f"ON {edge_type.table_name}(from_id, to_id);"
-            )
-            ddl.append(
-                f"CREATE INDEX idx_{edge_type.table_name}_to_from "
-                f"ON {edge_type.table_name}(to_id, from_id);"
-            )
-            ddl.extend(self._property_index_ddl(edge_type))
+            if capabilities.emit_secondary_indexes:
+                ddl.append(
+                    f"CREATE INDEX idx_{edge_type.table_name}_from_id "
+                    f"ON {edge_type.table_name}(from_id);"
+                )
+                ddl.append(
+                    f"CREATE INDEX idx_{edge_type.table_name}_to_id "
+                    f"ON {edge_type.table_name}(to_id);"
+                )
+                ddl.append(
+                    f"CREATE INDEX idx_{edge_type.table_name}_from_to "
+                    f"ON {edge_type.table_name}(from_id, to_id);"
+                )
+                ddl.append(
+                    f"CREATE INDEX idx_{edge_type.table_name}_to_from "
+                    f"ON {edge_type.table_name}(to_id, from_id);"
+                )
+                ddl.extend(self._property_index_ddl(edge_type))
 
         return ddl
 
@@ -401,12 +441,16 @@ class GraphSchema:
 
     def _id_column_sql(self, table_name: str, backend: SchemaBackend) -> str:
         capabilities = _schema_backend_capabilities(backend)
-        if not capabilities.needs_sequence_objects:
+        if capabilities.needs_sequence_objects:
+            return (
+                "id BIGINT PRIMARY KEY DEFAULT "
+                f"nextval('{_id_sequence_name(table_name)}')"
+            )
+        if capabilities.primary_key_inline:
             return "id INTEGER PRIMARY KEY"
-        return (
-            "id BIGINT PRIMARY KEY DEFAULT "
-            f"nextval('{_id_sequence_name(table_name)}')"
-        )
+        # ClickHouse: the key is declared by the MergeTree ORDER BY clause; ids are
+        # supplied explicitly at ingest, so no inline PRIMARY KEY / sequence.
+        return f"id {capabilities.reference_id_sql_type}"
 
     def _reference_id_column_sql(
         self,
@@ -414,7 +458,8 @@ class GraphSchema:
         column_name: str,
     ) -> str:
         capabilities = _schema_backend_capabilities(backend)
-        return f"{column_name} {capabilities.reference_id_sql_type} NOT NULL"
+        suffix = " NOT NULL" if capabilities.emit_not_null_constraints else ""
+        return f"{column_name} {capabilities.reference_id_sql_type}{suffix}"
 
     def _foreign_key_sql(
         self,
@@ -434,10 +479,18 @@ class GraphSchema:
         table_name: str,
         column_lines: list[str],
         backend: SchemaBackend,
+        *,
+        order_by_key: str,
     ) -> str:
-        table_suffix = (
-            " STRICT" if _schema_backend_capabilities(backend).strict_tables else ""
-        )
+        capabilities = _schema_backend_capabilities(backend)
+        if capabilities.table_engine is not None:
+            table_suffix = (
+                f"\nENGINE = {capabilities.table_engine} ORDER BY {order_by_key}"
+            )
+        elif capabilities.strict_tables:
+            table_suffix = " STRICT"
+        else:
+            table_suffix = ""
         return (
             "CREATE TABLE "
             f"{table_name} (\n  "

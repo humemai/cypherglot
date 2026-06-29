@@ -59,6 +59,7 @@ class SQLBackend(StrEnum):
     DUCKDB = "duckdb"
     POSTGRESQL = "postgresql"
     TURSO = "turso"
+    CLICKHOUSE = "clickhouse"
 
 
 @dataclass(frozen=True, slots=True)
@@ -337,6 +338,19 @@ BACKEND_CAPABILITIES: dict[SQLBackend, BackendCapabilities] = {
         supports_update_from=False,
         supports_delete_using=False,
         supports_native_boolean=False,
+    ),
+    # ClickHouse is a columnar OLAP engine. We scope it to the read/OLAP corpus:
+    # point updates/deletes are async, non-transactional ALTER mutations, so
+    # write capabilities are off. It renders via SQLGlot's clickhouse dialect.
+    SQLBackend.CLICKHOUSE: BackendCapabilities(
+        backend=SQLBackend.CLICKHOUSE,
+        supports_writes=False,
+        render_dialect="clickhouse",
+        supports_returning=False,
+        supports_update_from=False,
+        supports_delete_using=False,
+        supports_native_boolean=True,
+        integer_cast_requires_truncation=True,
     ),
 }
 

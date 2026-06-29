@@ -244,6 +244,7 @@ def compile_normalized_cypher_program(
             SQLBackend.DUCKDB: _compile_graph_relational_backend_program,
             SQLBackend.POSTGRESQL: _compile_graph_relational_backend_program,
             SQLBackend.TURSO: _compile_graph_relational_backend_program,
+            SQLBackend.CLICKHOUSE: _compile_graph_relational_backend_program,
         },
     )
     return program
