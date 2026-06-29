@@ -9,6 +9,7 @@ from ._compile_sql_utils import (
     _sql_value,
 )
 from ._compile_type_aware_common import (
+    _compile_type_aware_match_node_predicate,
     _compile_type_aware_numeric_coercion_expression,
     _compile_type_aware_size_expression,
     _compile_type_aware_edge_field_expression,
@@ -19,7 +20,7 @@ from ._compile_type_aware_common import (
     _type_aware_backend_requires_truncating_integer_cast,
 )
 from .ir import SQLBackend
-from ._normalize_support import OrderItem, ReturnItem
+from ._normalize_support import CaseSpec, OrderItem, Predicate, ReturnItem
 
 
 _TYPE_AWARE_RELATIONAL_PACKAGING_DEPENDENT_KINDS = {
@@ -292,12 +293,56 @@ def _compile_type_aware_match_node_group_by(
     return ", ".join(group_items)
 
 
+def _compile_type_aware_node_predicate_condition(
+    alias: str,
+    node_type: object,
+    item: ReturnItem,
+    backend: SQLBackend,
+) -> str:
+    """Compile a predicate-kind RETURN item (e.g. a CASE WHEN condition or a
+    `RETURN x >= 1 AS flag` projection) to a boolean SQL expression by reusing
+    the WHERE-predicate lowering."""
+    if item.operator is None:
+        raise ValueError("Type-aware predicate projection requires a comparison.")
+    return _compile_type_aware_match_node_predicate(
+        alias,
+        node_type,
+        Predicate(
+            alias=item.alias,
+            field=item.field or "",
+            operator=item.operator,
+            value=item.value,  # type: ignore[arg-type]
+        ),
+        backend=backend,
+    )
+
+
 def _compile_type_aware_return_expression(
     alias: str,
     node_type: object,
     item: ReturnItem,
     backend: SQLBackend,
 ) -> str:
+    if item.kind == "predicate":
+        return _compile_type_aware_node_predicate_condition(
+            alias, node_type, item, backend=backend
+        )
+    if item.kind == "case":
+        assert isinstance(item.value, CaseSpec)
+        arms: list[str] = []
+        for arm in item.value.when_items:
+            condition_sql = _compile_type_aware_node_predicate_condition(
+                alias, node_type, arm.condition, backend=backend
+            )
+            result_sql = _compile_type_aware_return_expression(
+                alias, node_type, arm.result, backend=backend
+            )
+            arms.append(f"WHEN {condition_sql} THEN {result_sql}")
+        else_sql = _compile_type_aware_return_expression(
+            alias, node_type, item.value.else_item, backend=backend
+        )
+        return f"CASE {' '.join(arms)} ELSE {else_sql} END"
+
     scalar_expression = _compile_type_aware_scalar_return_expression(
         item,
         field_expression_resolver=(

@@ -45,7 +45,7 @@ except ImportError:  # pragma: no cover - optional dependency
 
 
 # Output columns that carry boolean values (SQL backends store these as 0/1).
-_BOOLEAN_COLUMNS = {"active"}
+_BOOLEAN_COLUMNS = {"active", "senior"}
 
 _GRAPH_SCHEMA = GraphSchema(
     node_types=(
@@ -103,6 +103,8 @@ _CONFORMANCE_QUERIES: dict[str, str] = {
     "return_distinct": "MATCH (u:User) RETURN DISTINCT u.age AS age ORDER BY age",
     "with_distinct": "MATCH (u:User) WITH DISTINCT u.age AS age RETURN age ORDER BY age",
     "boolean_projection": "MATCH (u:User) RETURN u.name AS name, u.active AS active ORDER BY name",
+    "predicate_projection": "MATCH (u:User) RETURN u.name AS name, u.age >= 30 AS senior ORDER BY name",
+    "case_projection": "MATCH (u:User) RETURN u.name AS name, CASE WHEN u.age >= 30 THEN 'senior' ELSE 'junior' END AS bucket ORDER BY name",
     "count_star": "MATCH (u:User) RETURN count(*) AS total",
     "grouped_count": "MATCH (u:User) RETURN u.age AS age, count(*) AS c ORDER BY age",
     "aggregates": "MATCH (u:User) RETURN min(u.age) AS mn, max(u.age) AS mx, avg(u.age) AS av",

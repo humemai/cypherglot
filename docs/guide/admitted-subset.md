@@ -27,6 +27,7 @@ That includes:
   source rows survive with NULLs. The OPTIONAL MATCH `WHERE` lands in the join
   `ON` clause (not the outer `WHERE`) to preserve that semantics
 - narrow `MATCH ... WITH ... RETURN` rebinding flows
+- in ordinary `MATCH ... RETURN`, a searched `CASE WHEN <comparison> THEN ... ELSE ... END AS x` projection and a boolean predicate projection (`alias.field OP value AS flag`) are admitted (both require an `AS` alias)
 - narrow standalone `UNWIND ... RETURN`
 - grouped `count(...)`, `count(*)`, `sum(...)`, `avg(...)`, `min(...)`,
   `max(...)`, and `collect(alias.field)` aggregation slices in ordinary `RETURN`

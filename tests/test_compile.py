@@ -683,6 +683,33 @@ class CompileTests(unittest.TestCase):
             'ORDER BY u.name ASC LIMIT 1',
         )
 
+    def test_compile_type_aware_case_in_return(self) -> None:
+        expression = cypherglot.compile_cypher_text(
+            "MATCH (u:User) RETURN u.name AS name, "
+            "CASE WHEN u.age >= 18 THEN 'adult' ELSE 'minor' END AS bucket "
+            "ORDER BY name",
+            schema_context=_public_api_schema_context(),
+            backend="sqlite",
+        )
+        self.assertEqual(
+            expression.sql(dialect="sqlite"),
+            'SELECT u.name AS "name", '
+            "CASE WHEN u.age >= 18 THEN 'adult' ELSE 'minor' END AS \"bucket\" "
+            "FROM cg_node_user AS u ORDER BY u.name ASC",
+        )
+
+    def test_compile_type_aware_predicate_in_return(self) -> None:
+        expression = cypherglot.compile_cypher_text(
+            "MATCH (u:User) RETURN u.name AS name, u.age >= 18 AS adult ORDER BY name",
+            schema_context=_public_api_schema_context(),
+            backend="sqlite",
+        )
+        self.assertEqual(
+            expression.sql(dialect="sqlite"),
+            'SELECT u.name AS "name", u.age >= 18 AS "adult" '
+            "FROM cg_node_user AS u ORDER BY u.name ASC",
+        )
+
     def test_compile_type_aware_untyped_relationship_endpoint(self) -> None:
         # The unlabeled endpoint `b` is inferred from the KNOWS edge's target.
         expression = cypherglot.compile_cypher_text(
