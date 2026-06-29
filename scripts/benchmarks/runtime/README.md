@@ -21,6 +21,14 @@ Contents:
     without a determinable equality key (`INVALID_JOIN_ON_EXPRESSION`).
 - `neo4j.py`, `arcadedb_embedded.py`, `ladybug.py`: direct runtime benchmarks
   against non-SQL backends
+- `age.py`: Apache AGE helpers — a native-openCypher **baseline** (PostgreSQL +
+  the `age` extension). CypherGlot does **not** lower for AGE; AGE runs the
+  Cypher directly via `cypher('graph', $$ ... $$) AS (col agtype, ...)`. Because
+  CypherGlot also targets PostgreSQL, this is the cleanest head-to-head: native
+  graph extension vs. lowered SQL on the same engine. The mandatory `AS (...)`
+  column list is derived automatically from CypherGlot's own frontend. UNION
+  queries are unsupported (recorded, not failed). Correctness is proven in
+  `tests/test_cypher_conformance_age.py` (AGE == SQLite on a real AGE server).
 - `matrix.py`: repeated fresh-process runtime benchmarking with worker queues
 - `summarize_results.py`: Markdown summarizer for repeated runtime JSON outputs
 
