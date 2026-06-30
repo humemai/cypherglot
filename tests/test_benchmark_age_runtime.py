@@ -116,9 +116,12 @@ class AgeUnsupportedTests(unittest.TestCase):
         self.assertFalse(_age_uses_union("MATCH (u:User) RETURN u.name"))
 
     def test_unsupported_set_covers_union_conformance_queries(self) -> None:
-        self.assertEqual(
-            AGE_UNSUPPORTED_QUERIES,
-            frozenset({"union_distinct", "union_dedup", "union_all_keeps"}),
+        # The UNION conformance queries must always be flagged; the set may also
+        # carry runtime-corpus names (e.g. the lower()/toLower() function-name gap).
+        self.assertTrue(
+            {"union_distinct", "union_dedup", "union_all_keeps"}.issubset(
+                AGE_UNSUPPORTED_QUERIES
+            )
         )
 
 

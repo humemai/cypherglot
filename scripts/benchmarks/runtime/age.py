@@ -79,11 +79,18 @@ except ImportError:  # pragma: no cover - optional dependency
 # "native AGE vs lowered SQL" finding).
 #   - UNION / UNION ALL: AGE's cypher() wrapper returns a single set; stacking
 #     two cypher() calls needs UNION at the SQL layer, not inside one call.
+#   - lower()/upper(): the corpus uses SQL function names; native openCypher (AGE,
+#     Neo4j) wants toLower()/toUpper(). Skipped until CypherGlot accepts the
+#     standard Cypher names and the corpus switches to them (coverage follow-up).
 AGE_UNSUPPORTED_QUERIES: frozenset[str] = frozenset(
     {
+        # conformance-suite query names
         "union_distinct",
         "union_dedup",
         "union_all_keeps",
+        # runtime-corpus query names (lower()/toLower() function-name gap)
+        "olap_with_where_lower_projection",
+        "olap_relationship_function_projection",
     }
 )
 
@@ -216,6 +223,18 @@ def age_return_columns(
     selects = getattr(expression, "selects", None)
     if not selects:
         raise ValueError(f"Unable to determine output columns for query: {query}")
+    # Variable-length reads compile to `SELECT * FROM (<union>) AS variable_length_q`,
+    # so the top-level projection is a bare Star. Resolve the real column names from
+    # the wrapped subquery (its aliased projections) instead of returning "*".
+    if len(selects) == 1 and isinstance(selects[0], sqlglot.exp.Star):
+        subquery = expression.find(sqlglot.exp.Subquery)
+        inner = subquery.this if subquery is not None else None
+        inner_selects = getattr(inner, "selects", None) if inner is not None else None
+        if inner_selects:
+            return [select.alias_or_name for select in inner_selects]
+        raise ValueError(
+            f"Unable to resolve star projection to output columns for query: {query}"
+        )
     return [select.alias_or_name for select in selects]
 
 
