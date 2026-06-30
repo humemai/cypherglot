@@ -15,6 +15,7 @@ import subprocess
 import sys
 import threading
 import time
+import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -64,6 +65,7 @@ class VariantSpec:
     uses_db_root_dir: bool
     uses_neo4j_docker: bool = False
     uses_arcadedb_env: bool = False
+    uses_age_docker: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -344,6 +346,24 @@ VARIANTS: tuple[VariantSpec, ...] = (
         index_mode=None,
         uses_db_root_dir=True,
     ),
+    # Apache AGE is a native-Cypher baseline (openCypher run inside PostgreSQL),
+    # provisioned via a disposable apache/age Docker container like Neo4j.
+    VariantSpec(
+        name="age-indexed",
+        module_name="scripts.benchmarks.runtime.age",
+        backend="age",
+        index_mode="indexed",
+        uses_db_root_dir=False,
+        uses_age_docker=True,
+    ),
+    VariantSpec(
+        name="age-unindexed",
+        module_name="scripts.benchmarks.runtime.age",
+        backend="age",
+        index_mode="unindexed",
+        uses_db_root_dir=False,
+        uses_age_docker=True,
+    ),
 )
 
 VARIANT_BY_NAME = {variant.name: variant for variant in VARIANTS}
@@ -515,6 +535,17 @@ def _parse_args() -> argparse.Namespace:
         "--neo4j-keep-container",
         action="store_true",
         help="Keep Docker Neo4j containers after each job exits.",
+    )
+    parser.add_argument(
+        "--age-docker-image",
+        default="apache/age",
+        help="Docker image to use for Apache AGE jobs.",
+    )
+    parser.add_argument("--age-docker-startup-timeout", type=int, default=120)
+    parser.add_argument(
+        "--age-keep-container",
+        action="store_true",
+        help="Keep Docker Apache AGE containers after each job exits.",
     )
     parser.add_argument(
         "--iteration-progress",
@@ -836,6 +867,20 @@ def _build_command(
         )
         if args.neo4j_keep_container:
             command.append("--docker-keep-container")
+    if job.variant.uses_age_docker:
+        command.extend(
+            [
+                "--docker",
+                "--docker-image",
+                args.age_docker_image,
+                "--docker-container-name",
+                _age_container_name(job),
+                "--docker-startup-timeout",
+                str(args.age_docker_startup_timeout),
+            ]
+        )
+        if args.age_keep_container:
+            command.append("--docker-keep-container")
     if (
         job.variant.backend == "arcadedb_embedded"
         and args.arcadedb_worker_startup_timeout_s is not None
@@ -1097,24 +1142,35 @@ def _validate_args(args: argparse.Namespace, variants: list[VariantSpec]) -> Non
             "Neo4j variants require --neo4j-password or NEO4J_PASSWORD "
             "in the environment."
         )
-    requires_nested_docker = requires_neo4j_password or (
-        any(variant.backend == "postgresql" for variant in variants)
-        and not getattr(args, "postgres_dsn", None)
+    requires_nested_docker = (
+        requires_neo4j_password
+        or any(variant.uses_age_docker for variant in variants)
+        or (
+            any(variant.backend == "postgresql" for variant in variants)
+            and not getattr(args, "postgres_dsn", None)
+        )
     )
+    if args.age_docker_startup_timeout <= 0:
+        raise ValueError("--age-docker-startup-timeout must be positive.")
     if (
         container_cpus is not None
         and requires_nested_docker
         and not DOCKER_SOCKET_PATH.exists()
     ):
         raise ValueError(
-            "--container-cpus requires /var/run/docker.sock when Neo4j or "
-            "auto-docker PostgreSQL variants are selected."
+            "--container-cpus requires /var/run/docker.sock when Neo4j, Apache "
+            "AGE, or auto-docker PostgreSQL variants are selected."
         )
 
 
 def _neo4j_container_name(run_stamp: str, job: MatrixJob) -> str:
     slug = job.variant.name.replace("_", "-")
     return f"cypherglot-{slug}-{run_stamp}-r{job.repeat:02d}"
+
+
+def _age_container_name(job: MatrixJob) -> str:
+    slug = job.variant.name.replace("_", "-")
+    return f"cypherglot-{slug}-r{job.repeat:02d}-{uuid.uuid4().hex[:8]}"
 
 
 def _worker_loop(
