@@ -52,6 +52,9 @@ from scripts.benchmarks.common.topology import (
     resolve_topology,
 )
 from scripts.benchmarks.common.shared import (
+    add_cpu_affinity_cli_arg,
+    apply_cpu_affinity,
+    parse_cpu_affinity,
     BenchmarkQueryTimeoutError,
     CorpusQuery,
     EdgeTypePlan,
@@ -1717,11 +1720,13 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--variable-hop-max", type=int, default=2)
     parser.add_argument("--ingest-batch-size", type=int, default=5_000)
     add_topology_cli_args(parser)
+    add_cpu_affinity_cli_arg(parser)
     return parser.parse_args()
 
 
 def main() -> int:
     args = _parse_args()
+    apply_cpu_affinity(parse_cpu_affinity(args.cpu_affinity))
     started_at = datetime.now(UTC)
     args_dict = vars(args)
     oltp_timeout_ms = args_dict.get("oltp_timeout_ms", None)

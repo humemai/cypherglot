@@ -6,6 +6,8 @@ import argparse
 import os
 from pathlib import Path
 
+from scripts.benchmarks.common.shared import add_cpu_affinity_cli_arg
+
 
 def parse_sql_runtime_args(
     *,
@@ -152,6 +154,7 @@ def parse_sql_runtime_args(
             "--topology ldbc_snb."
         ),
     )
+    add_cpu_affinity_cli_arg(parser)
     parser.add_argument(
         "--db-root-dir",
         type=Path,

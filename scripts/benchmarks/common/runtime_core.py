@@ -32,6 +32,8 @@ from scripts.benchmarks.common.shared import (
     _summarize,
     _token_map,
     _write_json_atomic,
+    apply_cpu_affinity,
+    parse_cpu_affinity,
 )
 from scripts.benchmarks.common.postgres_runtime_support import (
     acquire_postgresql_benchmark_dsn,
@@ -1809,6 +1811,7 @@ def _parse_args(entrypoint: SQLRuntimeBenchmarkEntrypoint) -> argparse.Namespace
 
 def main(entrypoint: SQLRuntimeBenchmarkEntrypoint = SQLITE_ENTRYPOINT) -> int:
     args = _parse_args(entrypoint)
+    apply_cpu_affinity(parse_cpu_affinity(getattr(args, "cpu_affinity", None)))
     started_at = datetime.now(UTC)
     args_dict = vars(args)
     oltp_timeout_ms = args_dict.get("oltp_timeout_ms", None)

@@ -28,6 +28,9 @@ from typing import Any, Callable
 import cypherglot
 
 from scripts.benchmarks.common.shared import (
+    add_cpu_affinity_cli_arg,
+    apply_cpu_affinity,
+    parse_cpu_affinity,
     CorpusQuery,
     RuntimeScale,
     _average_edges_per_source,
@@ -1058,11 +1061,13 @@ def _parse_args() -> argparse.Namespace:
         ),
     )
     add_topology_cli_args(parser)
+    add_cpu_affinity_cli_arg(parser)
     return parser.parse_args()
 
 
 def main() -> int:
     args = _parse_args()
+    apply_cpu_affinity(parse_cpu_affinity(args.cpu_affinity))
     started_at = datetime.now(UTC)
     args_dict = vars(args)
     oltp_timeout_ms = args_dict.get("oltp_timeout_ms", None)

@@ -529,6 +529,15 @@ def _parse_args() -> argparse.Namespace:
             "--container-cpus is set."
         ),
     )
+    parser.add_argument(
+        "--cpu-affinity",
+        default=None,
+        help=(
+            "Comma-separated CPU ids to pin every job's benchmark process to "
+            "(e.g. '0,2,4,6,8,10' -- the locked equal-CPU budget). Forwarded to "
+            "each job; pair with a matching server-container --cpuset-cpus."
+        ),
+    )
     parser.add_argument("--postgres-dsn", help="Optional PostgreSQL DSN override.")
     parser.add_argument(
         "--neo4j-password",
@@ -844,6 +853,8 @@ def _build_command(
         command.extend(["--topology", args.topology])
         if args.ldbc_snb_data_dir is not None:
             command.extend(["--ldbc-snb-data-dir", str(args.ldbc_snb_data_dir)])
+    if getattr(args, "cpu_affinity", None):
+        command.extend(["--cpu-affinity", args.cpu_affinity])
     if args.oltp_iterations is not None:
         command.extend(["--oltp-iterations", str(args.oltp_iterations)])
     if args.oltp_warmup is not None:

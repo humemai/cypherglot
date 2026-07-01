@@ -7,7 +7,9 @@ to avoid duplication.
 
 from __future__ import annotations
 
+import argparse
 import json
+import os
 import platform
 import signal
 import sys
@@ -35,6 +37,75 @@ _TimedCallResult = TypeVar("_TimedCallResult")
 def _progress(message: str) -> None:
     timestamp = datetime.now().strftime("%H:%M:%S")
     print(f"[progress {timestamp}] {message}", file=sys.stderr, flush=True)
+
+
+def parse_cpu_affinity(spec: str | None) -> list[int] | None:
+    """Parse a comma-separated CPU-id list (e.g. ``"0,2,4,6,8,10"``).
+
+    Returns the sorted unique ids, or ``None`` when no pinning is requested.
+    """
+    if spec is None:
+        return None
+    stripped = spec.strip()
+    if not stripped:
+        return None
+    ids: set[int] = set()
+    for token in stripped.split(","):
+        token = token.strip()
+        if not token:
+            continue
+        try:
+            cpu_id = int(token)
+        except ValueError as error:
+            raise ValueError(
+                f"Invalid --cpu-affinity entry {token!r}; expected CPU ids."
+            ) from error
+        if cpu_id < 0:
+            raise ValueError(f"--cpu-affinity ids must be non-negative (got {cpu_id}).")
+        ids.add(cpu_id)
+    if not ids:
+        return None
+    return sorted(ids)
+
+
+def apply_cpu_affinity(cpu_ids: list[int] | None) -> None:
+    """Pin the current process to ``cpu_ids`` (the locked equal-CPU budget).
+
+    Embedded engines run in-process, so pinning the benchmark process is
+    equivalent to pinning the engine; server-engine clients are pinned to the
+    same ids as their container's ``--cpuset-cpus``. A no-op when no ids are
+    given or the platform lacks ``os.sched_setaffinity`` (e.g. macOS/Windows).
+    """
+    if not cpu_ids:
+        return
+    if not hasattr(os, "sched_setaffinity"):
+        _progress(
+            "cpu-affinity: os.sched_setaffinity unavailable on this platform; "
+            "process pinning skipped"
+        )
+        return
+    os.sched_setaffinity(0, set(cpu_ids))
+    _progress(f"cpu-affinity: pinned benchmark process to CPUs {cpu_ids}")
+
+
+def add_cpu_affinity_cli_arg(parser: argparse.ArgumentParser) -> None:
+    """Add the shared ``--cpu-affinity`` flag.
+
+    Pins the benchmark (client) process to a fixed CPU-id set -- the locked
+    equal-CPU budget (e.g. the six P-cores, one hardware thread per physical
+    core). Used by every runtime entrypoint; the matrix runner forwards it to
+    each job. Pair it with a matching ``--cpuset-cpus`` on server containers so
+    client and server share the same cores.
+    """
+    parser.add_argument(
+        "--cpu-affinity",
+        default=None,
+        help=(
+            "Comma-separated CPU ids to pin the benchmark process to "
+            "(e.g. '0,2,4,6,8,10'). Applied at process start via "
+            "os.sched_setaffinity; no-op on platforms without it."
+        ),
+    )
 
 
 @dataclass(frozen=True, slots=True)
