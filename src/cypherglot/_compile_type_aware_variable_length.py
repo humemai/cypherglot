@@ -1,10 +1,19 @@
 from __future__ import annotations
 
-from ._compile_sql_utils import _AGGREGATE_SQL_NAMES, _assemble_select_sql
+import contextlib
+import contextvars
+from collections.abc import Iterator
+
+from ._compile_sql_utils import (
+    _AGGREGATE_SQL_NAMES,
+    _assemble_select_sql,
+    _group_disjunct_predicates,
+)
 from ._compile_type_aware_common import (
     _TypeAwareAliasSpec,
     _TypeAwareWithBindingSpec,
     _build_type_aware_with_binding_spec,
+    _compile_type_aware_edge_field_expression,
     _compile_type_aware_match_node_predicate,
     _compile_type_aware_node_field_expression,
     _compile_type_aware_predicate,
@@ -12,16 +21,44 @@ from ._compile_type_aware_common import (
 )
 from ._compile_type_aware_read_projections import _is_type_aware_constant_projection
 from ._compile_type_aware_reads import (
+    _compile_type_aware_chain_group_by,
+    _compile_type_aware_chain_order_by,
     _compile_type_aware_chain_return_expression,
     _compile_type_aware_chain_select_expressions,
     _compile_type_aware_chain_source_components,
     _expand_type_aware_variable_length_relationship_branches,
     _supports_type_aware_zero_hop_variable_length_branch,
 )
-from ._normalize_support import OrderItem, ReturnItem
+from ._normalize_support import OrderItem, Predicate, ReturnItem
 from .ir import GraphRelationalReadIR, SQLBackend
 from .normalize import NormalizedMatchChain, NormalizedMatchRelationship, WithBinding
 from .schema import GraphSchema
+
+
+# Selects how ``(a)-[:E*lo..hi]->(b)`` is lowered. ``"unroll"`` (the default)
+# expands one fixed-length chain per hop count and ``UNION ALL``s them.
+# ``"recursive_cte"`` emits a single ``WITH RECURSIVE`` traversal. Both lowerings
+# realise the same admitted *walk* semantics (nodes/edges may repeat); they are
+# two encodings of one result multiset, toggled for paper ablations.
+_VARIABLE_LENGTH_STRATEGY: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "cypherglot_variable_length_strategy",
+    default="unroll",
+)
+
+
+@contextlib.contextmanager
+def variable_length_strategy_scope(strategy: str) -> Iterator[None]:
+    """Bind the active variable-length lowering strategy for the enclosed call."""
+    if strategy not in {"unroll", "recursive_cte"}:
+        raise ValueError(
+            "variable_length_strategy must be 'unroll' or 'recursive_cte', "
+            f"got {strategy!r}."
+        )
+    token = _VARIABLE_LENGTH_STRATEGY.set(strategy)
+    try:
+        yield
+    finally:
+        _VARIABLE_LENGTH_STRATEGY.reset(token)
 
 
 def _supports_direct_variable_length_aggregate_return(
@@ -164,6 +201,12 @@ def compile_type_aware_variable_length_match_relationship_sql(
     graph_schema: GraphSchema,
     backend: SQLBackend,
 ) -> str:
+    if _VARIABLE_LENGTH_STRATEGY.get() == "recursive_cte":
+        return _compile_type_aware_variable_length_recursive_cte_sql(
+            statement,
+            graph_schema,
+            backend=backend,
+        )
     if any(
         item.kind in {"type", "start_node", "end_node"}
         for item in statement.returns
@@ -724,3 +767,281 @@ def compile_type_aware_variable_length_with_source_sql(
         )
 
     return " UNION ALL ".join(branch_sql), binding_specs
+
+
+def _compile_type_aware_variable_length_recursive_cte_sql(
+    statement: NormalizedMatchRelationship,
+    graph_schema: GraphSchema,
+    backend: SQLBackend,
+) -> str:
+    """Lower ``(a)-[:E*lo..hi]->(b)`` to a single ``WITH RECURSIVE`` traversal.
+
+    The generated CTE carries only ``(end_id, depth)`` for each *walk* (nodes and
+    edges may repeat). Seeding at ``depth = 0`` with the start node(s) and
+    extending by one edge per recursion step reproduces exactly the walk multiset
+    that the branch-unroll strategy enumerates via one fixed-length chain per hop
+    count; the final ``UNION ALL`` (not ``UNION``) preserves multiplicity so a
+    node reachable by two length-2 walks appears twice.
+    """
+    relationship = statement.relationship
+    if relationship.type_name is None or "|" in relationship.type_name:
+        raise NotImplementedError(
+            "recursive_cte variable-length lowering requires exactly one "
+            "relationship type."
+        )
+    if relationship.direction != "out":
+        raise NotImplementedError(
+            "recursive_cte variable-length lowering currently supports only "
+            "outgoing paths."
+        )
+    if relationship.max_hops is None:
+        raise NotImplementedError(
+            "recursive_cte variable-length lowering requires a finite max_hops."
+        )
+    if relationship.min_hops < 0:
+        raise NotImplementedError(
+            "recursive_cte variable-length lowering requires min_hops >= 0."
+        )
+    if any(
+        item.kind in {"type", "start_node", "end_node"}
+        for item in statement.returns
+    ):
+        raise NotImplementedError(
+            "recursive_cte variable-length lowering does not support "
+            "relationship-type or endpoint-introspection returns."
+        )
+    if statement.left.label is None or statement.right.label is None:
+        raise NotImplementedError(
+            "recursive_cte variable-length lowering requires explicit endpoint "
+            "labels."
+        )
+
+    edge_type = graph_schema.edge_type(relationship.type_name)
+    if statement.left.label != edge_type.source_type:
+        raise NotImplementedError(
+            "recursive_cte variable-length lowering requires the left node label "
+            "to match the relationship source type."
+        )
+    if statement.right.label != edge_type.target_type:
+        raise NotImplementedError(
+            "recursive_cte variable-length lowering requires the right node label "
+            "to match the relationship target type."
+        )
+    if edge_type.source_type != edge_type.target_type:
+        raise NotImplementedError(
+            "recursive_cte variable-length lowering currently requires the "
+            "relationship to connect a single node type."
+        )
+
+    left_alias = statement.left.alias
+    right_alias = statement.right.alias
+
+    # The CTE only carries the walk endpoint, so the start node is not
+    # projectable. Any return/order that reaches back to the start alias (when it
+    # is distinct from the end alias) is out of scope for this lowering.
+    if left_alias != right_alias:
+        for item in statement.returns:
+            if item.kind != "count" and item.alias == left_alias:
+                raise NotImplementedError(
+                    "recursive_cte variable-length lowering cannot project the "
+                    "start-node alias; only the reached (right) alias is "
+                    "available."
+                )
+        for order_item in statement.order_by:
+            if order_item.field != "__value__" and order_item.alias == left_alias:
+                raise NotImplementedError(
+                    "recursive_cte variable-length lowering cannot ORDER BY the "
+                    "start-node alias."
+                )
+
+    # Predicates may only constrain the endpoint aliases; splitting a single OR
+    # disjunct across the base (start) term and the outer (end) filter would
+    # change its meaning, so reject that shape rather than mis-lower it.
+    left_predicates: list[Predicate] = []
+    right_predicates: list[Predicate] = []
+    for predicate in statement.predicates:
+        if predicate.alias == left_alias:
+            left_predicates.append(predicate)
+        elif predicate.alias == right_alias:
+            right_predicates.append(predicate)
+        else:
+            raise NotImplementedError(
+                "recursive_cte variable-length lowering supports predicates only "
+                "on the matched endpoint aliases."
+            )
+    if left_alias != right_alias:
+        shared_disjuncts = {p.disjunct_index for p in left_predicates} & {
+            p.disjunct_index for p in right_predicates
+        }
+        if shared_disjuncts:
+            raise NotImplementedError(
+                "recursive_cte variable-length lowering cannot split an OR "
+                "predicate across the start and end aliases."
+            )
+
+    source_type = graph_schema.node_type(statement.left.label)
+    lo = relationship.min_hops
+    hi = relationship.max_hops
+
+    cte_name = "__cg_vl"
+    recur_alias = "__cg_vl_r"
+    start_alias = "__cg_vl_start"
+    edge_alias = "__cg_vl_e"
+    end_alias = right_alias
+
+    # --- base term: start node(s) at depth 0 -------------------------------
+    # For a single-source pattern the start predicates/properties select one (or
+    # a few) start rows; for the all-pairs pattern (no start filter) this
+    # enumerates every start node, exactly like the branch-unroll zero-hop base.
+    base_where = _compile_type_aware_variable_length_endpoint_where(
+        node_alias=start_alias,
+        node_type=source_type,
+        properties=statement.left.properties,
+        predicates=left_predicates,
+        backend=backend,
+    )
+    base_sql = _assemble_select_sql(
+        select_sql=f"{start_alias}.id AS end_id, 0 AS depth",
+        distinct=False,
+        from_sql=f"FROM {source_type.table_name} AS {start_alias}",
+        joins=[],
+        where_parts=base_where,
+        order_sql=None,
+        limit=None,
+        skip=None,
+    )
+
+    # --- recursive term: extend every walk by one edge, capped at hi -------
+    recursive_where = [f"{recur_alias}.depth < {hi}"]
+    for field, value in relationship.properties:
+        recursive_where.append(
+            _compile_type_aware_predicate(
+                field_expression=_compile_type_aware_edge_field_expression(
+                    edge_alias,
+                    edge_type,
+                    field,
+                ),
+                operator="=",
+                value=value,
+                backend=backend,
+            )
+        )
+    recursive_sql = _assemble_select_sql(
+        select_sql=(
+            f"{edge_alias}.to_id AS end_id, {recur_alias}.depth + 1 AS depth"
+        ),
+        distinct=False,
+        from_sql=f"FROM {cte_name} AS {recur_alias}",
+        joins=[
+            f"JOIN {edge_type.table_name} AS {edge_alias} "
+            f"ON {edge_alias}.from_id = {recur_alias}.end_id"
+        ],
+        where_parts=recursive_where,
+        order_sql=None,
+        limit=None,
+        skip=None,
+    )
+
+    cte_sql = (
+        f"WITH RECURSIVE {cte_name} AS "
+        f"({base_sql} UNION ALL {recursive_sql})"
+    )
+
+    # --- outer query over reached endpoints --------------------------------
+    alias_specs = {
+        end_alias: _TypeAwareAliasSpec(
+            table_alias=end_alias,
+            alias_kind="node",
+            entity_type=source_type,
+        )
+    }
+    if left_alias != right_alias:
+        # Zero-hop rows (depth 0) bind ``b = a``; because the outer join uses the
+        # walk endpoint, referencing the start alias resolves to the same row.
+        alias_specs[left_alias] = alias_specs[end_alias]
+
+    outer_where = [f"{recur_alias}.depth >= {lo}"]
+    outer_where.extend(
+        _compile_type_aware_variable_length_endpoint_where(
+            node_alias=end_alias,
+            node_type=source_type,
+            properties=statement.right.properties,
+            predicates=right_predicates,
+            backend=backend,
+        )
+    )
+
+    select_parts: list[str] = []
+    for item in statement.returns:
+        for expression, output_name in _compile_type_aware_chain_select_expressions(
+            item,
+            alias_specs,
+            backend=backend,
+        ):
+            select_parts.append(f'{expression} AS "{output_name}"')
+    select_sql = ", ".join(select_parts)
+
+    order_sql = _compile_type_aware_chain_order_by(
+        statement.order_by,
+        statement.returns,
+        alias_specs,
+        backend=backend,
+    )
+    group_sql = _compile_type_aware_chain_group_by(
+        statement.returns,
+        alias_specs,
+        backend=backend,
+    )
+
+    outer_sql = _assemble_select_sql(
+        select_sql=select_sql,
+        distinct=statement.distinct,
+        from_sql=f"FROM {cte_name} AS {recur_alias}",
+        joins=[
+            f"JOIN {source_type.table_name} AS {end_alias} "
+            f"ON {end_alias}.id = {recur_alias}.end_id"
+        ],
+        where_parts=outer_where,
+        group_sql=group_sql,
+        order_sql=order_sql,
+        limit=statement.limit,
+        skip=statement.skip,
+    )
+    return f"{cte_sql} {outer_sql}"
+
+
+def _compile_type_aware_variable_length_endpoint_where(
+    *,
+    node_alias: str,
+    node_type: object,
+    properties: tuple[tuple[str, object], ...],
+    predicates: list[Predicate],
+    backend: SQLBackend,
+) -> list[str]:
+    where_parts: list[str] = [
+        _compile_type_aware_predicate(
+            field_expression=_compile_type_aware_node_field_expression(
+                node_alias,
+                node_type,
+                field,
+            ),
+            operator="=",
+            value=value,
+            backend=backend,
+        )
+        for field, value in properties
+    ]
+    predicate_parts: list[tuple[int, str]] = [
+        (
+            predicate.disjunct_index,
+            _compile_type_aware_match_node_predicate(
+                node_alias,
+                node_type,
+                predicate,
+                backend=backend,
+            ),
+        )
+        for predicate in predicates
+    ]
+    where_parts.extend(_group_disjunct_predicates(predicate_parts))
+    return where_parts

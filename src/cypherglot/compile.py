@@ -37,6 +37,7 @@ from ._compile_type_aware_reads import (
     _compile_type_aware_optional_match_node_sql,
     _is_variable_length_relationship,
 )
+from ._compile_type_aware_variable_length import variable_length_strategy_scope
 from ._compile_type_aware_with import _compile_type_aware_match_with_return_sql
 from ._compile_write_helpers import (
     _compile_direct_fresh_endpoint_relationship_program,
@@ -98,16 +99,18 @@ def compile_cypher_text(
     *,
     schema_context: CompilerSchemaContext | None = None,
     backend: SQLBackend | str | None = None,
+    variable_length_strategy: str = "unroll",
 ) -> exp.Expression:
     logger.debug("Compiling Cypher text")
     try:
-        expression = _require_single_statement_program(
-            compile_cypher_program_text(
-                text,
-                schema_context=schema_context,
-                backend=backend,
+        with variable_length_strategy_scope(variable_length_strategy):
+            expression = _require_single_statement_program(
+                compile_cypher_program_text(
+                    text,
+                    schema_context=schema_context,
+                    backend=backend,
+                )
             )
-        )
     except Exception:
         logger.debug("Compilation failed", exc_info=True)
         raise

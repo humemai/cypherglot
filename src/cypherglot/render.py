@@ -98,6 +98,7 @@ def to_sql(
     pretty: bool = False,
     schema_context: CompilerSchemaContext | None = None,
     backend: SQLBackend | str | None = None,
+    variable_length_strategy: str = "unroll",
 ) -> str:
     """Render one single-statement Cypher shape to SQL using SQLGlot.
 
@@ -120,6 +121,7 @@ def to_sql(
             text,
             schema_context=schema_context,
             backend=resolved_backend,
+            variable_length_strategy=variable_length_strategy,
         ),
         sql_kwargs=_build_render_sql_kwargs(
             dialect=resolved_dialect,
