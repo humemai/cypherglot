@@ -1325,6 +1325,9 @@ class BenchmarkSQLRuntimeCoreTests(unittest.TestCase):
             variable_hop_max=2,
             ingest_batch_size=10,
             db_root_dir=None,
+            topology="synthetic",
+            ldbc_snb_data_dir=None,
+            cpu_affinity=None,
         )
 
         with mock.patch.object(
