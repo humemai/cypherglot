@@ -194,6 +194,7 @@ class BenchmarkNeo4jRuntimeScriptTests(unittest.TestCase):
             graph_schema: object,
             edge_plans: object,
             docker_config: object,
+            fixture: object = None,
         ) -> dict[str, object]:
             self.assertEqual(database, "neo4j")
             self.assertIsNotNone(scale)

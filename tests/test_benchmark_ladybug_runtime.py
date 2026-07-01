@@ -385,8 +385,8 @@ class BenchmarkLadybugRuntimeScriptTests(unittest.TestCase):
             }
 
         with mock.patch.object(
-            benchmark_ladybug_runtime,
-            "_prepare_generated_graph_fixture",
+            benchmark_ladybug_runtime.SyntheticTopology,
+            "prepare_fixture",
             return_value=sqlite_source_mock,
         ), mock.patch.object(
             benchmark_ladybug_runtime,

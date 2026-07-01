@@ -803,8 +803,8 @@ class BenchmarkArcadeDBEmbeddedRuntimeScriptTests(unittest.TestCase):
             }
 
         with mock.patch.object(
-            benchmark_arcadedb_embedded_runtime,
-            "_prepare_generated_graph_fixture",
+            benchmark_arcadedb_embedded_runtime.SyntheticTopology,
+            "prepare_fixture",
             return_value=sqlite_source_mock,
         ), mock.patch.object(
             benchmark_arcadedb_embedded_runtime,

@@ -28,6 +28,7 @@ workload stays byte-identical while only the topology changes.
 
 from __future__ import annotations
 
+import argparse
 from abc import ABC, abstractmethod
 from pathlib import Path
 
@@ -118,6 +119,33 @@ class SyntheticTopology(Topology):
             index_mode=index_mode,
             db_root_dir=db_root_dir,
         )
+
+
+def add_topology_cli_args(parser: argparse.ArgumentParser) -> None:
+    """Add the shared ``--topology`` / ``--ldbc-snb-data-dir`` flags.
+
+    Used by the native-engine entrypoints; the SQL runtime entrypoints add the
+    same flags via ``cli.parse_sql_runtime_args``.
+    """
+    parser.add_argument(
+        "--topology",
+        choices=TOPOLOGY_CHOICES,
+        default=DEFAULT_TOPOLOGY,
+        help=(
+            "Graph topology the workload runs against: the parametric synthetic "
+            "generator, or a real LDBC SNB Datagen graph (--ldbc-snb-data-dir)."
+        ),
+    )
+    parser.add_argument(
+        "--ldbc-snb-data-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Directory of LDBC SNB Datagen '--mode bi --format csv' output "
+            "(containing graphs/csv/bi/composite-merged-fk). Required when "
+            "--topology ldbc_snb."
+        ),
+    )
 
 
 def resolve_topology(

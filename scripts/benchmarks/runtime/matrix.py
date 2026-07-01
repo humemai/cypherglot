@@ -413,6 +413,25 @@ def _parse_args() -> argparse.Namespace:
         )
     )
     parser.add_argument("--scale", choices=tuple(SCALE_PRESETS), required=True)
+    parser.add_argument(
+        "--topology",
+        choices=("synthetic", "ldbc_snb"),
+        default="synthetic",
+        help=(
+            "Graph topology every job runs against. Run the matrix once per "
+            "topology (the workload is identical; only the graph changes). "
+            "ldbc_snb requires --ldbc-snb-data-dir."
+        ),
+    )
+    parser.add_argument(
+        "--ldbc-snb-data-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Directory of LDBC SNB Datagen '--mode bi --format csv' output, "
+            "passed through to every job when --topology ldbc_snb."
+        ),
+    )
     parser.add_argument("--workers", type=int, default=1)
     parser.add_argument("--repeats", type=int, default=1)
     parser.add_argument("--iterations", type=int, default=1000)
@@ -821,6 +840,10 @@ def _build_command(
         str(args.warmup),
         *_common_scale_args(scale_preset.scale),
     ]
+    if getattr(args, "topology", "synthetic") != "synthetic":
+        command.extend(["--topology", args.topology])
+        if args.ldbc_snb_data_dir is not None:
+            command.extend(["--ldbc-snb-data-dir", str(args.ldbc_snb_data_dir)])
     if args.oltp_iterations is not None:
         command.extend(["--oltp-iterations", str(args.oltp_iterations)])
     if args.oltp_warmup is not None:
@@ -1391,6 +1414,11 @@ def main() -> int:
 
     selected_variants = _selected_variants(args.variants)
     _validate_args(args, selected_variants)
+    if args.topology == "ldbc_snb" and args.ldbc_snb_data_dir is None:
+        raise ValueError(
+            "--topology ldbc_snb requires --ldbc-snb-data-dir "
+            "(LDBC SNB Datagen bi/composite-merged-fk CSV output)."
+        )
     if _containerized_jobs_enabled(args) and not args.dry_run:
         _validate_runtime_environment(args)
 

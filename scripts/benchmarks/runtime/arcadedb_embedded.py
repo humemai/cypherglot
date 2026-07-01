@@ -49,6 +49,12 @@ from scripts.benchmarks.common.runtime_shared import (
     _create_managed_directory,
     _prepare_generated_graph_fixture,
 )
+from scripts.benchmarks.common.topology import (
+    SyntheticTopology,
+    Topology,
+    add_topology_cli_args,
+    resolve_topology,
+)
 
 try:
     import arcadedb_embedded as arcadedb
@@ -2206,10 +2212,12 @@ def _benchmark_result(
     oltp_timeout_ms: float | None = None,
     olap_timeout_ms: float | None = None,
     worker_startup_timeout_s: float = ARCADEDB_WORKER_STARTUP_TIMEOUT_S,
+    topology: Topology | None = None,
     progress_callback: RuntimeProgressCallback | None = None,
 ) -> tuple[dict[str, object], int]:
-    graph_schema, edge_plans = _build_graph_schema(scale)
-    token_map = _token_map(scale, graph_schema, edge_plans)
+    active_topology = topology if topology is not None else SyntheticTopology()
+    graph_schema, edge_plans = active_topology.build_schema(scale)
+    token_map = active_topology.token_map(scale, graph_schema, edge_plans)
     rendered_queries = _render_corpus_queries(queries, token_map)
 
     oltp_queries = [query for query in rendered_queries if query.workload == "oltp"]
@@ -2233,7 +2241,7 @@ def _benchmark_result(
             failure_count,
         )
 
-    sqlite_source = _prepare_generated_graph_fixture(
+    sqlite_source = active_topology.prepare_fixture(
         scale=scale,
         graph_schema=graph_schema,
         edge_plans=edge_plans,
@@ -2544,6 +2552,7 @@ def _parse_args() -> argparse.Namespace:
         type=Path,
         help=argparse.SUPPRESS,
     )
+    add_topology_cli_args(parser)
     return parser.parse_args()
 
 
@@ -2612,7 +2621,10 @@ def main() -> int:
         ingest_batch_size=args.ingest_batch_size,
         variable_hop_max=args.variable_hop_max,
     )
-    graph_schema, _ = _build_graph_schema(scale)
+    topology = resolve_topology(
+        args.topology, ldbc_snb_data_dir=args.ldbc_snb_data_dir
+    )
+    graph_schema, _ = topology.build_schema(scale)
     queries = _select_queries(_load_corpus(args.corpus), args.query_names)
     database_versions: dict[str, str] = {}
     version = _arcadedb_version()
@@ -2688,6 +2700,7 @@ def main() -> int:
         oltp_timeout_ms=oltp_timeout_ms,
         olap_timeout_ms=olap_timeout_ms,
         worker_startup_timeout_s=args.worker_startup_timeout_s,
+        topology=topology,
         progress_callback=(
             lambda partial_result, partial_failure_count: write_checkpoint(
                 partial_result,

@@ -31,13 +31,26 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 import sqlglot
 
 import cypherglot
 
-from scripts.benchmarks.common.runtime_shared import _capture_rss_snapshot
+from scripts.benchmarks.common.runtime_shared import (
+    GeneratedGraphFixture,
+    _capture_rss_snapshot,
+)
+from scripts.benchmarks.common._fixture_rows import (
+    iter_edge_rows,
+    iter_node_property_rows,
+)
+from scripts.benchmarks.common.topology import (
+    SyntheticTopology,
+    Topology,
+    add_topology_cli_args,
+    resolve_topology,
+)
 from scripts.benchmarks.common.shared import (
     BenchmarkQueryTimeoutError,
     CorpusQuery,
@@ -715,17 +728,25 @@ def _seed_nodes(
     scale: RuntimeScale,
     graph_schema: cypherglot.GraphSchema,
     progress_label: str,
+    fixture: GeneratedGraphFixture | None = None,
 ) -> int:
     total = 0
+    type_count = len(graph_schema.node_types)
     with _prepare_age_cursor(conn) as cur:
         for type_index, node_type in enumerate(graph_schema.node_types, start=1):
             _progress(
-                f"{progress_label}: node type {type_index}/{scale.node_type_count} "
+                f"{progress_label}: node type {type_index}/{type_count} "
                 f"({node_type.name})"
             )
+            if fixture is None:
+                rows = (
+                    _node_properties(scale, type_index, local_index)
+                    for local_index in range(1, scale.nodes_per_type + 1)
+                )
+            else:
+                rows = iter_node_property_rows(node_type, fixture)
             patterns: list[str] = []
-            for local_index in range(1, scale.nodes_per_type + 1):
-                properties = _node_properties(scale, type_index, local_index)
+            for properties in rows:
                 patterns.append(
                     f"(:{node_type.name} {_agtype_property_map(properties)})"
                 )
@@ -740,6 +761,23 @@ def _seed_nodes(
     return total
 
 
+def _synthetic_age_edge_rows(
+    scale: RuntimeScale,
+    plan: EdgeTypePlan,
+) -> Iterator[tuple[int, int, dict[str, object]]]:
+    for source_local_index in range(1, scale.nodes_per_type + 1):
+        edge_count_for_source = _edge_out_degree(scale, source_local_index)
+        from_id = _node_id(scale, plan.source_type_index, source_local_index)
+        for edge_ordinal in range(1, edge_count_for_source + 1):
+            target_local_index = (
+                (source_local_index - 1 + plan.type_index + edge_ordinal)
+                % scale.nodes_per_type
+            ) + 1
+            to_id = _node_id(scale, plan.target_type_index, target_local_index)
+            properties = _edge_properties(scale, plan, source_local_index, edge_ordinal)
+            yield from_id, to_id, properties
+
+
 def _seed_edges(
     conn: Any,
     *,
@@ -748,8 +786,10 @@ def _seed_edges(
     graph_schema: cypherglot.GraphSchema,
     edge_plans: list[EdgeTypePlan],
     progress_label: str,
+    fixture: GeneratedGraphFixture | None = None,
 ) -> int:
     total = 0
+    edge_type_total = len(edge_plans)
 
     def flush(cur: Any, match_parts: list[str], create_parts: list[str]) -> int:
         if not create_parts:
@@ -763,45 +803,38 @@ def _seed_edges(
     with _prepare_age_cursor(conn) as cur:
         for edge_type_index, plan in enumerate(edge_plans, start=1):
             _progress(
-                f"{progress_label}: edge type {edge_type_index}/{scale.edge_type_count} "
+                f"{progress_label}: edge type {edge_type_index}/{edge_type_total} "
                 f"({plan.name})"
             )
             source_label = graph_schema.node_types[plan.source_type_index - 1].name
             target_label = graph_schema.node_types[plan.target_type_index - 1].name
+            if fixture is None:
+                rows: Iterator[tuple[int, int, dict[str, object]]] = (
+                    _synthetic_age_edge_rows(scale, plan)
+                )
+            else:
+                edge_type = graph_schema.edge_types[plan.type_index - 1]
+                rows = (
+                    (row["from_id"], row["to_id"], row["props"])
+                    for row in iter_edge_rows(edge_type, fixture)
+                )
             match_parts: list[str] = []
             create_parts: list[str] = []
             slot = 0
-            for source_local_index in range(1, scale.nodes_per_type + 1):
-                edge_count_for_source = _edge_out_degree(scale, source_local_index)
-                from_id = _node_id(scale, plan.source_type_index, source_local_index)
-                for edge_ordinal in range(1, edge_count_for_source + 1):
-                    target_local_index = (
-                        (source_local_index - 1 + plan.type_index + edge_ordinal)
-                        % scale.nodes_per_type
-                    ) + 1
-                    to_id = _node_id(
-                        scale, plan.target_type_index, target_local_index
-                    )
-                    properties = _edge_properties(
-                        scale, plan, source_local_index, edge_ordinal
-                    )
-                    a = f"a{slot}"
-                    b = f"b{slot}"
-                    match_parts.append(
-                        f"({a}:{source_label} {{id: {from_id}}})"
-                    )
-                    match_parts.append(
-                        f"({b}:{target_label} {{id: {to_id}}})"
-                    )
-                    create_parts.append(
-                        f"({a})-[:{plan.name} {_agtype_property_map(properties)}]->({b})"
-                    )
-                    slot += 1
-                    if slot >= AGE_SEED_EDGE_BATCH:
-                        total += flush(cur, match_parts, create_parts)
-                        match_parts.clear()
-                        create_parts.clear()
-                        slot = 0
+            for from_id, to_id, properties in rows:
+                a = f"a{slot}"
+                b = f"b{slot}"
+                match_parts.append(f"({a}:{source_label} {{id: {from_id}}})")
+                match_parts.append(f"({b}:{target_label} {{id: {to_id}}})")
+                create_parts.append(
+                    f"({a})-[:{plan.name} {_agtype_property_map(properties)}]->({b})"
+                )
+                slot += 1
+                if slot >= AGE_SEED_EDGE_BATCH:
+                    total += flush(cur, match_parts, create_parts)
+                    match_parts.clear()
+                    create_parts.clear()
+                    slot = 0
             total += flush(cur, match_parts, create_parts)
             match_parts.clear()
             create_parts.clear()
@@ -818,6 +851,7 @@ def _seed_graph(
     graph_schema: cypherglot.GraphSchema,
     edge_plans: list[EdgeTypePlan],
     progress_label: str,
+    fixture: GeneratedGraphFixture | None = None,
 ) -> dict[str, int]:
     node_count = _seed_nodes(
         conn,
@@ -825,6 +859,7 @@ def _seed_graph(
         scale=scale,
         graph_schema=graph_schema,
         progress_label=progress_label,
+        fixture=fixture,
     )
     edge_count = _seed_edges(
         conn,
@@ -833,6 +868,7 @@ def _seed_graph(
         graph_schema=graph_schema,
         edge_plans=edge_plans,
         progress_label=progress_label,
+        fixture=fixture,
     )
     _progress(
         f"{progress_label}: ingest committed ({node_count} nodes, {edge_count} edges)"
@@ -840,8 +876,8 @@ def _seed_graph(
     return {
         "node_count": node_count,
         "edge_count": edge_count,
-        "node_type_count": scale.node_type_count,
-        "edge_type_count": scale.edge_type_count,
+        "node_type_count": len(graph_schema.node_types),
+        "edge_type_count": len(graph_schema.edge_types),
     }
 
 
@@ -913,14 +949,21 @@ def _setup_mode(
     graph_schema: cypherglot.GraphSchema,
     edge_plans: list[EdgeTypePlan],
     docker_config: DockerAgeConfig | None,
+    fixture: GeneratedGraphFixture | None = None,
 ) -> dict[str, object]:
     progress_label = f"age/{index_mode}"
     setup_metrics: dict[str, int] = {}
     rss_snapshots_mib: dict[str, dict[str, float | None]] = {}
 
+    expected_nodes = (
+        fixture.row_counts["node_count"] if fixture is not None else scale.total_nodes
+    )
+    expected_edges = (
+        fixture.row_counts["edge_count"] if fixture is not None else scale.total_edges
+    )
     _progress(
         f"{progress_label}: preparing graph "
-        f"({scale.total_nodes} nodes, {scale.total_edges} edges)"
+        f"({expected_nodes} nodes, {expected_edges} edges)"
     )
     _, setup_metrics["reset_ns"] = _measure_ns(
         lambda: _reset_graph(conn, graph_name, graph_schema)
@@ -944,6 +987,7 @@ def _setup_mode(
             graph_schema=graph_schema,
             edge_plans=edge_plans,
             progress_label=progress_label,
+            fixture=fixture,
         )
     )
     rss_snapshots_mib["after_ingest"] = _capture_age_rss_snapshot(docker_config)
@@ -1275,10 +1319,12 @@ def _benchmark_result(
     iteration_progress: bool,
     oltp_timeout_ms: float | None = None,
     olap_timeout_ms: float | None = None,
+    topology: Topology | None = None,
     progress_callback: RuntimeProgressCallback | None = None,
 ) -> tuple[dict[str, object], int]:
-    graph_schema, edge_plans = _build_graph_schema(scale)
-    token_map = _token_map(scale, graph_schema, edge_plans)
+    active_topology = topology if topology is not None else SyntheticTopology()
+    graph_schema, edge_plans = active_topology.build_schema(scale)
+    token_map = active_topology.token_map(scale, graph_schema, edge_plans)
     rendered_queries = _render_corpus_queries(queries, token_map)
 
     oltp_queries = [q for q in rendered_queries if q.workload == "oltp"]
@@ -1289,6 +1335,17 @@ def _benchmark_result(
     olap_warmup_value = warmup if olap_warmup is None else olap_warmup
 
     index_modes = [index_mode] if index_mode != "both" else ["indexed", "unindexed"]
+
+    # For a non-synthetic topology, materialise the fixture CSVs once (the data
+    # is identical across index modes) and seed the graph from them.
+    seed_fixture: GeneratedGraphFixture | None = None
+    if active_topology.name != "synthetic":
+        seed_fixture = active_topology.prepare_fixture(
+            scale=scale,
+            graph_schema=graph_schema,
+            edge_plans=edge_plans,
+            index_mode=index_modes[0],
+        )
 
     def suite_kwargs(timeout_ms: float | None) -> dict[str, object]:
         kwargs: dict[str, object] = {"iteration_progress": iteration_progress}
@@ -1311,6 +1368,7 @@ def _benchmark_result(
             graph_schema=graph_schema,
             edge_plans=edge_plans,
             docker_config=docker_config,
+            fixture=seed_fixture,
         )
         if oltp_queries:
             workloads.setdefault(
@@ -1658,6 +1716,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--edge-extra-boolean-property-count", type=int, default=1)
     parser.add_argument("--variable-hop-max", type=int, default=2)
     parser.add_argument("--ingest-batch-size", type=int, default=5_000)
+    add_topology_cli_args(parser)
     return parser.parse_args()
 
 
@@ -1750,9 +1809,11 @@ def main() -> int:
             f"${AGE_DSN_ENV}, pass --docker, or set ${AGE_AUTO_DOCKER_ENV}=1."
         )
 
-    schema_context = cypherglot.CompilerSchemaContext.type_aware(
-        _build_graph_schema(scale)[0]
+    topology = resolve_topology(
+        args.topology, ldbc_snb_data_dir=args.ldbc_snb_data_dir
     )
+    graph_schema, _ = topology.build_schema(scale)
+    schema_context = cypherglot.CompilerSchemaContext.type_aware(graph_schema)
 
     _progress(
         "age runtime benchmark: starting "
@@ -1760,7 +1821,6 @@ def main() -> int:
         f"warmup={args.warmup}, index_mode={args.index_mode})"
     )
 
-    graph_schema, _ = _build_graph_schema(scale)
     connect_ms: float | None = None
     connect_rss_mib: dict[str, float | None] | None = None
     database_versions: dict[str, str] = {}
@@ -1855,6 +1915,7 @@ def main() -> int:
             iteration_progress=args.iteration_progress,
             oltp_timeout_ms=oltp_timeout_ms,
             olap_timeout_ms=olap_timeout_ms,
+            topology=topology,
             progress_callback=lambda partial_result, partial_failure_count: (
                 write_checkpoint(
                     partial_result,
