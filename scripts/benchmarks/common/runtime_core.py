@@ -88,6 +88,11 @@ from scripts.benchmarks.common.runtime_shared import (
     _create_managed_directory,
     _prepare_generated_graph_fixture,
 )
+from scripts.benchmarks.common.topology import (
+    SyntheticTopology,
+    Topology,
+    resolve_topology,
+)
 from scripts.benchmarks.common.runtime_sqlite_backend import (
     _analyze_sqlite,
     _configure_sqlite_indexes,
@@ -1366,12 +1371,14 @@ def _benchmark_result(
     iteration_progress: bool = False,
     oltp_timeout_ms: float | None = None,
     olap_timeout_ms: float | None = None,
+    topology: Topology | None = None,
     progress_callback: RuntimeProgressCallback | None = None,
 ) -> dict[str, object]:
-    graph_schema, edge_plans = _build_graph_schema(scale)
+    active_topology = topology if topology is not None else SyntheticTopology()
+    graph_schema, edge_plans = active_topology.build_schema(scale)
     schema_context = cypherglot.CompilerSchemaContext.type_aware(graph_schema)
 
-    token_map = _token_map(scale, graph_schema, edge_plans)
+    token_map = active_topology.token_map(scale, graph_schema, edge_plans)
     rendered_queries = _render_corpus_queries(queries, token_map)
 
     oltp_queries = [query for query in rendered_queries if query.workload == "oltp"]
@@ -1401,7 +1408,7 @@ def _benchmark_result(
     if progress_callback is not None:
         progress_callback({"workloads": workloads, "token_map": token_map})
     generated_fixtures = {
-        mode: _prepare_generated_graph_fixture(
+        mode: active_topology.prepare_fixture(
             scale=scale,
             graph_schema=graph_schema,
             edge_plans=edge_plans,
@@ -1882,8 +1889,13 @@ def main(entrypoint: SQLRuntimeBenchmarkEntrypoint = SQLITE_ENTRYPOINT) -> int:
         variable_hop_max=args.variable_hop_max,
     )
 
+    topology = resolve_topology(
+        getattr(args, "topology", "synthetic"),
+        ldbc_snb_data_dir=getattr(args, "ldbc_snb_data_dir", None),
+    )
+
     queries = _select_queries(_load_corpus(args.corpus), args.query_names)
-    graph_schema, _ = _build_graph_schema(scale)
+    graph_schema, _ = topology.build_schema(scale)
 
     def write_checkpoint(result: dict[str, object], *, status: str) -> None:
         payload = _build_payload(
@@ -1966,6 +1978,7 @@ def main(entrypoint: SQLRuntimeBenchmarkEntrypoint = SQLITE_ENTRYPOINT) -> int:
             iteration_progress=args.iteration_progress,
             oltp_timeout_ms=oltp_timeout_ms,
             olap_timeout_ms=olap_timeout_ms,
+            topology=topology,
             progress_callback=lambda partial_result: write_checkpoint(
                 partial_result,
                 status="running",

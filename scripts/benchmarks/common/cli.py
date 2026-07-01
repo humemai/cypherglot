@@ -132,6 +132,27 @@ def parse_sql_runtime_args(
     parser.add_argument("--variable-hop-max", type=int, default=2)
     parser.add_argument("--ingest-batch-size", type=int, default=5_000)
     parser.add_argument(
+        "--topology",
+        # Kept in sync with scripts.benchmarks.common.topology.TOPOLOGY_CHOICES;
+        # hardcoded here to avoid importing the topology module at parse time.
+        choices=("synthetic", "ldbc_snb"),
+        default="synthetic",
+        help=(
+            "Graph topology the workload runs against: the parametric synthetic "
+            "generator, or a real LDBC SNB Datagen graph (--ldbc-snb-data-dir)."
+        ),
+    )
+    parser.add_argument(
+        "--ldbc-snb-data-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Directory of LDBC SNB Datagen '--mode bi --format csv' output "
+            "(containing graphs/csv/bi/composite-merged-fk). Required when "
+            "--topology ldbc_snb."
+        ),
+    )
+    parser.add_argument(
         "--db-root-dir",
         type=Path,
         default=None,
