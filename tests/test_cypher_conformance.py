@@ -156,16 +156,28 @@ class CypherNeo4jConformanceTests(unittest.TestCase):
             keep_container=False,
         )
         _start_docker_neo4j(cls._neo4j_config, cls._neo4j_password)
-        _wait_for_docker_server_ready(
-            cls._neo4j_config, cls._neo4j_config.startup_timeout_s
-        )
-        cls._neo4j_driver = _wait_for_neo4j_driver_ready(
-            f"bolt://127.0.0.1:{cls._neo4j_config.bolt_port}",
-            "neo4j",
-            cls._neo4j_password,
-            cls._neo4j_config.startup_timeout_s,
-        )
-        cls._seed_neo4j()
+        try:
+            _wait_for_docker_server_ready(
+                cls._neo4j_config, cls._neo4j_config.startup_timeout_s
+            )
+            cls._neo4j_driver = _wait_for_neo4j_driver_ready(
+                f"bolt://127.0.0.1:{cls._neo4j_config.bolt_port}",
+                "neo4j",
+                cls._neo4j_password,
+                cls._neo4j_config.startup_timeout_s,
+            )
+            cls._seed_neo4j()
+        except Exception as error:
+            # A failed startup (e.g. an unhealthy Docker host) must not leak the
+            # container: setUpClass raising means tearDownClass never runs, so
+            # stop it here and skip rather than error the whole run.
+            _stop_docker_neo4j(cls._neo4j_config)
+            cls._neo4j_config = None
+            if getattr(cls, "sqlite", None) is not None:
+                cls.sqlite.close()
+            if getattr(cls, "duckdb", None) is not None:
+                cls.duckdb.close()
+            raise unittest.SkipTest(f"Neo4j Docker server unavailable: {error}")
 
     @classmethod
     def tearDownClass(cls) -> None:
