@@ -79,18 +79,15 @@ except ImportError:  # pragma: no cover - optional dependency
 # "native AGE vs lowered SQL" finding).
 #   - UNION / UNION ALL: AGE's cypher() wrapper returns a single set; stacking
 #     two cypher() calls needs UNION at the SQL layer, not inside one call.
-#   - lower()/upper(): the corpus uses SQL function names; native openCypher (AGE,
-#     Neo4j) wants toLower()/toUpper(). Skipped until CypherGlot accepts the
-#     standard Cypher names and the corpus switches to them (coverage follow-up).
+# The former lower()/upper() gap is now closed: CypherGlot accepts the standard
+# Cypher names toLower()/toUpper() and the corpus uses them, so those queries run
+# on native AGE as well.
 AGE_UNSUPPORTED_QUERIES: frozenset[str] = frozenset(
     {
         # conformance-suite query names
         "union_distinct",
         "union_dedup",
         "union_all_keeps",
-        # runtime-corpus query names (lower()/toLower() function-name gap)
-        "olap_with_where_lower_projection",
-        "olap_relationship_function_projection",
     }
 )
 

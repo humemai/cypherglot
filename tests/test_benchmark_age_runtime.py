@@ -116,12 +116,19 @@ class AgeUnsupportedTests(unittest.TestCase):
         self.assertFalse(_age_uses_union("MATCH (u:User) RETURN u.name"))
 
     def test_unsupported_set_covers_union_conformance_queries(self) -> None:
-        # The UNION conformance queries must always be flagged; the set may also
-        # carry runtime-corpus names (e.g. the lower()/toLower() function-name gap).
+        # The UNION conformance queries must always be flagged.
         self.assertTrue(
             {"union_distinct", "union_dedup", "union_all_keeps"}.issubset(
                 AGE_UNSUPPORTED_QUERIES
             )
+        )
+
+    def test_lower_upper_queries_no_longer_skipped(self) -> None:
+        # The lower()/toLower() function-name gap is closed: CypherGlot accepts the
+        # standard Cypher names and the corpus uses them, so these run on AGE.
+        self.assertNotIn("olap_with_where_lower_projection", AGE_UNSUPPORTED_QUERIES)
+        self.assertNotIn(
+            "olap_relationship_function_projection", AGE_UNSUPPORTED_QUERIES
         )
 
 

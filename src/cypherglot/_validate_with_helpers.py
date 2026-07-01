@@ -473,7 +473,7 @@ def _validate_with_shape(result: CypherParseResult, multi_part_query_ctx) -> Non
                     continue
 
             unary_match = re.fullmatch(
-                r"(?P<func>lower|upper|trim|ltrim|rtrim|reverse|abs|sign|round|ceil|floor|sqrt|exp|sin|cos|tan|asin|acos|atan|ln|log|log10|radians|degrees|tostring|tointeger|tofloat|toboolean)\s*\(\s*(?P<expr>.+?)\s*\)",
+                r"(?P<func>tolower|toupper|lower|upper|trim|ltrim|rtrim|reverse|abs|sign|round|ceil|floor|sqrt|exp|sin|cos|tan|asin|acos|atan|ln|log|log10|radians|degrees|tostring|tointeger|tofloat|toboolean)\s*\(\s*(?P<expr>.+?)\s*\)",
                 expression_text,
                 flags=re.IGNORECASE,
             )
@@ -586,7 +586,7 @@ def _validate_with_shape(result: CypherParseResult, multi_part_query_ctx) -> Non
             )
 
         _unary_func_m = re.fullmatch(
-            r"(?P<func>lower|upper|trim|ltrim|rtrim|reverse|abs|sign|round"
+            r"(?P<func>tolower|toupper|lower|upper|trim|ltrim|rtrim|reverse|abs|sign|round"
             r"|floor|ceil|sqrt|exp|sin|cos|tan|asin|acos|atan|ln|log"
             r"|radians|degrees|log10|tostring|tointeger|tofloat|toboolean"
             r")\s*\(\s*(?P<expr>.+?)\s*\)",
@@ -596,6 +596,7 @@ def _validate_with_shape(result: CypherParseResult, multi_part_query_ctx) -> Non
         if _unary_func_m is not None:
             _uf_lower = _unary_func_m.group("func").lower()
             _uf_display = {
+                "tolower": "toLower", "toupper": "toUpper",
                 "tostring": "toString", "tointeger": "toInteger",
                 "tofloat": "toFloat", "toboolean": "toBoolean",
             }.get(_uf_lower, _uf_lower)

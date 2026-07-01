@@ -16,6 +16,8 @@ from ._normalize_support import (
 
 _AGGREGATE_RETURN_KINDS = {"count", "sum", "avg", "min", "max", "collect"}
 _UNARY_FUNCTION_NAMES = {
+    "tolower",
+    "toupper",
     "lower",
     "upper",
     "trim",
@@ -482,7 +484,7 @@ def _translate_plain_read_parse_error(message: str, expression_text: str) -> str
                 "CypherGlot currently supports size(...) in the supported read subset only over admitted field projections, admitted id/type outputs, or scalar literal/parameter inputs."
             )
         if re.fullmatch(
-            r"(?P<func>lower|upper|trim|ltrim|rtrim|reverse)\s*\(.+\)",
+            r"(?P<func>tolower|toupper|lower|upper|trim|ltrim|rtrim|reverse)\s*\(.+\)",
             expression_text,
             flags=re.IGNORECASE,
         ):
@@ -1121,7 +1123,7 @@ def _validate_with_projection_expression(
     )
     if unary_match is not None:
         function_name = unary_match.group("func")
-        if function_name.lower() in {"lower", "upper", "trim", "ltrim", "rtrim", "reverse"}:
+        if function_name.lower() in {"tolower", "toupper", "lower", "upper", "trim", "ltrim", "rtrim", "reverse"}:
             message = (
                 "CypherGlot currently supports lower(...), upper(...), trim(...), ltrim(...), rtrim(...), and reverse(...) in the WITH subset only over admitted entity-field projections, scalar bindings, or scalar literal/parameter inputs."
             )

@@ -25,6 +25,8 @@ from .normalize import (
 
 _WITH_AGGREGATE_RETURN_KINDS = {"count", "sum", "avg", "min", "max"}
 _WITH_UNARY_FUNCTION_KIND_BY_NAME = {
+    "tolower": "lower",
+    "toupper": "upper",
     "lower": "lower",
     "upper": "upper",
     "trim": "trim",
@@ -963,7 +965,7 @@ def _parse_with_unary_function_item(
     binding_map: dict[str, WithBinding],
 ) -> WithReturnItem | None:
     match = re.fullmatch(
-        r"(?P<func>lower|upper|trim|ltrim|rtrim|reverse|abs|sign|round|"
+        r"(?P<func>tolower|toupper|lower|upper|trim|ltrim|rtrim|reverse|abs|sign|round|"
         r"ceil|floor|sqrt|exp|sin|cos|tan|asin|acos|atan|ln|log|log10|"
         r"radians|degrees|tostring|tointeger|tofloat|toboolean)"
         r"\s*\(\s*(?P<expr>.+?)\s*\)",

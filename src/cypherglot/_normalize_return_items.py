@@ -222,7 +222,7 @@ def _parse_return_items(text: str) -> tuple[ReturnItem, ...]:
                     continue
 
             unary_field_match = re.fullmatch(
-                rf"(?P<func>lower|upper|trim|ltrim|rtrim|reverse|abs|sign|round|ceil|floor|sqrt|exp|sin|cos|tan|asin|acos|atan|ln|log|log10|radians|degrees|tostring|tointeger|tofloat|toboolean)\s*\(\s*(?P<alias>{_IDENTIFIER})\.(?P<field>{_IDENTIFIER})\s*\)",
+                rf"(?P<func>tolower|toupper|lower|upper|trim|ltrim|rtrim|reverse|abs|sign|round|ceil|floor|sqrt|exp|sin|cos|tan|asin|acos|atan|ln|log|log10|radians|degrees|tostring|tointeger|tofloat|toboolean)\s*\(\s*(?P<alias>{_IDENTIFIER})\.(?P<field>{_IDENTIFIER})\s*\)",
                 expression_text,
                 flags=re.IGNORECASE,
             )
@@ -264,6 +264,8 @@ def _parse_return_items(text: str) -> tuple[ReturnItem, ...]:
                                 "to_boolean",
                             ],
                             {
+                                "tolower": "lower",
+                                "toupper": "upper",
                                 "tostring": "to_string",
                                 "tointeger": "to_integer",
                                 "tofloat": "to_float",
@@ -1220,7 +1222,7 @@ def _parse_return_items(text: str) -> tuple[ReturnItem, ...]:
             continue
 
         unary_string_match = re.fullmatch(
-            r"(?P<func>lower|upper|trim|ltrim|rtrim|reverse)\s*\(\s*(?P<expr>.+?)\s*\)",
+            r"(?P<func>tolower|toupper|lower|upper|trim|ltrim|rtrim|reverse)\s*\(\s*(?P<expr>.+?)\s*\)",
             expression_text,
             flags=re.IGNORECASE,
         )
@@ -1229,9 +1231,12 @@ def _parse_return_items(text: str) -> tuple[ReturnItem, ...]:
                 raise ValueError(
                     "HumemCypher v0 RETURN lower(...), upper(...), trim(...), ltrim(...), rtrim(...), and reverse(...) items currently require an explicit AS alias."
                 )
+            _unary_func_name = unary_string_match.group("func").lower()
             function_kind = cast(
                 Literal["lower", "upper", "trim", "ltrim", "rtrim", "reverse"],
-                unary_string_match.group("func").lower(),
+                {"tolower": "lower", "toupper": "upper"}.get(
+                    _unary_func_name, _unary_func_name
+                ),
             )
             function_expr = unary_string_match.group("expr").strip()
             field_match = _RETURN_ITEM_RE.fullmatch(function_expr)

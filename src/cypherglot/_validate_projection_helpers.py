@@ -120,7 +120,7 @@ def _validate_plain_unary_function_projection(
 ) -> bool:
     unary_string_match = re.fullmatch(
         (
-            r"(?P<func>lower|upper|trim|ltrim|rtrim|reverse|abs|sign|round|floor|ceil|sqrt|exp|sin|cos|tan|asin|acos|atan|ln|log|radians|degrees|log10|tostring|tointeger|tofloat|toboolean)"
+            r"(?P<func>tolower|toupper|lower|upper|trim|ltrim|rtrim|reverse|abs|sign|round|floor|ceil|sqrt|exp|sin|cos|tan|asin|acos|atan|ln|log|radians|degrees|log10|tostring|tointeger|tofloat|toboolean)"
             r"\s*\(\s*(?P<expr>.+?)\s*\)"
         ),
         expression_text,
@@ -686,7 +686,7 @@ def _validate_with_unary_function_projection(
     projected_output_kinds: dict[str, str],
 ) -> bool:
     unary_string_match = re.fullmatch(
-        r"(?P<func>lower|upper|trim|ltrim|rtrim|reverse)\s*\(\s*(?P<expr>.+?)\s*\)",
+        r"(?P<func>tolower|toupper|lower|upper|trim|ltrim|rtrim|reverse)\s*\(\s*(?P<expr>.+?)\s*\)",
         expression_text,
         flags=re.IGNORECASE,
     )

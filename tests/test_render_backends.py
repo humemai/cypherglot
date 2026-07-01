@@ -316,6 +316,39 @@ class RenderTests(unittest.TestCase):
             'SELECT with_q."__cg_with_scalar_age" >= 18 AS "adult" FROM (SELECT u.age AS "__cg_with_scalar_age" FROM cg_node_user AS u) AS with_q ORDER BY with_q."__cg_with_scalar_age" >= 18 ASC NULLS FIRST',
         )
 
+    def test_to_sql_accepts_standard_tolower_toupper_aliases(self) -> None:
+        # toLower()/toUpper() are the standard openCypher spellings and must
+        # produce exactly the same SQL as the lower()/upper() aliases in both
+        # RETURN and WITH positions across the SQL backends.
+        schema_context = _public_api_schema_context()
+        for backend in ("sqlite", "duckdb", "postgresql"):
+            for standard, alias in (("toLower", "lower"), ("toUpper", "upper")):
+                return_std = cypherglot.to_sql(
+                    f"MATCH (u:User) RETURN {standard}(u.name) AS n",
+                    backend=backend,
+                    schema_context=schema_context,
+                )
+                return_alias = cypherglot.to_sql(
+                    f"MATCH (u:User) RETURN {alias}(u.name) AS n",
+                    backend=backend,
+                    schema_context=schema_context,
+                )
+                self.assertEqual(return_std, return_alias)
+
+                with_std = cypherglot.to_sql(
+                    f"MATCH (u:User) WITH {standard}(u.name) AS n "
+                    "RETURN n ORDER BY n",
+                    backend=backend,
+                    schema_context=schema_context,
+                )
+                with_alias = cypherglot.to_sql(
+                    f"MATCH (u:User) WITH {alias}(u.name) AS n "
+                    "RETURN n ORDER BY n",
+                    backend=backend,
+                    schema_context=schema_context,
+                )
+                self.assertEqual(with_std, with_alias)
+
     def test_to_sql_renders_derived_with_scalar_binding(self) -> None:
         sql = cypherglot.to_sql(
             "MATCH (u:User) WITH lower(u.name) AS lowered RETURN lowered ORDER BY lowered",

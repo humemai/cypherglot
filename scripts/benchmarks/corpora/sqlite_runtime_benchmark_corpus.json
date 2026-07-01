@@ -231,7 +231,7 @@
     "backends": ["sqlite", "turso", "clickhouse", "duckdb", "postgresql"],
     "mode": "statement",
     "mutation": false,
-    "query": "MATCH (n:%node_type_1%) WITH n.name AS name, n.score AS score WHERE score >= 2.0 RETURN lower(name) AS lower_name, score AS score ORDER BY score DESC, lower_name ASC LIMIT 50"
+    "query": "MATCH (n:%node_type_1%) WITH n.name AS name, n.score AS score WHERE score >= 2.0 RETURN toLower(name) AS lower_name, score AS score ORDER BY score DESC, lower_name ASC LIMIT 50"
   },
   {
     "name": "olap_with_size_predicate_projection",
@@ -249,7 +249,7 @@
     "backends": ["sqlite", "turso", "clickhouse", "duckdb", "postgresql"],
     "mode": "statement",
     "mutation": false,
-    "query": "MATCH (a:%node_type_1%)-[r:%edge_type_2%]->(b:%node_type_2%) RETURN lower(r.note) AS note_text, round(r.score) AS rounded_score, toBoolean(r.active) AS edge_active ORDER BY rounded_score DESC, note_text ASC LIMIT 25"
+    "query": "MATCH (a:%node_type_1%)-[r:%edge_type_2%]->(b:%node_type_2%) RETURN toLower(r.note) AS note_text, round(r.score) AS rounded_score, toBoolean(r.active) AS edge_active ORDER BY rounded_score DESC, note_text ASC LIMIT 25"
   },
   {
     "name": "olap_variable_length_grouped_rollup",
