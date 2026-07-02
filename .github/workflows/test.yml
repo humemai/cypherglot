@@ -54,9 +54,9 @@ jobs:
         run: |
           uv sync --group test
 
-      # The Docker/server-backed integration tests are skipped by default
-      # (conftest gates them on CYPHERGLOT_TEST_INTEGRATION) and run in the
-      # dedicated per-engine jobs below, so the matrix stays a fast unit run.
+      # Integration tests run by default. On ubuntu cells they auto-provision
+      # their Docker servers; macOS/Windows cells skip Docker provisioning by
+      # platform. The dedicated per-engine jobs below keep clear named signals.
       - name: Run tests
         run: |
           uv run pytest
@@ -97,7 +97,6 @@ jobs:
 
       - name: Run PostgreSQL runtime tests
         env:
-          CYPHERGLOT_TEST_INTEGRATION: '1'
           CYPHERGLOT_TEST_POSTGRES_DSN: dbname=cypherglot_test user=cypherglot password=cypherglot host=127.0.0.1 port=5432
         run: |
           uv run pytest \
@@ -129,8 +128,6 @@ jobs:
       # backends, asserting identical results. This enforces that CypherGlot
       # does not diverge from Neo4j semantics.
       - name: Run Neo4j conformance + parity tests
-        env:
-          CYPHERGLOT_TEST_INTEGRATION: '1'
         run: |
           uv run pytest \
             tests/test_cypher_conformance.py \
@@ -159,8 +156,6 @@ jobs:
 
       # ClickHouse is auto-provisioned via Docker (pre-installed on the runner).
       - name: Run ClickHouse parity tests
-        env:
-          CYPHERGLOT_TEST_INTEGRATION: '1'
         run: |
           uv run pytest tests/test_clickhouse_read_parity.py
 
@@ -186,7 +181,5 @@ jobs:
 
       # Apache AGE (PostgreSQL + graph extension) is auto-provisioned via Docker.
       - name: Run Apache AGE conformance tests
-        env:
-          CYPHERGLOT_TEST_INTEGRATION: '1'
         run: |
           uv run pytest tests/test_cypher_conformance_age.py

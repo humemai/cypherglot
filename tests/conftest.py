@@ -15,10 +15,11 @@ if _REPO_ROOT not in sys.path:
 
 
 # Integration test modules that need a live database server (Neo4j / PostgreSQL /
-# ClickHouse / Apache AGE). They auto-provision Docker containers on Linux, which
-# is slow and leaks containers on an unhealthy Docker host, so they are skipped
-# by default to keep `pytest` a fast unit-test run. Set CYPHERGLOT_TEST_INTEGRATION=1
-# to run them (CI sets it in the dedicated per-engine jobs).
+# ClickHouse / Apache AGE). They auto-provision Docker containers on Linux and
+# RUN BY DEFAULT (a full run is ~2-3 minutes on a healthy Docker host). Set
+# CYPHERGLOT_TEST_INTEGRATION=0 to skip them for a fast unit-only run, or when
+# the local Docker daemon is unhealthy (each helper otherwise burns its startup
+# timeout before skipping).
 _INTEGRATION_TEST_FILES = frozenset(
     {
         "test_cypher_conformance.py",
@@ -31,11 +32,14 @@ _INTEGRATION_TEST_FILES = frozenset(
     }
 )
 
-_TRUTHY = frozenset({"1", "true", "yes", "on"})
+_FALSY = frozenset({"0", "false", "no", "off"})
 
 
 def _integration_enabled() -> bool:
-    return os.environ.get("CYPHERGLOT_TEST_INTEGRATION", "").strip().lower() in _TRUTHY
+    return (
+        os.environ.get("CYPHERGLOT_TEST_INTEGRATION", "").strip().lower()
+        not in _FALSY
+    )
 
 
 def pytest_collection_modifyitems(
@@ -46,8 +50,8 @@ def pytest_collection_modifyitems(
         return
     skip_integration = pytest.mark.skip(
         reason=(
-            "integration test (needs a Neo4j/PostgreSQL/ClickHouse/AGE server); "
-            "set CYPHERGLOT_TEST_INTEGRATION=1 to run"
+            "integration tests disabled (CYPHERGLOT_TEST_INTEGRATION=0); "
+            "unset it to run the Neo4j/PostgreSQL/ClickHouse/AGE tests"
         )
     )
     for item in items:
