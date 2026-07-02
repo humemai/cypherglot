@@ -134,3 +134,62 @@ class AgeUnsupportedTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AgeBulkLoadCsvTests(unittest.TestCase):
+    def test_agtype_cells_are_typed_literals(self) -> None:
+        from scripts.benchmarks.runtime.age import _agtype_csv_cell
+
+        self.assertEqual(_agtype_csv_cell("54", "integer"), "54")
+        self.assertEqual(_agtype_csv_cell("83.2", "float"), "83.2")
+        self.assertEqual(_agtype_csv_cell("1", "boolean"), "true")
+        self.assertEqual(_agtype_csv_cell("0", "boolean"), "false")
+        self.assertEqual(_agtype_csv_cell("plain", "string"), '"plain"')
+        self.assertEqual(
+            _agtype_csv_cell('say "hi"', "string"), '"say \\"hi\\""'
+        )
+
+    def test_write_age_load_csvs_shapes(self) -> None:
+        import csv as _csv
+        import tempfile
+        from pathlib import Path as _Path
+
+        from scripts.benchmarks.common.shared import (
+            RuntimeScale,
+            _build_graph_schema,
+        )
+        from scripts.benchmarks.common.runtime_shared import (
+            _prepare_generated_graph_fixture,
+        )
+        from scripts.benchmarks.runtime.age import _write_age_load_csvs
+
+        scale = RuntimeScale(
+            node_type_count=3, edge_type_count=3, nodes_per_type=5,
+            edges_per_source=1, ingest_batch_size=5,
+        )
+        schema, plans = _build_graph_schema(scale)
+        fixture = _prepare_generated_graph_fixture(
+            scale=scale, graph_schema=schema, edge_plans=plans,
+            index_mode="indexed",
+        )
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                out = _Path(tmp) / "load"
+                paths = _write_age_load_csvs(fixture, schema, out)
+                node_rows = list(
+                    _csv.reader(paths[schema.node_types[0].table_name].open())
+                )
+                self.assertEqual(node_rows[0][0], "id")
+                self.assertEqual(node_rows[1][0], "1")  # id stays plain
+                self.assertTrue(node_rows[1][1].startswith('"'))  # name quoted
+                edge_rows = list(
+                    _csv.reader(paths[schema.edge_types[0].table_name].open())
+                )
+                self.assertEqual(
+                    edge_rows[0][:4],
+                    ["start_id", "start_vertex_type", "end_id", "end_vertex_type"],
+                )
+                self.assertEqual(edge_rows[1][1], schema.edge_types[0].source_type)
+                self.assertIn(edge_rows[1][7], ("true", "false"))  # active typed
+        finally:
+            fixture.close()

@@ -24,7 +24,9 @@ import platform
 import re
 import shutil
 import socket
+import csv
 import subprocess
+import tempfile
 import sys
 import time
 import uuid
@@ -850,6 +852,142 @@ def _seed_edges(
     return total
 
 
+def _agtype_csv_cell(value: str, logical_type: str) -> str:
+    """Render one fixture-CSV cell as an agtype literal for the AGE bulk loader.
+
+    ``load_*_from_file(..., load_as_agtype=true)`` parses each cell as an
+    agtype value, which gives properly typed properties (the plain-text mode
+    loads everything as strings and breaks typed comparisons).
+    """
+    if logical_type == "boolean":
+        return "true" if value in ("1", "true", "True") else "false"
+    if logical_type in ("integer", "float"):
+        return value
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
+def _write_age_load_csvs(
+    fixture: GeneratedGraphFixture,
+    graph_schema: cypherglot.GraphSchema,
+    out_dir: Path,
+) -> dict[str, Path]:
+    """Rewrite fixture CSVs into the AGE bulk-loader format.
+
+    Nodes keep ``id`` plus agtype-typed property cells. Edges use the loader's
+    ``start_id,start_vertex_type,end_id,end_vertex_type`` header (the fixture's
+    own edge ``id`` is dropped; the corpus never reads ``r.id``).
+    """
+    out_dir.mkdir(parents=True, exist_ok=True)
+    load_paths: dict[str, Path] = {}
+
+    for node_type in graph_schema.node_types:
+        logical = {prop.name: prop.logical_type for prop in node_type.properties}
+        out_path = out_dir / f"{node_type.table_name}.csv"
+        with fixture.table_csv_paths[node_type.table_name].open(
+            "r", encoding="utf-8", newline=""
+        ) as src_handle, out_path.open("w", encoding="utf-8", newline="") as dst:
+            reader = csv.DictReader(src_handle)
+            writer = csv.writer(dst)
+            columns = list(reader.fieldnames or [])
+            writer.writerow(columns)
+            for row in reader:
+                writer.writerow(
+                    row[c] if c == "id" else _agtype_csv_cell(row[c], logical[c])
+                    for c in columns
+                )
+        load_paths[node_type.table_name] = out_path
+
+    for edge_type in graph_schema.edge_types:
+        logical = {prop.name: prop.logical_type for prop in edge_type.properties}
+        out_path = out_dir / f"{edge_type.table_name}.csv"
+        with fixture.table_csv_paths[edge_type.table_name].open(
+            "r", encoding="utf-8", newline=""
+        ) as src_handle, out_path.open("w", encoding="utf-8", newline="") as dst:
+            reader = csv.DictReader(src_handle)
+            writer = csv.writer(dst)
+            prop_columns = [
+                c for c in (reader.fieldnames or [])
+                if c not in ("id", "from_id", "to_id")
+            ]
+            writer.writerow(
+                ["start_id", "start_vertex_type", "end_id", "end_vertex_type"]
+                + prop_columns
+            )
+            for row in reader:
+                writer.writerow(
+                    [
+                        row["from_id"],
+                        edge_type.source_type,
+                        row["to_id"],
+                        edge_type.target_type,
+                    ]
+                    + [_agtype_csv_cell(row[c], logical[c]) for c in prop_columns]
+                )
+        load_paths[edge_type.table_name] = out_path
+    return load_paths
+
+
+def _bulk_load_age_graph(
+    conn: Any,
+    *,
+    graph_name: str,
+    graph_schema: cypherglot.GraphSchema,
+    fixture: GeneratedGraphFixture,
+    docker_config: DockerAgeConfig,
+    progress_label: str,
+) -> dict[str, int]:
+    """Ingest via AGE's server-side bulk loaders (its documented fast path).
+
+    Rewrites the fixture CSVs into loader format, copies them into the
+    container (the loader roots relative paths at /tmp/age/), and calls
+    load_labels_from_file / load_edges_from_file per label.
+    """
+    _progress(f"{progress_label}: bulk load via load_*_from_file")
+    with tempfile.TemporaryDirectory(prefix="age-load-") as tmp:
+        out_dir = Path(tmp) / "cgload"
+        _write_age_load_csvs(fixture, graph_schema, out_dir)
+        container = docker_config.container_name
+        subprocess.run(
+            ["docker", "exec", container, "mkdir", "-p", "/tmp/age"],
+            check=True, capture_output=True,
+        )
+        subprocess.run(
+            ["docker", "cp", str(out_dir), f"{container}:/tmp/age/cgload"],
+            check=True, capture_output=True,
+        )
+    with conn.cursor() as cur:
+        for node_type in graph_schema.node_types:
+            _progress(f"{progress_label}: bulk load nodes {node_type.name}")
+            cur.execute(
+                "SELECT ag_catalog.load_labels_from_file(%s, %s, %s, true, true)",
+                (graph_name, node_type.name, f"cgload/{node_type.table_name}.csv"),
+            )
+        for edge_type in graph_schema.edge_types:
+            _progress(f"{progress_label}: bulk load edges {edge_type.name}")
+            cur.execute(
+                "SELECT ag_catalog.load_edges_from_file(%s, %s, %s, true)",
+                (graph_name, edge_type.name, f"cgload/{edge_type.table_name}.csv"),
+            )
+    conn.commit()
+    subprocess.run(
+        ["docker", "exec", docker_config.container_name, "rm", "-rf",
+         "/tmp/age/cgload"],
+        check=False, capture_output=True,
+    )
+    _progress(
+        f"{progress_label}: bulk load committed "
+        f"({fixture.row_counts['node_count']} nodes, "
+        f"{fixture.row_counts['edge_count']} edges)"
+    )
+    return {
+        "node_count": fixture.row_counts["node_count"],
+        "edge_count": fixture.row_counts["edge_count"],
+        "node_type_count": len(graph_schema.node_types),
+        "edge_type_count": len(graph_schema.edge_types),
+    }
+
+
 def _seed_graph(
     conn: Any,
     *,
@@ -986,8 +1124,19 @@ def _setup_mode(
         docker_config
     )
 
-    row_counts, setup_metrics["ingest_ns"] = _measure_ns(
-        lambda: _seed_graph(
+    def ingest() -> dict[str, int]:
+        # AGE's documented bulk path needs container file access; DSN-only
+        # runs (no docker handle) keep the statement-based fallback.
+        if docker_config is not None and fixture is not None:
+            return _bulk_load_age_graph(
+                conn,
+                graph_name=graph_name,
+                graph_schema=graph_schema,
+                fixture=fixture,
+                docker_config=docker_config,
+                progress_label=progress_label,
+            )
+        return _seed_graph(
             conn,
             graph_name=graph_name,
             scale=scale,
@@ -996,7 +1145,8 @@ def _setup_mode(
             progress_label=progress_label,
             fixture=fixture,
         )
-    )
+
+    row_counts, setup_metrics["ingest_ns"] = _measure_ns(ingest)
     rss_snapshots_mib["after_ingest"] = _capture_age_rss_snapshot(docker_config)
 
     index_warnings: list[str] = []
@@ -1346,7 +1496,11 @@ def _benchmark_result(
     # For a non-synthetic topology, materialise the fixture CSVs once (the data
     # is identical across index modes) and seed the graph from them.
     seed_fixture: GeneratedGraphFixture | None = None
-    if active_topology.name != "synthetic":
+    # Non-synthetic topologies need the fixture as the data source; docker-
+    # managed runs also need it for the bulk loader, so materialise it for the
+    # synthetic topology too in that case (DSN-only synthetic runs keep the
+    # in-process generator).
+    if active_topology.name != "synthetic" or docker_config is not None:
         seed_fixture = active_topology.prepare_fixture(
             scale=scale,
             graph_schema=graph_schema,
