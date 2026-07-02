@@ -908,8 +908,11 @@ def _run_iteration_with_timeout(
 ) -> dict[str, int]:
     if runner.backend == "postgresql":
         return _run_iteration(runner, query, timeout_ms=timeout_ms)
+    # Pass the budget down so engines with in-engine deadlines (sqlite's
+    # progress handler) arm them; the SIGALRM wrapper stays as the outer net
+    # for engines that yield to signals.
     return _call_with_timeout(
-        lambda: _run_iteration(runner, query),
+        lambda: _run_iteration(runner, query, timeout_ms=timeout_ms),
         timeout_ms=timeout_ms,
         operation=operation,
     )
