@@ -171,5 +171,19 @@ def _optimize_clickhouse(client, graph_schema: cypherglot.GraphSchema) -> None:
         client.command(f"OPTIMIZE TABLE {table_name} FINAL")
 
 
-def _execute_clickhouse_statement(client, sql: str) -> None:
-    client.query(sql)
+def _execute_clickhouse_statement(
+    client,
+    sql: str,
+    timeout_ms: float | None = None,
+) -> None:
+    if timeout_ms is None:
+        client.query(sql)
+        return
+    # Enforce the budget server-side (like PostgreSQL's statement_timeout):
+    # the server aborts with TIMEOUT_EXCEEDED (code 159) instead of the HTTP
+    # client abandoning a request the server keeps executing, which wedges the
+    # session (SESSION_IS_LOCKED) for every later query.
+    client.query(
+        sql,
+        settings={"max_execution_time": max(1, int(timeout_ms / 1000.0))},
+    )

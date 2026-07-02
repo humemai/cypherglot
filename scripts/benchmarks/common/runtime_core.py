@@ -712,7 +712,9 @@ class _BackendRunner:
                     cursor.fetchall()
                 return
             if self.backend == "clickhouse":
-                _execute_clickhouse_statement(self.clickhouse, artifact.compiled)
+                _execute_clickhouse_statement(
+                    self.clickhouse, artifact.compiled, timeout_ms=timeout_ms
+                )
                 return
             cursor = self.duck.execute(artifact.compiled)
             if cursor.description is not None:
@@ -891,6 +893,9 @@ def _error_is_query_timeout(
     if backend == "sqlite" and timeout_armed:
         # Progress-handler abort surfaces as OperationalError("interrupted").
         return "interrupt" in str(exc).lower()
+    if backend == "clickhouse" and timeout_armed:
+        message = str(exc)
+        return "TIMEOUT_EXCEEDED" in message or "Code: 159" in message
     if backend == "duckdb" and timeout_armed:
         return (
             type(exc).__name__ == "InterruptException"
