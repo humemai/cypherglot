@@ -13,6 +13,8 @@ server-style shape (connection params instead of a file path).
 from __future__ import annotations
 
 import csv
+import threading
+import uuid
 from dataclasses import dataclass
 
 import cypherglot
@@ -43,12 +45,18 @@ def _clickhouse_available() -> bool:
 def _create_clickhouse_client(params: ClickHouseConnectionParams):
     if clickhouse_connect is None:
         raise ValueError("clickhouse-connect is not installed.")
+    # Sessionless: an abandoned server-side query must not lock a session and
+    # cascade SESSION_IS_LOCKED over every later query in the suite.
+    clickhouse_connect.common.set_setting("autogenerate_session_id", False)
     return clickhouse_connect.get_client(
         host=params.host,
         port=params.port,
         username=params.username,
         password=params.password,
         database=params.database,
+        # Outer socket net well above any query budget; real enforcement is
+        # max_execution_time plus the KILL QUERY watchdog below.
+        send_receive_timeout=910,
     )
 
 
@@ -175,15 +183,40 @@ def _execute_clickhouse_statement(
     client,
     sql: str,
     timeout_ms: float | None = None,
+    kill_client=None,
 ) -> None:
     if timeout_ms is None:
         client.query(sql)
         return
-    # Enforce the budget server-side (like PostgreSQL's statement_timeout):
-    # the server aborts with TIMEOUT_EXCEEDED (code 159) instead of the HTTP
-    # client abandoning a request the server keeps executing, which wedges the
-    # session (SESSION_IS_LOCKED) for every later query.
-    client.query(
-        sql,
-        settings={"max_execution_time": max(1, int(timeout_ms / 1000.0))},
-    )
+    # Two enforcement layers. max_execution_time is checked at progress
+    # points, which heavy join builds can stall past (observed: a deep-hop
+    # union join ran to the HTTP read timeout with the timer armed). The
+    # watchdog thread issues KILL QUERY at the budget via a second client, so
+    # cancellation lands regardless of the server's check granularity.
+    query_id = uuid.uuid4().hex
+    watchdog: threading.Timer | None = None
+    if kill_client is not None:
+        def _kill() -> None:
+            try:
+                kill_client.command(
+                    f"KILL QUERY WHERE query_id = '{query_id}' ASYNC"
+                )
+            except Exception:
+                pass
+
+        watchdog = threading.Timer(timeout_ms / 1000.0 + 2.0, _kill)
+        watchdog.daemon = True
+        watchdog.start()
+    try:
+        client.query(
+            sql,
+            settings={
+                "max_execution_time": max(1, int(timeout_ms / 1000.0)),
+                # query_id rides the settings dict onto the HTTP request, so
+                # the watchdog can target this exact query with KILL QUERY.
+                "query_id": query_id,
+            },
+        )
+    finally:
+        if watchdog is not None:
+            watchdog.cancel()

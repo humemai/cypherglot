@@ -492,6 +492,11 @@ class _BackendRunner:
             self.connection, self.setup_metrics["connect_ns"] = _measure_ns(
                 lambda: _create_clickhouse_client(self.clickhouse_params)
             )
+            # Second client for the KILL QUERY watchdog: cancellation must not
+            # ride the connection that is blocked on the running query.
+            self.clickhouse_kill = _create_clickhouse_client(
+                self.clickhouse_params
+            )
             self.rss_snapshots_mib["after_connect"] = self.capture_rss_snapshot()
             _, self.setup_metrics["schema_ns"] = _measure_ns(
                 lambda: self._reset_and_create_clickhouse_schema()
@@ -554,6 +559,9 @@ class _BackendRunner:
         return self.connection
 
     def close(self) -> None:
+        kill_client = getattr(self, "clickhouse_kill", None)
+        if kill_client is not None:
+            kill_client.close()
         self.connection.close()
         self.work_dir.close()
 
@@ -713,7 +721,10 @@ class _BackendRunner:
                 return
             if self.backend == "clickhouse":
                 _execute_clickhouse_statement(
-                    self.clickhouse, artifact.compiled, timeout_ms=timeout_ms
+                    self.clickhouse,
+                    artifact.compiled,
+                    timeout_ms=timeout_ms,
+                    kill_client=getattr(self, "clickhouse_kill", None),
                 )
                 return
             cursor = self.duck.execute(artifact.compiled)
@@ -895,7 +906,13 @@ def _error_is_query_timeout(
         return "interrupt" in str(exc).lower()
     if backend == "clickhouse" and timeout_armed:
         message = str(exc)
-        return "TIMEOUT_EXCEEDED" in message or "Code: 159" in message
+        return (
+            "TIMEOUT_EXCEEDED" in message
+            or "Code: 159" in message
+            or "QUERY_WAS_CANCELLED" in message
+            or "Code: 394" in message
+            or "read timed out" in message.lower()
+        )
     if backend == "duckdb" and timeout_armed:
         return (
             type(exc).__name__ == "InterruptException"
