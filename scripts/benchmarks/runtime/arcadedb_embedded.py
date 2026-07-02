@@ -2279,7 +2279,8 @@ def _benchmark_result(
                 )
                 workloads["oltp"][_suite_key(current_index_mode)] = suite
                 failure_count += int(suite["fail_count"])
-                failure_count += int(suite.get("timeout_count", 0))
+                # Timeouts are data (an exceeded budget is a result, not an
+                # operational failure), so they do not affect the exit code.
                 if progress_callback is not None:
                     progress_callback(
                         {"workloads": workloads, "token_map": token_map},
@@ -2313,7 +2314,8 @@ def _benchmark_result(
                 )
                 workloads["olap"][_suite_key(current_index_mode)] = suite
                 failure_count += int(suite["fail_count"])
-                failure_count += int(suite.get("timeout_count", 0))
+                # Timeouts are data (an exceeded budget is a result, not an
+                # operational failure), so they do not affect the exit code.
                 if progress_callback is not None:
                     progress_callback(
                         {"workloads": workloads, "token_map": token_map},

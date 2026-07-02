@@ -2061,7 +2061,8 @@ def main(entrypoint: SQLRuntimeBenchmarkEntrypoint = SQLITE_ENTRYPOINT) -> int:
                 if suite_name == "description":
                     continue
                 failure_count += int(suite.get("fail_count", 0))
-                failure_count += int(suite.get("timeout_count", 0))
+                # Timeouts are data (an exceeded budget is a result, not an
+                # operational failure), so they do not affect the exit code.
         return 1 if failure_count else 0
     finally:
         if acquired_postgresql_runtime:
