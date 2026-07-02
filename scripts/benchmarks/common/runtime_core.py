@@ -681,9 +681,23 @@ class _BackendRunner:
     ) -> None:
         if artifact.mode == "statement":
             if self.backend == "sqlite":
-                cursor = self.sqlite.execute(artifact.compiled)
-                if cursor.description is not None:
-                    cursor.fetchall()
+                # The SIGALRM query timeout cannot interrupt sqlite3's C call,
+                # so arm sqlite's own progress handler with the deadline; on
+                # expiry sqlite aborts with OperationalError("interrupted"),
+                # which _error_is_query_timeout classifies as a timeout.
+                if timeout_ms is not None:
+                    deadline = time.monotonic() + timeout_ms / 1000.0
+                    self.sqlite.set_progress_handler(
+                        lambda: 1 if time.monotonic() > deadline else 0,
+                        10_000,
+                    )
+                try:
+                    cursor = self.sqlite.execute(artifact.compiled)
+                    if cursor.description is not None:
+                        cursor.fetchall()
+                finally:
+                    if timeout_ms is not None:
+                        self.sqlite.set_progress_handler(None, 0)
                 return
             if self.backend == "postgresql":
                 with self.postgresql.cursor() as cur:
@@ -874,6 +888,9 @@ def _error_is_query_timeout(
     """
     if backend == "postgresql":
         return _postgresql_error_is_query_timeout(exc)
+    if backend == "sqlite" and timeout_armed:
+        # Progress-handler abort surfaces as OperationalError("interrupted").
+        return "interrupt" in str(exc).lower()
     if backend == "duckdb" and timeout_armed:
         return (
             type(exc).__name__ == "InterruptException"
