@@ -14,6 +14,10 @@ jobs:
   test:
     name: Test (${{ matrix.platform }}, Python ${{ matrix.python-version }})
     runs-on: ${{ matrix.runs-on }}
+    env:
+      # The repo's .python-version pins 3.12 for local dev; without this, uv
+      # honours that pin and every matrix cell silently tests 3.12.
+      UV_PYTHON: ${{ matrix.python-version }}
     strategy:
       fail-fast: false
       matrix:
@@ -52,7 +56,7 @@ jobs:
 
       - name: Install project
         run: |
-          uv sync --group test
+          uv sync --group test || uv sync --group test
 
       # Integration tests run by default. On ubuntu cells they auto-provision
       # their Docker servers; macOS/Windows cells skip Docker provisioning by
@@ -93,7 +97,7 @@ jobs:
 
       - name: Install project
         run: |
-          uv sync --group test
+          uv sync --group test || uv sync --group test
 
       - name: Run PostgreSQL runtime tests
         env:
@@ -121,7 +125,7 @@ jobs:
 
       - name: Install project
         run: |
-          uv sync --group test
+          uv sync --group test || uv sync --group test
 
       # The conformance and OLTP-parity tests run the SAME Cypher on native
       # Neo4j (started via Docker, pre-installed on the runner) and on the SQL
@@ -152,7 +156,7 @@ jobs:
 
       - name: Install project
         run: |
-          uv sync --group test
+          uv sync --group test || uv sync --group test
 
       # ClickHouse is auto-provisioned via Docker (pre-installed on the runner).
       - name: Run ClickHouse parity tests
@@ -177,7 +181,7 @@ jobs:
 
       - name: Install project
         run: |
-          uv sync --group test
+          uv sync --group test || uv sync --group test
 
       # Apache AGE (PostgreSQL + graph extension) is auto-provisioned via Docker.
       - name: Run Apache AGE conformance tests

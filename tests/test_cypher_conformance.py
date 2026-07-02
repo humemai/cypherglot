@@ -155,8 +155,10 @@ class CypherNeo4jConformanceTests(unittest.TestCase):
             startup_timeout_s=120,
             keep_container=False,
         )
-        _start_docker_neo4j(cls._neo4j_config, cls._neo4j_password)
         try:
+            # The start itself can fail (e.g. Windows runners have docker but no
+            # linux/amd64 images), so it belongs inside the skip guard too.
+            _start_docker_neo4j(cls._neo4j_config, cls._neo4j_password)
             _wait_for_docker_server_ready(
                 cls._neo4j_config, cls._neo4j_config.startup_timeout_s
             )
