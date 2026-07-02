@@ -12,34 +12,41 @@
 # paper's methodology.
 #
 # Usage:
-#   scripts/benchmarks/data/generate_ldbc_snb.sh <SCALE_FACTOR> <OUTPUT_DIR> [PARALLELISM]
+#   scripts/benchmarks/data/generate_ldbc_snb.sh <SCALE_FACTOR> <OUTPUT_DIR> [PARALLELISM] [MEMORY]
 #
 # Examples (the paper's two scale points):
 #   scripts/benchmarks/data/generate_ldbc_snb.sh 1  /data/ldbc_snb/sf1
-#   scripts/benchmarks/data/generate_ldbc_snb.sh 10 /data/ldbc_snb/sf10 8
+#   scripts/benchmarks/data/generate_ldbc_snb.sh 10 /data/ldbc_snb/sf10 8 24g
 #
 # Requires Docker. SF1 is a few hundred MB and generates in ~minutes on a
 # laptop; SF10 (~30M nodes) is the >=10M headline scale and is generated on the
 # measurement host (mini). Pin the image tag so the dataset is reproducible.
+#
+# MEMORY is the Spark driver heap inside the container (wrapper --memory).
+# The image default (~1g) OOMs at SF10; give it real memory for SF >= 3.
+# Per the wrapper's own help, HIGHER parallelism also reduces OOM risk
+# (smaller partitions), so scale both together for large SFs.
 set -euo pipefail
 
 DATAGEN_IMAGE="ldbc/datagen-standalone:0.5.1-2.12_spark3.2"
 
-SCALE_FACTOR="${1:?usage: generate_ldbc_snb.sh <SCALE_FACTOR> <OUTPUT_DIR> [PARALLELISM]}"
-OUTPUT_DIR="${2:?usage: generate_ldbc_snb.sh <SCALE_FACTOR> <OUTPUT_DIR> [PARALLELISM]}"
+SCALE_FACTOR="${1:?usage: generate_ldbc_snb.sh <SCALE_FACTOR> <OUTPUT_DIR> [PARALLELISM] [MEMORY]}"
+OUTPUT_DIR="${2:?usage: generate_ldbc_snb.sh <SCALE_FACTOR> <OUTPUT_DIR> [PARALLELISM] [MEMORY]}"
 PARALLELISM="${3:-1}"
+MEMORY="${4:-8g}"
 
 mkdir -p "$OUTPUT_DIR"
 # The container writes as its own user; make the bind mount writable.
 chmod 777 "$OUTPUT_DIR"
 
-echo "Generating LDBC SNB SF${SCALE_FACTOR} into ${OUTPUT_DIR} (parallelism=${PARALLELISM})"
+echo "Generating LDBC SNB SF${SCALE_FACTOR} into ${OUTPUT_DIR} (parallelism=${PARALLELISM}, memory=${MEMORY})"
 echo "Image: ${DATAGEN_IMAGE}"
 
 docker run --rm \
   --mount type=bind,source="$(cd "$OUTPUT_DIR" && pwd)",target=/out \
   "$DATAGEN_IMAGE" \
   --parallelism "$PARALLELISM" \
+  --memory "$MEMORY" \
   -- \
   --format csv \
   --scale-factor "$SCALE_FACTOR" \
