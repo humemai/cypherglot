@@ -1274,7 +1274,7 @@ class BenchmarkSQLRuntimeCoreTests(unittest.TestCase):
         payload = build_payload(
             entrypoint=benchmark_sql_runtime_core.SQLITE_ENTRYPOINT,
             started_at=benchmark_sql_runtime_core.datetime.now(
-                benchmark_sql_runtime_core.UTC
+                benchmark_sql_runtime_core.timezone.utc
             ),
             database_versions={"sqlite": "3.45.3"},
             corpus_path=CORPUS_PATH,

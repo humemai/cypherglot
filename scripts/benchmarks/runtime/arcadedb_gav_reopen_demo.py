@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import argparse
 import os
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from scripts.benchmarks.common.runtime_shared import _prepare_generated_graph_fixture
@@ -109,7 +109,7 @@ def main() -> int:
 
     fixture = None
     summary: dict[str, object] = {
-        "generated_at": datetime.now(UTC).isoformat(),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
         "scale": args.scale,
         "jvm_args": os.environ["ARCADEDB_JVM_ARGS"],
         "gav_name": ARCADEDB_GAV_NAME,

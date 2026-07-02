@@ -16,7 +16,7 @@ import sqlite3
 import tempfile
 import time
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from scripts.benchmarks.common.cli import parse_sqlite_schema_shapes_args
@@ -1602,7 +1602,7 @@ def main() -> int:
 
     results = {
         "benchmark_entrypoint": "scripts.benchmarks.schema.sqlite_shapes",
-        "generated_at": datetime.now(UTC).isoformat(),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
         "run_status": "completed",
         "environment": {
             "python": platform.python_version(),

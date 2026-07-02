@@ -22,7 +22,7 @@ import sys
 import tempfile
 import time
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
@@ -992,7 +992,7 @@ def main() -> int:
     )
 
     payload = {
-        "generated_at": datetime.now(UTC).isoformat(),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
         "python_version": platform.python_version(),
         "platform": platform.platform(),
         "cypherglot_version": cypherglot_module.__version__,

@@ -17,7 +17,7 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -611,7 +611,7 @@ def _parse_args() -> argparse.Namespace:
 def _resolve_run_stamp(run_stamp: str | None) -> str:
     if run_stamp:
         return run_stamp
-    return datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
 
 def _resolve_arcadedb_jvm_args(scale_name: str, override: str | None) -> str:
@@ -1235,7 +1235,7 @@ def _worker_loop(
 
         status.worker_id = worker_id
         status.status = "running"
-        status.started_at = datetime.now(UTC).isoformat()
+        status.started_at = datetime.now(timezone.utc).isoformat()
         reserved_ports: tuple[int, int] | None = None
         try:
             if status.job.variant.uses_neo4j_docker:
@@ -1300,7 +1300,7 @@ def _worker_loop(
                 completed_returncode = process.wait()
             status.duration_s = round(time.monotonic() - start, 2)
             status.exit_code = completed_returncode
-            status.completed_at = datetime.now(UTC).isoformat()
+            status.completed_at = datetime.now(timezone.utc).isoformat()
             cleanup_error = _cleanup_job_db_root_dir(status.job)
             if completed_returncode == 0:
                 status.status = "completed"
@@ -1328,7 +1328,7 @@ def _worker_loop(
                 )
         except (OSError, RuntimeError, subprocess.SubprocessError, ValueError) as exc:
             status.status = "failed"
-            status.completed_at = datetime.now(UTC).isoformat()
+            status.completed_at = datetime.now(timezone.utc).isoformat()
             status.error = str(exc)
             print(
                 f"[worker {worker_id}] failed {status.job.slug}: {exc} | "

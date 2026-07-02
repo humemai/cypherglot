@@ -20,7 +20,7 @@ import platform
 import re
 import time
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Callable
@@ -887,7 +887,7 @@ def _build_payload(
         "benchmark_entrypoint": "ladybug",
         "enabled_backends": ["ladybug"],
         "generated_at": started_at.isoformat(),
-        "updated_at": datetime.now(UTC).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
         "run_status": status,
         "python_version": platform.python_version(),
         "platform": platform.platform(),
@@ -1068,7 +1068,7 @@ def _parse_args() -> argparse.Namespace:
 def main() -> int:
     args = _parse_args()
     apply_cpu_affinity(parse_cpu_affinity(args.cpu_affinity))
-    started_at = datetime.now(UTC)
+    started_at = datetime.now(timezone.utc)
     args_dict = vars(args)
     oltp_timeout_ms = args_dict.get("oltp_timeout_ms", None)
     olap_timeout_ms = args_dict.get("olap_timeout_ms", None)
@@ -1175,7 +1175,7 @@ def main() -> int:
             result=result,
             failure_count=failure_count,
             status=status,
-            completed_at=datetime.now(UTC) if status == "completed" else None,
+            completed_at=datetime.now(timezone.utc) if status == "completed" else None,
         )
         _write_json_atomic(args.output, payload)
 

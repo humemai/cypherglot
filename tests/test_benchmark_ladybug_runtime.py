@@ -177,7 +177,7 @@ class BenchmarkLadybugRuntimeScriptTests(unittest.TestCase):
 
         payload = build_payload(
             started_at=benchmark_ladybug_runtime.datetime.now(
-                benchmark_ladybug_runtime.UTC
+                benchmark_ladybug_runtime.timezone.utc
             ),
             database_versions={"ladybug": "0.15.3"},
             corpus_path=CORPUS_PATH,

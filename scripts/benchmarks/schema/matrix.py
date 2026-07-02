@@ -11,7 +11,7 @@ import sys
 import threading
 import time
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -185,7 +185,7 @@ def _parse_args() -> argparse.Namespace:
 def _resolve_run_stamp(run_stamp: str | None) -> str:
     if run_stamp:
         return run_stamp
-    return datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
 
 def _build_jobs(
@@ -313,7 +313,7 @@ def _worker_loop(
             return
 
         command = _build_command(args, job=status.job, preset=preset)
-        started_at = datetime.now(UTC)
+        started_at = datetime.now(timezone.utc)
         with status_lock:
             status.status = "running"
             status.worker_id = worker_id
@@ -351,7 +351,7 @@ def _worker_loop(
         except (OSError, subprocess.SubprocessError) as exc:
             error = str(exc)
 
-        completed_at = datetime.now(UTC)
+        completed_at = datetime.now(timezone.utc)
         duration_s = time.perf_counter() - start_time
         with status_lock:
             status.completed_at = completed_at.isoformat()
@@ -382,7 +382,7 @@ def _manifest_payload(
 ) -> dict[str, Any]:
     return {
         "runner": "scripts.benchmarks.schema.matrix",
-        "generated_at": datetime.now(UTC).isoformat(),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
         "run_stamp": run_stamp,
         "scale": preset.name,
         "scale_preset": asdict(preset),

@@ -19,7 +19,7 @@ import subprocess
 import sys
 import time
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Callable
@@ -2355,7 +2355,7 @@ def _build_payload(
         "benchmark_entrypoint": ARCADEDB_BACKEND_NAME,
         "enabled_backends": [ARCADEDB_BACKEND_NAME],
         "generated_at": started_at.isoformat(),
-        "updated_at": datetime.now(UTC).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
         "run_status": status,
         "python_version": platform.python_version(),
         "platform": platform.platform(),
@@ -2568,7 +2568,7 @@ def main() -> int:
     if args.query_worker_server_spec is not None:
         return _run_arcadedb_query_worker_server(args.query_worker_server_spec)
 
-    started_at = datetime.now(UTC)
+    started_at = datetime.now(timezone.utc)
     args_dict = vars(args)
     oltp_timeout_ms = args_dict.get("oltp_timeout_ms", None)
     olap_timeout_ms = args_dict.get("olap_timeout_ms", None)
@@ -2680,7 +2680,7 @@ def main() -> int:
             result=result,
             failure_count=failure_count,
             status=status,
-            completed_at=datetime.now(UTC) if status == "completed" else None,
+            completed_at=datetime.now(timezone.utc) if status == "completed" else None,
         )
         _write_json_atomic(args.output, payload)
 

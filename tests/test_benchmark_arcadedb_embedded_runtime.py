@@ -207,7 +207,7 @@ class BenchmarkArcadeDBEmbeddedRuntimeScriptTests(unittest.TestCase):
 
         payload = build_payload(
             started_at=benchmark_arcadedb_embedded_runtime.datetime.now(
-                benchmark_arcadedb_embedded_runtime.UTC
+                benchmark_arcadedb_embedded_runtime.timezone.utc
             ),
             database_versions={"arcadedb-embedded": "26.4.1.dev3"},
             corpus_path=CORPUS_PATH,

@@ -910,10 +910,7 @@ def _compile_delete_relationship_sql(
                 (
                     f"JOIN {right_type.table_name} AS {statement.right.alias} ON "
                     f"{statement.right.alias}.id = {relationship_alias}."
-                    f"{_edge_endpoint_column(
-                        statement.relationship.direction,
-                        'right',
-                    )}"
+                    f"{_edge_endpoint_column(statement.relationship.direction, 'right')}"
                 ),
             ]
             if distinct_endpoints

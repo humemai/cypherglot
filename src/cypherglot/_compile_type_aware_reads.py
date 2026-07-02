@@ -1090,13 +1090,13 @@ def _compile_type_aware_chain_order_by(
                         )
                     )
                     continue
+                chain_return_expression = _compile_type_aware_chain_return_expression(
+                    matched_return,
+                    alias_specs,
+                    backend=backend,
+                )
                 parts.append(
-                    f"{_compile_type_aware_chain_return_expression(
-                        matched_return,
-                        alias_specs,
-                        backend=backend,
-                    )} "
-                    f"{item.direction.upper()}"
+                    f"{chain_return_expression} {item.direction.upper()}"
                 )
                 continue
 

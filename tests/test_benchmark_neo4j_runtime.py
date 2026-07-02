@@ -80,7 +80,7 @@ class BenchmarkNeo4jRuntimeScriptTests(unittest.TestCase):
 
         payload = build_payload(
             started_at=benchmark_neo4j_runtime.datetime.now(
-                benchmark_neo4j_runtime.UTC
+                benchmark_neo4j_runtime.timezone.utc
             ),
             database_versions={"neo4j": "5.26.0"},
             neo4j_uri="bolt://127.0.0.1:7687",

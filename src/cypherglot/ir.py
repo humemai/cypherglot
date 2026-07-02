@@ -9,8 +9,18 @@ once.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import StrEnum
 from typing import Callable, Literal, TypeVar
+
+try:
+    from enum import StrEnum
+except ImportError:  # Python 3.10: StrEnum landed in 3.11
+    from enum import Enum
+
+    class StrEnum(str, Enum):  # type: ignore[no-redef]
+        """Minimal 3.10 backport matching enum.StrEnum's str behaviour."""
+
+        __str__ = str.__str__
+        __format__ = str.__format__
 
 from ._normalize_support import (
     CypherValue,

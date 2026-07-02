@@ -9,7 +9,7 @@ import platform
 import sqlite3
 import time
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import cypherglot
@@ -1160,7 +1160,7 @@ def _build_payload(
         "benchmark_entrypoint": entrypoint.name,
         "enabled_backends": list(entrypoint.enabled_backends),
         "generated_at": started_at.isoformat(),
-        "updated_at": datetime.now(UTC).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
         "run_status": status,
         "python_version": platform.python_version(),
         "platform": platform.platform(),
@@ -1812,7 +1812,7 @@ def _parse_args(entrypoint: SQLRuntimeBenchmarkEntrypoint) -> argparse.Namespace
 def main(entrypoint: SQLRuntimeBenchmarkEntrypoint = SQLITE_ENTRYPOINT) -> int:
     args = _parse_args(entrypoint)
     apply_cpu_affinity(parse_cpu_affinity(getattr(args, "cpu_affinity", None)))
-    started_at = datetime.now(UTC)
+    started_at = datetime.now(timezone.utc)
     args_dict = vars(args)
     oltp_timeout_ms = args_dict.get("oltp_timeout_ms", None)
     olap_timeout_ms = args_dict.get("olap_timeout_ms", None)
@@ -1871,7 +1871,7 @@ def main(entrypoint: SQLRuntimeBenchmarkEntrypoint = SQLITE_ENTRYPOINT) -> int:
     if args.db_root_dir is not None:
         run_name = (
             f"benchmark-{entrypoint.name}-runtime-"
-            + datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+            + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         )
         db_root_dir = args.db_root_dir / run_name
         db_root_dir.mkdir(parents=True, exist_ok=False)
@@ -1933,7 +1933,7 @@ def main(entrypoint: SQLRuntimeBenchmarkEntrypoint = SQLITE_ENTRYPOINT) -> int:
             db_root_dir=db_root_dir,
             result=result,
             status=status,
-            completed_at=datetime.now(UTC) if status == "completed" else None,
+            completed_at=datetime.now(timezone.utc) if status == "completed" else None,
         )
         _write_json_atomic(args.output, payload)
 
