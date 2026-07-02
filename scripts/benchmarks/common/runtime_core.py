@@ -859,6 +859,29 @@ def _postgresql_error_is_query_timeout(exc: Exception) -> bool:
     return "statement timeout" in error_message or "timed out" in error_message
 
 
+def _error_is_query_timeout(
+    backend: str,
+    exc: Exception,
+    *,
+    timeout_armed: bool,
+) -> bool:
+    """Engine-specific exceptions that really mean 'our timeout fired'.
+
+    PostgreSQL reports a cancelled statement as QUERY_CANCELED. DuckDB swallows
+    the SIGALRM-driven interruption and re-raises it as its own
+    InterruptException ("Query interrupted"), so with a timer armed that is a
+    timeout, not an engine failure.
+    """
+    if backend == "postgresql":
+        return _postgresql_error_is_query_timeout(exc)
+    if backend == "duckdb" and timeout_armed:
+        return (
+            type(exc).__name__ == "InterruptException"
+            or "interrupted" in str(exc).lower()
+        )
+    return False
+
+
 def _run_iteration_with_timeout(
     runner: _BackendRunner,
     query: CorpusQuery,
@@ -917,8 +940,8 @@ def _measure_query(
                 },
             }
         except Exception as exc:
-            if runner.backend == "postgresql" and _postgresql_error_is_query_timeout(
-                exc
+            if _error_is_query_timeout(
+                runner.backend, exc, timeout_armed=timeout_ms is not None
             ):
                 return {
                     "name": query.name,
@@ -983,8 +1006,8 @@ def _measure_query(
                     },
                 }
             except Exception as exc:
-                if runner.backend == "postgresql" and _postgresql_error_is_query_timeout(
-                    exc
+                if _error_is_query_timeout(
+                    runner.backend, exc, timeout_armed=timeout_ms is not None
                 ):
                     return {
                         "name": query.name,
