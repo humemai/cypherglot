@@ -61,6 +61,18 @@ class _RuntimeState:
 _STATE = _RuntimeState()
 
 
+def _server_cpuset_args() -> list[str]:
+    """Optional --cpuset-cpus for the server container (locked CPU budget).
+
+    Read from CYPHERGLOT_BENCHMARK_SERVER_CPUSET_CPUS so the matrix runner can
+    pin every provisioned server to the same cores as the pinned client.
+    """
+    cpuset = os.environ.get("CYPHERGLOT_BENCHMARK_SERVER_CPUSET_CPUS", "").strip()
+    if not cpuset:
+        return []
+    return ["--cpuset-cpus", cpuset]
+
+
 def acquire_clickhouse_benchmark_params() -> ClickHouseConnectionParams:
     if clickhouse_connect is None:
         raise ValueError("clickhouse-connect is not installed")
@@ -158,6 +170,7 @@ def _create_clickhouse_runtime() -> _ManagedClickHouseRuntime:
             container_name,
             "--publish",
             f"127.0.0.1:{port}:8123",
+            *_server_cpuset_args(),
             "--ulimit",
             "nofile=262144:262144",
             "--env",

@@ -554,6 +554,16 @@ def _parse_args() -> argparse.Namespace:
             "recursive-CTE side by side ('<name>+rcte' entries)."
         ),
     )
+    parser.add_argument(
+        "--server-cpuset-cpus",
+        default=None,
+        help=(
+            "Comma-separated CPU ids for every server container "
+            "(Neo4j/AGE via --docker-cpuset-cpus; PostgreSQL/ClickHouse via "
+            "CYPHERGLOT_BENCHMARK_SERVER_CPUSET_CPUS). Defaults to the "
+            "--cpu-affinity ids so client and server share one CPU budget."
+        ),
+    )
     parser.add_argument("--postgres-dsn", help="Optional PostgreSQL DSN override.")
     parser.add_argument(
         "--neo4j-password",
@@ -841,6 +851,13 @@ def _wrap_command_in_container(
     return command
 
 
+def _resolve_server_cpuset(args: argparse.Namespace) -> str | None:
+    explicit = getattr(args, "server_cpuset_cpus", None)
+    if explicit:
+        return explicit
+    return getattr(args, "cpu_affinity", None) or None
+
+
 def _build_command(
     args: argparse.Namespace,
     *,
@@ -924,6 +941,9 @@ def _build_command(
                 str(args.neo4j_docker_startup_timeout),
             ]
         )
+        server_cpuset = _resolve_server_cpuset(args)
+        if server_cpuset:
+            command.extend(["--docker-cpuset-cpus", server_cpuset])
         if args.neo4j_keep_container:
             command.append("--docker-keep-container")
     if job.variant.uses_age_docker:
@@ -938,6 +958,9 @@ def _build_command(
                 str(args.age_docker_startup_timeout),
             ]
         )
+        server_cpuset = _resolve_server_cpuset(args)
+        if server_cpuset:
+            command.extend(["--docker-cpuset-cpus", server_cpuset])
         if args.age_keep_container:
             command.append("--docker-keep-container")
     if (
@@ -952,6 +975,9 @@ def _build_command(
         )
 
     env = os.environ.copy()
+    server_cpuset = _resolve_server_cpuset(args)
+    if server_cpuset:
+        env["CYPHERGLOT_BENCHMARK_SERVER_CPUSET_CPUS"] = server_cpuset
     if job.variant.uses_arcadedb_env:
         env["ARCADEDB_JVM_ARGS"] = _resolve_arcadedb_jvm_args(
             args.scale,

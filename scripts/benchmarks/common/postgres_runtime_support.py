@@ -52,6 +52,18 @@ class _RuntimeState:
 _STATE = _RuntimeState()
 
 
+def _server_cpuset_args() -> list[str]:
+    """Optional --cpuset-cpus for the server container (locked CPU budget).
+
+    Read from CYPHERGLOT_BENCHMARK_SERVER_CPUSET_CPUS so the matrix runner can
+    pin every provisioned server to the same cores as the pinned client.
+    """
+    cpuset = os.environ.get("CYPHERGLOT_BENCHMARK_SERVER_CPUSET_CPUS", "").strip()
+    if not cpuset:
+        return []
+    return ["--cpuset-cpus", cpuset]
+
+
 def acquire_postgresql_benchmark_dsn() -> str:
     if psycopg2 is None:
         raise ValueError("psycopg2 is not installed")
@@ -144,6 +156,7 @@ def _create_postgresql_runtime() -> _ManagedPostgresRuntime:
             container_name,
             "--publish",
             f"127.0.0.1:{port}:5432",
+            *_server_cpuset_args(),
             "--env",
             f"POSTGRES_DB={_POSTGRES_DB}",
             "--env",

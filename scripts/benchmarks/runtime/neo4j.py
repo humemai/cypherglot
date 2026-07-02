@@ -118,6 +118,7 @@ class DockerNeo4jConfig:
     http_port: int
     startup_timeout_s: int
     keep_container: bool
+    cpuset_cpus: str | None = None
 
 
 def _run_command(command: list[str]) -> subprocess.CompletedProcess[str]:
@@ -134,7 +135,7 @@ def _docker_default_container_name() -> str:
 
 
 def _docker_run_command(config: DockerNeo4jConfig, password: str) -> list[str]:
-    return [
+    command = [
         "docker",
         "run",
         "--detach",
@@ -147,8 +148,11 @@ def _docker_run_command(config: DockerNeo4jConfig, password: str) -> list[str]:
         f"{config.http_port}:7474",
         "--env",
         f"NEO4J_AUTH=neo4j/{password}",
-        config.image,
     ]
+    if config.cpuset_cpus:
+        command.extend(["--cpuset-cpus", config.cpuset_cpus])
+    command.append(config.image)
+    return command
 
 
 def _start_docker_neo4j(config: DockerNeo4jConfig, password: str) -> None:
@@ -1387,6 +1391,10 @@ def _parse_args() -> argparse.Namespace:
         help="Seconds to wait for the Docker Neo4j instance to become ready.",
     )
     parser.add_argument(
+        "--docker-cpuset-cpus",
+        help="Optional --cpuset-cpus for the Neo4j container (locked CPU budget).",
+    )
+    parser.add_argument(
         "--docker-keep-container",
         action="store_true",
         help="Keep the Docker Neo4j container running after the benchmark finishes.",
@@ -1488,6 +1496,7 @@ def main() -> int:
             http_port=args.docker_http_port,
             startup_timeout_s=args.docker_startup_timeout,
             keep_container=args.docker_keep_container,
+            cpuset_cpus=args.docker_cpuset_cpus,
         )
         neo4j_uri = f"bolt://127.0.0.1:{docker_config.bolt_port}"
     _progress(
