@@ -439,6 +439,17 @@ def _parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument("--workers", type=int, default=1)
+    parser.add_argument(
+        "--job-timeout-s",
+        type=int,
+        default=None,
+        help=(
+            "Hard wall-clock budget per job, in seconds. A job exceeding it is "
+            "killed and marked failed (its incremental checkpoint JSON survives). "
+            "Backstop for engines whose queries cannot be interrupted in-process "
+            "(e.g. pyturso never yields to the SIGALRM query timeout)."
+        ),
+    )
     parser.add_argument("--repeats", type=int, default=1)
     parser.add_argument("--iterations", type=int, default=1000)
     parser.add_argument("--warmup", type=int, default=10)
@@ -1341,14 +1352,29 @@ def _worker_loop(
                     text=True,
                     bufsize=1,
                 )
-                if process.stdout is not None:
-                    _relay_process_output(
-                        worker_id,
-                        status,
-                        stream=process.stdout,
-                        log_file=log_file,
-                    )
-                completed_returncode = process.wait()
+                job_timeout_s = getattr(args, "job_timeout_s", None)
+                job_timed_out = threading.Event()
+                watchdog: threading.Timer | None = None
+                if job_timeout_s:
+                    def _kill_job() -> None:
+                        job_timed_out.set()
+                        process.kill()
+
+                    watchdog = threading.Timer(job_timeout_s, _kill_job)
+                    watchdog.daemon = True
+                    watchdog.start()
+                try:
+                    if process.stdout is not None:
+                        _relay_process_output(
+                            worker_id,
+                            status,
+                            stream=process.stdout,
+                            log_file=log_file,
+                        )
+                    completed_returncode = process.wait()
+                finally:
+                    if watchdog is not None:
+                        watchdog.cancel()
             status.duration_s = round(time.monotonic() - start, 2)
             status.exit_code = completed_returncode
             status.completed_at = datetime.now(timezone.utc).isoformat()
@@ -1362,7 +1388,15 @@ def _worker_loop(
                 )
             else:
                 status.status = "failed"
-                status.error = f"process exited with code {completed_returncode}"
+                if job_timed_out.is_set():
+                    status.error = (
+                        f"job exceeded --job-timeout-s ({job_timeout_s}s) and was "
+                        "killed; partial results remain in the checkpoint JSON"
+                    )
+                else:
+                    status.error = (
+                        f"process exited with code {completed_returncode}"
+                    )
                 print(
                     f"[worker {worker_id}] failed {status.job.slug} "
                     f"with exit code {completed_returncode} | "
