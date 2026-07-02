@@ -11,6 +11,7 @@ import argparse
 import json
 import os
 import platform
+import re
 import signal
 import sys
 import threading
@@ -150,6 +151,9 @@ class CorpusQuery:
     backends: tuple[str, ...]
     mode: str = "statement"
     mutation: bool = False
+    # SQL-target lowering for variable-length patterns; ignored by native
+    # engines, which execute the Cypher text directly.
+    variable_length_strategy: str = "unroll"
 
 
 class BenchmarkQueryTimeoutError(TimeoutError):
@@ -523,9 +527,81 @@ def _render_corpus_queries(
             backends=query.backends,
             mode=query.mode,
             mutation=query.mutation,
+            variable_length_strategy=query.variable_length_strategy,
         )
         for query in queries
     ]
+
+
+# Matches a variable-length relationship pattern such as ``[:KNOWS*1..3]``.
+_VARIABLE_LENGTH_PATTERN = re.compile(r"\[[^\]]*\*")
+
+VARIABLE_LENGTH_STRATEGY_CHOICES = ("unroll", "recursive_cte", "both")
+RECURSIVE_CTE_NAME_SUFFIX = "+rcte"
+
+
+def _query_has_variable_length(query: CorpusQuery) -> bool:
+    return _VARIABLE_LENGTH_PATTERN.search(query.query) is not None
+
+
+def _with_variable_length_strategy(
+    query: CorpusQuery,
+    *,
+    name: str,
+    strategy: str,
+) -> CorpusQuery:
+    return CorpusQuery(
+        name=name,
+        workload=query.workload,
+        category=query.category,
+        query=query.query,
+        backends=query.backends,
+        mode=query.mode,
+        mutation=query.mutation,
+        variable_length_strategy=strategy,
+    )
+
+
+def _expand_variable_length_strategies(
+    queries: list[CorpusQuery],
+    strategy_mode: str,
+) -> list[CorpusQuery]:
+    """Apply the requested variable-length lowering strategy to the corpus.
+
+    ``unroll`` leaves the corpus unchanged (the default lowering).
+    ``recursive_cte`` switches every variable-length query to the recursive-CTE
+    lowering. ``both`` measures the two lowerings side by side: each
+    variable-length query additionally runs as ``<name>+rcte`` under identical
+    conditions, which is the branch-unroll vs recursive-CTE ablation.
+    """
+    if strategy_mode == "unroll":
+        return list(queries)
+    if strategy_mode == "recursive_cte":
+        return [
+            _with_variable_length_strategy(
+                query, name=query.name, strategy="recursive_cte"
+            )
+            if _query_has_variable_length(query)
+            else query
+            for query in queries
+        ]
+    if strategy_mode == "both":
+        expanded: list[CorpusQuery] = []
+        for query in queries:
+            expanded.append(query)
+            if _query_has_variable_length(query):
+                expanded.append(
+                    _with_variable_length_strategy(
+                        query,
+                        name=f"{query.name}{RECURSIVE_CTE_NAME_SUFFIX}",
+                        strategy="recursive_cte",
+                    )
+                )
+        return expanded
+    raise ValueError(
+        f"Unsupported variable-length strategy mode {strategy_mode!r}; "
+        f"expected one of {VARIABLE_LENGTH_STRATEGY_CHOICES}."
+    )
 
 
 def _select_queries(

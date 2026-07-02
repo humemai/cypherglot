@@ -241,6 +241,12 @@ SCALE_PRESETS: dict[str, ScalePreset] = {
     ),
 }
 
+# Backends reached through the Cypher->SQL compiler; only these understand
+# --variable-length-strategy (native engines run the Cypher text directly).
+SQL_COMPILE_TARGET_BACKENDS = frozenset(
+    {"sqlite", "turso", "duckdb", "postgresql", "clickhouse"}
+)
+
 VARIANTS: tuple[VariantSpec, ...] = (
     VariantSpec(
         name="sqlite-indexed",
@@ -536,6 +542,16 @@ def _parse_args() -> argparse.Namespace:
             "Comma-separated CPU ids to pin every job's benchmark process to "
             "(e.g. '0,2,4,6,8,10' -- the locked equal-CPU budget). Forwarded to "
             "each job; pair with a matching server-container --cpuset-cpus."
+        ),
+    )
+    parser.add_argument(
+        "--variable-length-strategy",
+        choices=("unroll", "recursive_cte", "both"),
+        default="unroll",
+        help=(
+            "SQL lowering for variable-length patterns, forwarded to the SQL "
+            "compile-target jobs; 'both' measures branch-unroll and "
+            "recursive-CTE side by side ('<name>+rcte' entries)."
         ),
     )
     parser.add_argument("--postgres-dsn", help="Optional PostgreSQL DSN override.")
@@ -855,6 +871,15 @@ def _build_command(
             command.extend(["--ldbc-snb-data-dir", str(args.ldbc_snb_data_dir)])
     if getattr(args, "cpu_affinity", None):
         command.extend(["--cpu-affinity", args.cpu_affinity])
+    if (
+        getattr(args, "variable_length_strategy", "unroll") != "unroll"
+        and job.variant.backend in SQL_COMPILE_TARGET_BACKENDS
+    ):
+        # Native engines execute the Cypher directly; the lowering strategy
+        # only exists for the SQL compile targets.
+        command.extend(
+            ["--variable-length-strategy", args.variable_length_strategy]
+        )
     if args.oltp_iterations is not None:
         command.extend(["--oltp-iterations", str(args.oltp_iterations)])
     if args.oltp_warmup is not None:

@@ -132,6 +132,16 @@ def parse_sql_runtime_args(
     parser.add_argument("--edge-extra-numeric-property-count", type=int, default=3)
     parser.add_argument("--edge-extra-boolean-property-count", type=int, default=1)
     parser.add_argument("--variable-hop-max", type=int, default=2)
+    parser.add_argument(
+        "--variable-length-strategy",
+        choices=("unroll", "recursive_cte", "both"),
+        default="unroll",
+        help=(
+            "SQL lowering for variable-length patterns: branch-unroll (default), "
+            "recursive CTE, or 'both' to measure the two side by side (each "
+            "variable-length query additionally runs as '<name>+rcte')."
+        ),
+    )
     parser.add_argument("--ingest-batch-size", type=int, default=5_000)
     parser.add_argument(
         "--topology",

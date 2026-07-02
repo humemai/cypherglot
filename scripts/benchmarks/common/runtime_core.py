@@ -27,6 +27,7 @@ from scripts.benchmarks.common.shared import (
     _measure_ns,
     _progress,
     _progress_iteration,
+    _expand_variable_length_strategies,
     _render_corpus_queries,
     _select_queries,
     _summarize,
@@ -581,6 +582,7 @@ class _BackendRunner:
                         query.query,
                         dialect="duckdb",
                         schema_context=self.schema_context,
+                        variable_length_strategy=query.variable_length_strategy,
                     ),
                 )
             if self.backend == "postgresql":
@@ -591,6 +593,7 @@ class _BackendRunner:
                         dialect="postgres",
                         backend="postgresql",
                         schema_context=self.schema_context,
+                        variable_length_strategy=query.variable_length_strategy,
                     ),
                 )
             if self.backend == "turso":
@@ -600,6 +603,7 @@ class _BackendRunner:
                         query.query,
                         backend="turso",
                         schema_context=self.schema_context,
+                        variable_length_strategy=query.variable_length_strategy,
                     ),
                 )
             if self.backend == "clickhouse":
@@ -609,6 +613,7 @@ class _BackendRunner:
                         query.query,
                         backend="clickhouse",
                         schema_context=self.schema_context,
+                        variable_length_strategy=query.variable_length_strategy,
                     ),
                 )
             return PreparedArtifact(
@@ -617,6 +622,7 @@ class _BackendRunner:
                     query.query,
                     backend="sqlite",
                     schema_context=self.schema_context,
+                    variable_length_strategy=query.variable_length_strategy,
                 ),
             )
         if self.backend == "postgresql":
@@ -1374,6 +1380,7 @@ def _benchmark_result(
     oltp_timeout_ms: float | None = None,
     olap_timeout_ms: float | None = None,
     topology: Topology | None = None,
+    variable_length_strategy: str = "unroll",
     progress_callback: RuntimeProgressCallback | None = None,
 ) -> dict[str, object]:
     active_topology = topology if topology is not None else SyntheticTopology()
@@ -1381,7 +1388,10 @@ def _benchmark_result(
     schema_context = cypherglot.CompilerSchemaContext.type_aware(graph_schema)
 
     token_map = active_topology.token_map(scale, graph_schema, edge_plans)
-    rendered_queries = _render_corpus_queries(queries, token_map)
+    rendered_queries = _expand_variable_length_strategies(
+        _render_corpus_queries(queries, token_map),
+        variable_length_strategy,
+    )
 
     oltp_queries = [query for query in rendered_queries if query.workload == "oltp"]
     olap_queries = [query for query in rendered_queries if query.workload == "olap"]
@@ -1982,6 +1992,9 @@ def main(entrypoint: SQLRuntimeBenchmarkEntrypoint = SQLITE_ENTRYPOINT) -> int:
             oltp_timeout_ms=oltp_timeout_ms,
             olap_timeout_ms=olap_timeout_ms,
             topology=topology,
+            variable_length_strategy=getattr(
+                args, "variable_length_strategy", "unroll"
+            ),
             progress_callback=lambda partial_result: write_checkpoint(
                 partial_result,
                 status="running",
