@@ -156,6 +156,12 @@ def _create_postgresql_runtime() -> _ManagedPostgresRuntime:
             container_name,
             "--publish",
             f"127.0.0.1:{port}:5432",
+            # Docker's default /dev/shm is 64 MB; PostgreSQL parallel workers
+            # allocate dynamic shared memory there and fail on analytic joins
+            # ("could not resize shared memory segment: No space left on
+            # device"), so give the server a real allowance.
+            "--shm-size",
+            os.environ.get("CYPHERGLOT_BENCHMARK_POSTGRES_SHM_SIZE", "2g"),
             *_server_cpuset_args(),
             "--env",
             f"POSTGRES_DB={_POSTGRES_DB}",

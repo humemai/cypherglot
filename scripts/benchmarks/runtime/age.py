@@ -408,6 +408,10 @@ def _docker_run_command(config: DockerAgeConfig) -> list[str]:
         f"POSTGRES_USER={config.user}",
         "--env",
         f"POSTGRES_PASSWORD={config.password}",
+        # AGE runs inside PostgreSQL: parallel workers allocate dynamic shared
+        # memory in /dev/shm, and Docker's 64 MB default fails analytic joins.
+        "--shm-size",
+        os.environ.get("CYPHERGLOT_BENCHMARK_POSTGRES_SHM_SIZE", "2g"),
     ]
     if config.cpuset_cpus:
         command.extend(["--cpuset-cpus", config.cpuset_cpus])
