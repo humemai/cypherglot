@@ -740,16 +740,31 @@ def _run_iteration(
         return _run_postgresql_iteration(runner, query, timeout_ms=timeout_ms)
 
     reset_ns = 0
-    rss_stages_mib = {"before_compile": runner.capture_rss_snapshot()}
+    rss_stages_mib = {
+        "before_compile": getattr(
+            runner,
+            "capture_lightweight_rss_snapshot",
+            runner.capture_rss_snapshot,
+        )()
+    }
     if query.mutation and runner.backend == "sqlite":
         runner.sqlite.execute(f"SAVEPOINT {SQLITE_SAVEPOINT}")
     if query.mutation and runner.backend == "turso":
         runner.turso.execute(f"SAVEPOINT {SQLITE_SAVEPOINT}")
     if query.mutation and runner.backend == "duckdb":
         runner.duck.execute("BEGIN TRANSACTION")
+    # Per-iteration RSS uses the lightweight client-only snapshot: the full
+    # snapshot shells out to `docker stats` for server engines (~2 s each),
+    # which multiplies wall-clock ~30x without changing any measured latency.
+    # Server RSS is still sampled at the suite checkpoints.
+    capture_iteration_rss = getattr(
+        runner,
+        "capture_lightweight_rss_snapshot",
+        runner.capture_rss_snapshot,
+    )
     try:
         artifact, compile_ns = _measure_ns(lambda: runner.compile_query(query))
-        rss_stages_mib["after_compile"] = runner.capture_rss_snapshot()
+        rss_stages_mib["after_compile"] = capture_iteration_rss()
         _, execute_ns = _measure_ns(
             lambda: _execute_runner_query(
                 runner,
@@ -758,7 +773,7 @@ def _run_iteration(
             )
         )
         end_to_end_ns = compile_ns + execute_ns
-        rss_stages_mib["after_execute"] = runner.capture_rss_snapshot()
+        rss_stages_mib["after_execute"] = capture_iteration_rss()
     finally:
         if query.mutation and runner.backend == "sqlite":
             _, reset_ns = _measure_ns(
@@ -770,7 +785,7 @@ def _run_iteration(
             )
         if query.mutation and runner.backend == "duckdb":
             _, reset_ns = _measure_ns(lambda: runner.duck.execute("ROLLBACK"))
-        rss_stages_mib["after_reset"] = runner.capture_rss_snapshot()
+        rss_stages_mib["after_reset"] = capture_iteration_rss()
     return {
         "compile_ns": compile_ns,
         "execute_ns": execute_ns,
@@ -1088,17 +1103,37 @@ def _run_backend_suite(
                 f"{query.name}"
             )
             _progress(query_progress_label)
-            query_results.append(
-                _measure_query(
-                    runner,
-                    query,
-                    iterations=iterations,
-                    warmup=warmup,
-                    progress_label=query_progress_label,
-                    iteration_progress=iteration_progress,
-                    timeout_ms=timeout_ms,
+            try:
+                query_results.append(
+                    _measure_query(
+                        runner,
+                        query,
+                        iterations=iterations,
+                        warmup=warmup,
+                        progress_label=query_progress_label,
+                        iteration_progress=iteration_progress,
+                        timeout_ms=timeout_ms,
+                    )
                 )
-            )
+            except Exception as error:  # noqa: BLE001 - a broken query must not
+                # kill the whole suite (e.g. an engine rejecting a lowering it
+                # does not support); record it as data and keep measuring.
+                # Transaction state is already rolled back by the iteration's
+                # own try/finally before the exception reaches here.
+                _progress(f"{query_progress_label}: FAILED ({error})")
+                query_results.append(
+                    {
+                        "name": query.name,
+                        "workload": query.workload,
+                        "category": query.category,
+                        "backend": runner.backend,
+                        "index_mode": runner.index_mode,
+                        "mode": query.mode,
+                        "mutation": query.mutation,
+                        "status": "failed",
+                        "error": f"{type(error).__name__}: {error}",
+                    }
+                )
         runner.rss_snapshots_mib["suite_complete"] = runner.capture_rss_snapshot()
         _progress(f"{suite_progress_name}: suite complete")
         pass_count = sum(
@@ -1106,6 +1141,9 @@ def _run_backend_suite(
         )
         timeout_count = sum(
             result.get("status") == "timed_out" for result in query_results
+        )
+        fail_count = sum(
+            result.get("status") == "failed" for result in query_results
         )
         return {
             "backend": backend,
@@ -1115,7 +1153,7 @@ def _run_backend_suite(
             "query_count": len(queries),
             "pass_count": pass_count,
             "timeout_count": timeout_count,
-            "fail_count": 0,
+            "fail_count": fail_count,
             "setup": {
                 f"{metric[:-3]}_ms": value / 1_000_000.0
                 for metric, value in runner.setup_metrics.items()

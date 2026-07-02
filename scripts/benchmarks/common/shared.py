@@ -538,6 +538,13 @@ _VARIABLE_LENGTH_PATTERN = re.compile(r"\[[^\]]*\*")
 
 VARIABLE_LENGTH_STRATEGY_CHOICES = ("unroll", "recursive_cte", "both")
 RECURSIVE_CTE_NAME_SUFFIX = "+rcte"
+# Engines whose SQL dialect executes WITH RECURSIVE. Turso (libSQL rewrite)
+# rejects it at parse time as of 0.6 ("Recursive CTEs are not yet supported"),
+# so the ablation covers the remaining SQL targets; noted in the paper's
+# capability discussion. ClickHouse supports it since 24.4 (verified on 24.8).
+RECURSIVE_CTE_BACKENDS = frozenset(
+    {"sqlite", "duckdb", "postgresql", "clickhouse"}
+)
 
 
 def _query_has_variable_length(query: CorpusQuery) -> bool:
@@ -550,12 +557,17 @@ def _with_variable_length_strategy(
     name: str,
     strategy: str,
 ) -> CorpusQuery:
+    backends = query.backends
+    if strategy == "recursive_cte":
+        backends = tuple(
+            backend for backend in backends if backend in RECURSIVE_CTE_BACKENDS
+        )
     return CorpusQuery(
         name=name,
         workload=query.workload,
         category=query.category,
         query=query.query,
-        backends=query.backends,
+        backends=backends,
         mode=query.mode,
         mutation=query.mutation,
         variable_length_strategy=strategy,

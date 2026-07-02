@@ -1522,3 +1522,72 @@ class BenchmarkSQLRuntimeCoreTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SuiteFailureRecordingTests(unittest.TestCase):
+    def test_failed_query_is_recorded_and_suite_continues(self) -> None:
+        """A query that raises must record status=failed, not kill the suite."""
+        run_backend_suite = getattr(benchmark_sql_runtime_core, "_run_backend_suite")
+        build_graph_schema = getattr(benchmark_sql_runtime_core, "_build_graph_schema")
+        prepare_fixture = getattr(
+            benchmark_sql_runtime_core,
+            "_prepare_generated_graph_fixture",
+        )
+        corpus_query = getattr(benchmark_sql_runtime_core, "CorpusQuery")
+
+        graph_schema, edge_plans = build_graph_schema(SMALL_SCALE)
+        schema_context = cypherglot.CompilerSchemaContext.type_aware(graph_schema)
+        fixture = prepare_fixture(
+            scale=SMALL_SCALE,
+            graph_schema=graph_schema,
+            edge_plans=edge_plans,
+            index_mode="indexed",
+        )
+        first_node_type = graph_schema.node_types[0].name
+        good = corpus_query(
+            name="good",
+            workload="olap",
+            category="scan",
+            query=f"MATCH (n:{first_node_type}) RETURN count(*) AS total",
+            backends=("sqlite",),
+        )
+        bad = corpus_query(
+            name="bad",
+            workload="olap",
+            category="scan",
+            query=f"MATCH (n:{first_node_type}) RETURN count(*) AS total",
+            backends=("sqlite",),
+        )
+
+        original_measure = getattr(benchmark_sql_runtime_core, "_measure_query")
+
+        def exploding_measure(runner, query, **kwargs):
+            if query.name == "bad":
+                raise RuntimeError("engine rejected the lowering")
+            return original_measure(runner, query, **kwargs)
+
+        try:
+            with mock.patch.object(
+                benchmark_sql_runtime_core,
+                "_measure_query",
+                side_effect=exploding_measure,
+            ), mock.patch.object(benchmark_sql_runtime_core, "_progress"):
+                suite = run_backend_suite(
+                    "sqlite",
+                    [bad, good],
+                    workload="olap",
+                    iterations=1,
+                    warmup=0,
+                    graph_schema=graph_schema,
+                    schema_context=schema_context,
+                    sqlite_source=fixture,
+                )
+        finally:
+            fixture.close()
+
+        self.assertEqual(suite["fail_count"], 1)
+        self.assertEqual(suite["pass_count"], 1)
+        statuses = {q["name"]: q["status"] for q in suite["queries"]}
+        self.assertEqual(statuses, {"bad": "failed", "good": "passed"})
+        failed_entry = next(q for q in suite["queries"] if q["name"] == "bad")
+        self.assertIn("engine rejected the lowering", failed_entry["error"])

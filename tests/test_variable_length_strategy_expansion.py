@@ -73,6 +73,28 @@ class StrategyExpansionTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             _expand_variable_length_strategies([_PLAIN], "nope")
 
+    def test_rcte_excludes_backends_without_recursive_cte(self) -> None:
+        # Turso rejects WITH RECURSIVE at parse time, so the rcte twin (and the
+        # whole-corpus recursive_cte mode) must drop it from the backend list.
+        query = CorpusQuery(
+            name="reach",
+            workload="olap",
+            category="variable-length",
+            query="MATCH (a:T {name: 'x'})-[:E*1..3]->(b:T) RETURN b.name AS n",
+            backends=("sqlite", "turso", "duckdb", "postgresql", "clickhouse"),
+        )
+        expanded = _expand_variable_length_strategies([query], "both")
+        self.assertEqual(expanded[0].backends, query.backends)  # unroll untouched
+        self.assertEqual(
+            expanded[1].backends,
+            ("sqlite", "duckdb", "postgresql", "clickhouse"),
+        )
+        switched = _expand_variable_length_strategies([query], "recursive_cte")
+        self.assertEqual(
+            switched[0].backends,
+            ("sqlite", "duckdb", "postgresql", "clickhouse"),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
