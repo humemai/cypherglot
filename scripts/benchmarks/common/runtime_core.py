@@ -7,6 +7,7 @@ import gc
 import json
 import platform
 import sqlite3
+import threading
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -727,9 +728,23 @@ class _BackendRunner:
                     kill_client=getattr(self, "clickhouse_kill", None),
                 )
                 return
-            cursor = self.duck.execute(artifact.compiled)
-            if cursor.description is not None:
-                cursor.fetchall()
+            # SIGALRM cannot land while DuckDB holds the GIL in a long plan
+            # (a deep recursive CTE ran 38+ minutes past its budget), so arm
+            # DuckDB's own thread-safe interrupt as the enforcement layer.
+            duck_watchdog: threading.Timer | None = None
+            if timeout_ms is not None:
+                duck_watchdog = threading.Timer(
+                    timeout_ms / 1000.0 + 2.0, self.duck.interrupt
+                )
+                duck_watchdog.daemon = True
+                duck_watchdog.start()
+            try:
+                cursor = self.duck.execute(artifact.compiled)
+                if cursor.description is not None:
+                    cursor.fetchall()
+            finally:
+                if duck_watchdog is not None:
+                    duck_watchdog.cancel()
             return
         if self.backend == "postgresql":
             _execute_postgresql_program(
