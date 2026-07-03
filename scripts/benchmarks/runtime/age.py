@@ -944,7 +944,11 @@ def _bulk_load_age_graph(
     load_labels_from_file / load_edges_from_file per label.
     """
     _progress(f"{progress_label}: bulk load via load_*_from_file")
-    with tempfile.TemporaryDirectory(prefix="age-load-") as tmp:
+    # Stage next to the fixture CSVs (disk-backed): the rewritten loader CSVs
+    # are roughly fixture-sized, which can exceed /tmp tmpfs quotas.
+    with tempfile.TemporaryDirectory(
+        prefix="age-load-", dir=fixture.csv_dir.parent
+    ) as tmp:
         out_dir = Path(tmp) / "cgload"
         _write_age_load_csvs(fixture, graph_schema, out_dir)
         container = docker_config.container_name
