@@ -352,16 +352,17 @@ print(rendered.steps[0])
 
 CypherGlot supports Python 3.10 and newer.
 
-Install from PyPI:
+Add it to a project from PyPI:
 
 ```bash
-uv pip install cypherglot
+uv add cypherglot
 ```
 
-Install from source in editable mode:
+Or work from a source checkout (creates the environment and installs the
+project in editable mode):
 
 ```bash
-uv pip install -e .
+uv sync
 ```
 
 ## Development

@@ -663,7 +663,7 @@ def _create_query_indexes(session: Any, graph_schema: cypherglot.GraphSchema) ->
 def _create_driver(uri: str, user: str, password: str) -> Any:
     if GraphDatabase is None:
         raise ValueError(
-            "neo4j is not installed. Install it with `uv pip install neo4j`."
+            "neo4j is not installed. Install it with `uv sync --group test`."
         )
     driver = GraphDatabase.driver(uri, auth=(user, password))
     driver.verify_connectivity()

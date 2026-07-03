@@ -129,7 +129,7 @@ def _open_ladybug(db_path: Path) -> tuple[Any, Any]:
     connection_ctor = getattr(ladybug, "Connection", None)
     if not callable(database_ctor) or not callable(connection_ctor):
         raise ValueError(
-            "ladybug is not installed. Install it with `uv pip install ladybug`."
+            "ladybug is not installed. Install it with `uv sync --group test`."
         )
     db_path_str = db_path.as_posix()
     database = database_ctor(
@@ -1106,7 +1106,7 @@ def main() -> int:
         args.db_root_dir.mkdir(parents=True, exist_ok=True)
     if not _ladybug_available():
         raise ValueError(
-            "ladybug is not installed. Install it with `uv pip install ladybug`."
+            "ladybug is not installed. Install it with `uv sync --group test`."
         )
 
     scale = RuntimeScale(

@@ -1,15 +1,16 @@
 # Installation
 
-Install `cypherglot` from PyPI:
+Add `cypherglot` to a project from PyPI:
 
 ```bash
-uv pip install cypherglot
+uv add cypherglot
 ```
 
-Install from source in editable mode:
+Or work from a source checkout (creates the environment and installs the
+project in editable mode):
 
 ```bash
-uv pip install -e .
+uv sync
 ```
 
 For local development with docs and test tooling:

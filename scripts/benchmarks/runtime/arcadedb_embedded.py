@@ -194,8 +194,8 @@ def _open_arcadedb(db_path: Path) -> Any:
     ):
         raise ValueError(
             "arcadedb-embedded is not installed. Install it with "
-            "`uv pip install arcadedb-embedded` or a dev build such as "
-            "`uv pip install arcadedb-embedded==26.4.1.dev3`."
+            "`uv sync --group test` or a dev build such as "
+            "`uv add arcadedb-embedded==26.4.1.dev3`."
         )
     db_path_str = db_path.as_posix()
     if database_exists(db_path_str):
@@ -2609,8 +2609,8 @@ def main() -> int:
     if not _arcadedb_available():
         raise ValueError(
             "arcadedb-embedded is not installed. Install it with "
-            "`uv pip install arcadedb-embedded` or a dev build such as "
-            "`uv pip install arcadedb-embedded==26.4.1.dev3`."
+            "`uv sync --group test` or a dev build such as "
+            "`uv add arcadedb-embedded==26.4.1.dev3`."
         )
 
     scale = RuntimeScale(

@@ -493,7 +493,7 @@ def _connect_age(dsn: str) -> Any:
     if psycopg2 is None:
         raise ValueError(
             "psycopg2 is not installed. Install it with "
-            "`uv pip install psycopg2-binary`."
+            "`uv sync --group test`."
         )
     conn = psycopg2.connect(dsn)
     conn.autocommit = False
@@ -1929,7 +1929,7 @@ def main() -> int:
     if psycopg2 is None:
         raise ValueError(
             "psycopg2 is not installed. Install it with "
-            "`uv pip install psycopg2-binary`."
+            "`uv sync --group test`."
         )
 
     scale = RuntimeScale(
