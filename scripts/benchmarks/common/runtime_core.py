@@ -1927,6 +1927,13 @@ def _print_suite(name: str, suite: dict[str, object]) -> None:
                 f"timeout={timeout['timeout_ms']:.2f} ms)"
             )
             continue
+        if query_result.get("status") == "failed":
+            print(
+                "    - "
+                f"{query_result['name']} [{query_result['category']}]: "
+                f"FAILED ({query_result.get('error', 'unknown error')})"
+            )
+            continue
         print(
             "    - "
             f"{query_result['name']} [{query_result['category']}]: "
