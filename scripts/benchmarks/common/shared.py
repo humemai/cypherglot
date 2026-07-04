@@ -598,9 +598,14 @@ def _expand_variable_length_strategies(
             for query in queries
         ]
     if strategy_mode == "both":
+        # rcte twins run in corpus position; the unroll originals are
+        # deferred to the very end. The unrolled giant-join form is where
+        # uninterruptible wedges live (e.g. DuckDB on the SNB rollups), and
+        # a wedge kills the job: everything scheduled after it is lost, so
+        # every interruptible query must run first.
         expanded: list[CorpusQuery] = []
+        deferred_unrolls: list[CorpusQuery] = []
         for query in queries:
-            expanded.append(query)
             if _query_has_variable_length(query):
                 expanded.append(
                     _with_variable_length_strategy(
@@ -609,7 +614,10 @@ def _expand_variable_length_strategies(
                         strategy="recursive_cte",
                     )
                 )
-        return expanded
+                deferred_unrolls.append(query)
+            else:
+                expanded.append(query)
+        return expanded + deferred_unrolls
     raise ValueError(
         f"Unsupported variable-length strategy mode {strategy_mode!r}; "
         f"expected one of {VARIABLE_LENGTH_STRATEGY_CHOICES}."

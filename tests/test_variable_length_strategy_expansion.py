@@ -56,12 +56,14 @@ class StrategyExpansionTests(unittest.TestCase):
         self.assertEqual(expanded[1].variable_length_strategy, "recursive_cte")
 
     def test_both_duplicates_variable_length_with_suffix(self) -> None:
+        # rcte twin runs in corpus position; the unroll original is deferred
+        # to the end (wedge-prone giant joins must never block other queries).
         expanded = _expand_variable_length_strategies([_PLAIN, _VARIABLE], "both")
         self.assertEqual(
             [q.name for q in expanded],
-            ["plain", "reach", f"reach{RECURSIVE_CTE_NAME_SUFFIX}"],
+            ["plain", f"reach{RECURSIVE_CTE_NAME_SUFFIX}", "reach"],
         )
-        duplicate = expanded[2]
+        duplicate = expanded[1]
         self.assertEqual(duplicate.variable_length_strategy, "recursive_cte")
         # Everything except name and strategy stays identical.
         self.assertEqual(duplicate.query, _VARIABLE.query)
@@ -84,9 +86,9 @@ class StrategyExpansionTests(unittest.TestCase):
             backends=("sqlite", "turso", "duckdb", "postgresql", "clickhouse"),
         )
         expanded = _expand_variable_length_strategies([query], "both")
-        self.assertEqual(expanded[0].backends, query.backends)  # unroll untouched
+        self.assertEqual(expanded[1].backends, query.backends)  # unroll untouched
         self.assertEqual(
-            expanded[1].backends,
+            expanded[0].backends,
             ("sqlite", "duckdb", "postgresql", "clickhouse"),
         )
         switched = _expand_variable_length_strategies([query], "recursive_cte")
