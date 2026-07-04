@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from scripts.benchmarks.runtime.age import DEFAULT_AGE_IMAGE
 from scripts.benchmarks.common.shared import RuntimeScale
 
 
@@ -657,7 +658,7 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--age-docker-image",
-        default="apache/age",
+        default=DEFAULT_AGE_IMAGE,
         help="Docker image to use for Apache AGE jobs.",
     )
     parser.add_argument("--age-docker-startup-timeout", type=int, default=120)

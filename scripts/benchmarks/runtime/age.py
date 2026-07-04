@@ -317,7 +317,9 @@ DEFAULT_RUNTIME_RESULTS_DIR = (
 DEFAULT_OUTPUT_PATH = DEFAULT_RUNTIME_RESULTS_DIR / "age_runtime_benchmark.json"
 
 DEFAULT_GRAPH_NAME = "cypherglot_benchmark"
-DEFAULT_AGE_IMAGE = "apache/age"
+# Digest-pinned: the "latest" tag floats and would silently change the
+# measured PostgreSQL+AGE build between runs.
+DEFAULT_AGE_IMAGE = "apache/age@sha256:4241e2d8bb86a6b2ea44e9ad06c73856e12b209de295124603a599dd7feb70eb"
 DEFAULT_AGE_DB = "cypherglot_age"
 DEFAULT_AGE_USER = "cypherglot"
 DEFAULT_AGE_PASSWORD = "cypherglot"
