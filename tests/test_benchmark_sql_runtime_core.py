@@ -988,14 +988,30 @@ class BenchmarkSQLRuntimeCoreTests(unittest.TestCase):
             ),
         )
 
+        # Per-query partial publishes interleave with the per-suite ones, so
+        # assert semantics rather than positions: the stream starts empty,
+        # contains partial suites mid-flight, and ends with all four suites
+        # finalized (partial=False).
         self.assertGreaterEqual(len(snapshots), 5)
         self.assertEqual(snapshots[0]["workloads"], {})
-        self.assertIn("oltp", snapshots[1]["workloads"])
-        self.assertIn("sqlite_indexed", snapshots[1]["workloads"]["oltp"])
-        self.assertIn("sqlite_unindexed", snapshots[2]["workloads"]["oltp"])
-        self.assertIn("olap", snapshots[3]["workloads"])
-        self.assertIn("sqlite_indexed", snapshots[3]["workloads"]["olap"])
-        self.assertIn("sqlite_unindexed", snapshots[4]["workloads"]["olap"])
+        partial_seen = any(
+            suite.get("partial") is True
+            for snapshot in snapshots
+            for workload in snapshot["workloads"].values()
+            if isinstance(workload, dict)
+            for suite in workload.values()
+            if isinstance(suite, dict)
+        )
+        self.assertTrue(partial_seen)
+        final = snapshots[-1]["workloads"]
+        for workload, key in (
+            ("oltp", "sqlite_indexed"),
+            ("oltp", "sqlite_unindexed"),
+            ("olap", "sqlite_indexed"),
+            ("olap", "sqlite_unindexed"),
+        ):
+            self.assertIn(key, final[workload])
+            self.assertFalse(final[workload][key]["partial"])
         self.assertEqual(snapshots[-1], result)
 
     def test_benchmark_result_reports_postgresql_suites_when_configured(self) -> None:

@@ -1153,6 +1153,7 @@ def _run_backend_suite(
     db_root_dir: Path | None = None,
     iteration_progress: bool = False,
     timeout_ms: float | None = None,
+    on_query_complete: "Callable[[str, str, dict[str, object]], None] | None" = None,
 ) -> dict[str, object]:
     backend_index_mode = sqlite_source.index_mode
     suite_progress_name = f"{workload}/{backend}_{backend_index_mode}"
@@ -1177,6 +1178,50 @@ def _run_backend_suite(
             f"({iterations} iterations, {warmup} warmup)"
         )
         query_results = []
+
+        def _suite_snapshot(*, partial: bool) -> dict[str, object]:
+            # Pure function of the results so far. Published after every
+            # query (partial=True) so an uninterruptible wedge later in the
+            # suite (the job watchdog SIGKILLs the process) loses only the
+            # wedged query, not the whole suite's measurements.
+            return {
+                "backend": backend,
+                "index_mode": runner.index_mode,
+                "iterations": iterations,
+                "warmup": warmup,
+                "query_count": len(queries),
+                "partial": partial,
+                "pass_count": sum(
+                    r.get("status", "passed") == "passed" for r in query_results
+                ),
+                "timeout_count": sum(
+                    r.get("status") == "timed_out" for r in query_results
+                ),
+                "fail_count": sum(
+                    r.get("status") == "failed" for r in query_results
+                ),
+                "setup": {
+                    f"{metric[:-3]}_ms": value / 1_000_000.0
+                    for metric, value in runner.setup_metrics.items()
+                },
+                "row_counts": runner.row_counts,
+                "rss_snapshots_mib": runner.rss_snapshots_mib,
+                "storage": {
+                    "db_size_mib": runner.db_size_mib,
+                    "wal_size_mib": runner.wal_size_mib,
+                },
+                "db_path": (
+                    str(runner.artifact_path)
+                    if runner.artifact_path is not None
+                    else None
+                ),
+                "compile": _pool_summaries(query_results, "compile"),
+                "execute": _pool_summaries(query_results, "execute"),
+                "end_to_end": _pool_summaries(query_results, "end_to_end"),
+                "reset": _pool_summaries(query_results, "reset"),
+                "queries": query_results,
+            }
+
         for query_index, query in enumerate(queries, start=1):
             query_progress_label = (
                 f"{suite_progress_name}: query {query_index}/{len(queries)} "
@@ -1214,45 +1259,15 @@ def _run_backend_suite(
                         "error": f"{type(error).__name__}: {error}",
                     }
                 )
+            if on_query_complete is not None:
+                on_query_complete(
+                    workload,
+                    f"{backend}_{backend_index_mode}",
+                    _suite_snapshot(partial=True),
+                )
         runner.rss_snapshots_mib["suite_complete"] = runner.capture_rss_snapshot()
         _progress(f"{suite_progress_name}: suite complete")
-        pass_count = sum(
-            result.get("status", "passed") == "passed" for result in query_results
-        )
-        timeout_count = sum(
-            result.get("status") == "timed_out" for result in query_results
-        )
-        fail_count = sum(
-            result.get("status") == "failed" for result in query_results
-        )
-        return {
-            "backend": backend,
-            "index_mode": runner.index_mode,
-            "iterations": iterations,
-            "warmup": warmup,
-            "query_count": len(queries),
-            "pass_count": pass_count,
-            "timeout_count": timeout_count,
-            "fail_count": fail_count,
-            "setup": {
-                f"{metric[:-3]}_ms": value / 1_000_000.0
-                for metric, value in runner.setup_metrics.items()
-            },
-            "row_counts": runner.row_counts,
-            "rss_snapshots_mib": runner.rss_snapshots_mib,
-            "storage": {
-                "db_size_mib": runner.db_size_mib,
-                "wal_size_mib": runner.wal_size_mib,
-            },
-            "db_path": (
-                str(runner.artifact_path) if runner.artifact_path is not None else None
-            ),
-            "compile": _pool_summaries(query_results, "compile"),
-            "execute": _pool_summaries(query_results, "execute"),
-            "end_to_end": _pool_summaries(query_results, "end_to_end"),
-            "reset": _pool_summaries(query_results, "reset"),
-            "queries": query_results,
-        }
+        return _suite_snapshot(partial=False)
     finally:
         runner.close()
 
@@ -1521,6 +1536,13 @@ def _benchmark_result(
 
     index_modes = [index_mode] if index_mode != "both" else ["indexed", "unindexed"]
 
+    def _publish_partial_suite(
+        workload_key: str, suite_key: str, partial_suite: dict[str, object]
+    ) -> None:
+        workloads.setdefault(workload_key, {})[suite_key] = partial_suite
+        if progress_callback is not None:
+            progress_callback({"workloads": workloads, "token_map": token_map})
+
     def backend_suite_kwargs(
         *,
         workload: str,
@@ -1529,6 +1551,7 @@ def _benchmark_result(
         kwargs: dict[str, object] = {
             "workload": workload,
             "iteration_progress": iteration_progress,
+            "on_query_complete": _publish_partial_suite,
         }
         if timeout_ms is not None:
             kwargs["timeout_ms"] = timeout_ms

@@ -20,7 +20,8 @@ except ImportError:  # pragma: no cover - optional dependency
 _POSTGRES_DSN_ENV = "CYPHERGLOT_TEST_POSTGRES_DSN"
 _POSTGRES_IMAGE_ENV = "CYPHERGLOT_BENCHMARK_POSTGRES_IMAGE"
 _AUTO_DOCKER_ENV = "CYPHERGLOT_BENCHMARK_POSTGRES_AUTO_DOCKER"
-_POSTGRES_IMAGE = os.environ.get(_POSTGRES_IMAGE_ENV, "postgres:16")
+# Digest of postgres:16 at campaign start (tags resolve at pull time).
+_POSTGRES_IMAGE = os.environ.get(_POSTGRES_IMAGE_ENV, "postgres@sha256:fe03a7605299a34ddf5e4f285dff78c3d7190a576b3c6b46f2fcff69f4bffd54")
 _POSTGRES_DB = "cypherglot_benchmark"
 _POSTGRES_USER = "cypherglot"
 _POSTGRES_PASSWORD = "cypherglot"

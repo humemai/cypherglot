@@ -640,7 +640,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--neo4j-database", default="neo4j")
     parser.add_argument(
         "--neo4j-docker-image",
-        default="neo4j:5.26.24-community",
+        # Digest of neo4j:5.26.24-community at campaign start.
+        default="neo4j@sha256:f66304b9511c60d33555a2c451f88e03d82d1ebc893f32d84c98a6b326096435",
     )
     parser.add_argument("--neo4j-docker-startup-timeout", type=int, default=120)
     parser.add_argument("--neo4j-bolt-port-base", type=int, default=8788)
