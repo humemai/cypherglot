@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import queue
 import random
 import shlex
 import shutil
@@ -97,6 +96,40 @@ class JobStatus:
     neo4j_http_port: int | None = None
     neo4j_container_name: str | None = None
     error: str | None = None
+
+
+class _JobDispatcher:
+    """Hands out jobs so that no two jobs of the same backend co-run.
+
+    With --workers > 1, co-running two instances of one engine would let its
+    repeats share correlated contention (and collide on embedded resources),
+    so a worker claims the first pending job whose backend is not currently
+    running elsewhere, or blocks until one frees up.
+    """
+
+    def __init__(self, statuses: list[JobStatus]) -> None:
+        self._pending: list[JobStatus] = list(statuses)
+        self._running_backends: set[str] = set()
+        self._cond = threading.Condition()
+
+    def claim(self) -> JobStatus | None:
+        """Return an eligible job, or None once the queue is drained."""
+        with self._cond:
+            while True:
+                if not self._pending:
+                    return None
+                for index, status in enumerate(self._pending):
+                    backend = status.job.variant.backend
+                    if backend not in self._running_backends:
+                        del self._pending[index]
+                        self._running_backends.add(backend)
+                        return status
+                self._cond.wait(timeout=5.0)
+
+    def release(self, status: JobStatus) -> None:
+        with self._cond:
+            self._running_backends.discard(status.job.variant.backend)
+            self._cond.notify_all()
 
 
 def _progress_counts(statuses: list[JobStatus]) -> dict[str, int]:
@@ -439,6 +472,16 @@ def _parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument("--workers", type=int, default=1)
+    parser.add_argument(
+        "--worker-cpusets",
+        default=None,
+        help=(
+            "Pipe-separated CPU sets, one per worker (e.g. "
+            "'0,1,2,3|4,5,6,7|8,9,10,11'). Each worker pins its client AND "
+            "its server containers to its own set, overriding --cpu-affinity "
+            "and --server-cpuset-cpus, so co-running jobs never share cores."
+        ),
+    )
     parser.add_argument(
         "--job-timeout-s",
         type=int,
@@ -862,6 +905,21 @@ def _wrap_command_in_container(
     return command
 
 
+def _parse_worker_cpusets(args: argparse.Namespace) -> list[str] | None:
+    raw = getattr(args, "worker_cpusets", None)
+    if not raw:
+        return None
+    cpusets = [part.strip() for part in raw.split("|")]
+    if any(not part for part in cpusets):
+        raise ValueError("--worker-cpusets must not contain empty entries.")
+    if len(cpusets) != args.workers:
+        raise ValueError(
+            f"--worker-cpusets defines {len(cpusets)} sets but --workers is "
+            f"{args.workers}; one CPU set per worker is required."
+        )
+    return cpusets
+
+
 def _resolve_server_cpuset(args: argparse.Namespace) -> str | None:
     explicit = getattr(args, "server_cpuset_cpus", None)
     if explicit:
@@ -876,6 +934,7 @@ def _build_command(
     scale_preset: ScalePreset,
     neo4j_ports: tuple[int, int] | None = None,
     neo4j_container_name: str | None = None,
+    cpu_override: str | None = None,
 ) -> tuple[list[str], dict[str, str]]:
     args_dict = vars(args)
     oltp_timeout_ms = args_dict.get("oltp_timeout_ms", DEFAULT_OLTP_TIMEOUT_MS)
@@ -897,8 +956,9 @@ def _build_command(
         command.extend(["--topology", args.topology])
         if args.ldbc_snb_data_dir is not None:
             command.extend(["--ldbc-snb-data-dir", str(args.ldbc_snb_data_dir)])
-    if getattr(args, "cpu_affinity", None):
-        command.extend(["--cpu-affinity", args.cpu_affinity])
+    client_cpuset = cpu_override or getattr(args, "cpu_affinity", None)
+    if client_cpuset:
+        command.extend(["--cpu-affinity", client_cpuset])
     if (
         getattr(args, "variable_length_strategy", "unroll") != "unroll"
         and job.variant.backend in SQL_COMPILE_TARGET_BACKENDS
@@ -952,7 +1012,7 @@ def _build_command(
                 str(args.neo4j_docker_startup_timeout),
             ]
         )
-        server_cpuset = _resolve_server_cpuset(args)
+        server_cpuset = cpu_override or _resolve_server_cpuset(args)
         if server_cpuset:
             command.extend(["--docker-cpuset-cpus", server_cpuset])
         if args.neo4j_keep_container:
@@ -969,7 +1029,7 @@ def _build_command(
                 str(args.age_docker_startup_timeout),
             ]
         )
-        server_cpuset = _resolve_server_cpuset(args)
+        server_cpuset = cpu_override or _resolve_server_cpuset(args)
         if server_cpuset:
             command.extend(["--docker-cpuset-cpus", server_cpuset])
         if args.age_keep_container:
@@ -986,7 +1046,7 @@ def _build_command(
         )
 
     env = os.environ.copy()
-    server_cpuset = _resolve_server_cpuset(args)
+    server_cpuset = cpu_override or _resolve_server_cpuset(args)
     if server_cpuset:
         env["CYPHERGLOT_BENCHMARK_SERVER_CPUSET_CPUS"] = server_cpuset
     if job.variant.uses_arcadedb_env:
@@ -1272,7 +1332,8 @@ def _age_container_name(job: MatrixJob) -> str:
 def _worker_loop(
     *,
     worker_id: int,
-    job_queue: queue.Queue[JobStatus],
+    dispatcher: _JobDispatcher,
+    worker_cpuset: str | None,
     args: argparse.Namespace,
     scale_preset: ScalePreset,
     run_stamp: str,
@@ -1286,13 +1347,12 @@ def _worker_loop(
     while True:
         if stop_event.is_set() and args.fail_fast:
             return
-        try:
-            status = job_queue.get_nowait()
-        except queue.Empty:
+        status = dispatcher.claim()
+        if status is None:
             return
 
         if stop_event.is_set() and args.fail_fast:
-            job_queue.task_done()
+            dispatcher.release(status)
             return
 
         status.worker_id = worker_id
@@ -1315,6 +1375,7 @@ def _worker_loop(
                 scale_preset=scale_preset,
                 neo4j_ports=reserved_ports,
                 neo4j_container_name=status.neo4j_container_name,
+                cpu_override=worker_cpuset,
             )
             status.command = command
             env_overrides = {}
@@ -1426,7 +1487,7 @@ def _worker_loop(
             if reserved_ports is not None:
                 port_pool.release_pair(reserved_ports)
             _update_manifest(manifest_path, base_manifest, statuses, manifest_lock)
-            job_queue.task_done()
+            dispatcher.release(status)
 
 
 def _run_jobs(
@@ -1449,9 +1510,8 @@ def _run_jobs(
     )
     _write_json_atomic(manifest_path, base_manifest)
 
-    job_queue: queue.Queue[JobStatus] = queue.Queue()
-    for status in statuses:
-        job_queue.put(status)
+    dispatcher = _JobDispatcher(statuses)
+    worker_cpusets = _parse_worker_cpusets(args)
 
     stop_event = threading.Event()
     port_pool = PortReservationPool(
@@ -1465,7 +1525,10 @@ def _run_jobs(
             target=_worker_loop,
             kwargs={
                 "worker_id": worker_id,
-                "job_queue": job_queue,
+                "dispatcher": dispatcher,
+                "worker_cpuset": (
+                    worker_cpusets[worker_id - 1] if worker_cpusets else None
+                ),
                 "args": args,
                 "scale_preset": scale_preset,
                 "run_stamp": run_stamp,

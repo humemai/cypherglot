@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import io
-import queue
 import sys
 import tempfile
 import threading
@@ -49,6 +48,48 @@ format_relayed_progress_line = getattr(
 relay_process_output = getattr(run_runtime_matrix, "_relay_process_output")
 cleanup_job_db_root_dir = getattr(run_runtime_matrix, "_cleanup_job_db_root_dir")
 worker_loop = getattr(run_runtime_matrix, "_worker_loop")
+
+
+def _make_build_command_args() -> argparse.Namespace:
+    return argparse.Namespace(
+        scale="small",
+        iterations=100,
+        warmup=10,
+        oltp_iterations=None,
+        oltp_warmup=None,
+        olap_iterations=None,
+        olap_warmup=None,
+        oltp_timeout_ms=None,
+        olap_timeout_ms=None,
+        iteration_progress=False,
+        postgres_dsn=None,
+        cpu_affinity="0,2,4,6,8,10",
+        server_cpuset_cpus=None,
+        neo4j_user="neo4j",
+        neo4j_database="neo4j",
+        neo4j_password="secret",
+        neo4j_docker_image="neo4j:5.26.24-community",
+        neo4j_docker_startup_timeout=120,
+        age_docker_image="apache/age",
+        age_docker_startup_timeout=120,
+        age_keep_container=False,
+        neo4j_keep_container=False,
+        arcadedb_jvm_args=None,
+        arcadedb_worker_startup_timeout_s=None,
+        container_cpus=None,
+        container_image="python:3.12-bookworm",
+    )
+
+
+def _make_age_job() -> "run_runtime_matrix.MatrixJob":
+    return run_runtime_matrix.MatrixJob(
+        sequence=1,
+        variant=run_runtime_matrix.VARIANT_BY_NAME["age-indexed"],
+        repeat=1,
+        output_path=Path("/tmp/age-result.json"),
+        log_path=Path("/tmp/age-job.log"),
+        db_root_dir=None,
+    )
 
 
 class RunRuntimeMatrixTests(unittest.TestCase):
@@ -589,8 +630,7 @@ class RunRuntimeMatrixTests(unittest.TestCase):
                 db_root_dir=db_root_dir,
             )
             status = run_runtime_matrix.JobStatus(job=job)
-            job_queue = queue.Queue()
-            job_queue.put(status)
+            dispatcher = run_runtime_matrix._JobDispatcher([status])
             statuses = [status]
             manifest_path = temp_path / "manifest.json"
             base_manifest = {"jobs": []}
@@ -611,7 +651,8 @@ class RunRuntimeMatrixTests(unittest.TestCase):
             ):
                 worker_loop(
                     worker_id=1,
-                    job_queue=job_queue,
+                    dispatcher=dispatcher,
+                    worker_cpuset=None,
                     args=args,
                     scale_preset=run_runtime_matrix.SCALE_PRESETS["small"],
                     run_stamp="20260501T000000Z",
@@ -626,6 +667,69 @@ class RunRuntimeMatrixTests(unittest.TestCase):
         self.assertEqual(status.status, "failed")
         self.assertEqual(status.exit_code, 1)
         self.assertFalse(db_root_dir.exists())
+
+    def test_dispatcher_never_corun_same_backend(self) -> None:
+        variant = run_runtime_matrix.VARIANT_BY_NAME["sqlite-indexed"]
+        other = run_runtime_matrix.VARIANT_BY_NAME["duckdb-indexed"]
+
+        def make_status(seq: int, spec) -> run_runtime_matrix.JobStatus:
+            job = run_runtime_matrix.MatrixJob(
+                sequence=seq,
+                variant=spec,
+                repeat=seq,
+                output_path=Path(f"/tmp/out-{seq}.json"),
+                log_path=Path(f"/tmp/log-{seq}.log"),
+                db_root_dir=None,
+            )
+            return run_runtime_matrix.JobStatus(job=job)
+
+        statuses = [
+            make_status(1, variant),
+            make_status(2, variant),
+            make_status(3, other),
+        ]
+        dispatcher = run_runtime_matrix._JobDispatcher(statuses)
+
+        first = dispatcher.claim()
+        self.assertIs(first, statuses[0])
+        # sqlite is busy: the next claim must skip the second sqlite job
+        second = dispatcher.claim()
+        self.assertIs(second, statuses[2])
+        dispatcher.release(first)
+        third = dispatcher.claim()
+        self.assertIs(third, statuses[1])
+        dispatcher.release(second)
+        dispatcher.release(third)
+        self.assertIsNone(dispatcher.claim())
+
+    def test_parse_worker_cpusets_validates_count(self) -> None:
+        args = argparse.Namespace(workers=3, worker_cpusets="0,1,2,3|4,5,6,7|8,9,10,11")
+        self.assertEqual(
+            run_runtime_matrix._parse_worker_cpusets(args),
+            ["0,1,2,3", "4,5,6,7", "8,9,10,11"],
+        )
+        args = argparse.Namespace(workers=2, worker_cpusets="0,1|2,3|4,5")
+        with self.assertRaises(ValueError):
+            run_runtime_matrix._parse_worker_cpusets(args)
+        args = argparse.Namespace(workers=1, worker_cpusets=None)
+        self.assertIsNone(run_runtime_matrix._parse_worker_cpusets(args))
+
+    def test_build_command_cpu_override_pins_client_and_server(self) -> None:
+        args = _make_build_command_args()
+        job = _make_age_job()
+        command, env = run_runtime_matrix._build_command(
+            args,
+            job=job,
+            scale_preset=run_runtime_matrix.SCALE_PRESETS["small"],
+            cpu_override="4,5,6,7",
+        )
+        self.assertIn("--cpu-affinity", command)
+        self.assertEqual(command[command.index("--cpu-affinity") + 1], "4,5,6,7")
+        self.assertIn("--docker-cpuset-cpus", command)
+        self.assertEqual(
+            command[command.index("--docker-cpuset-cpus") + 1], "4,5,6,7"
+        )
+        self.assertEqual(env.get("CYPHERGLOT_BENCHMARK_SERVER_CPUSET_CPUS"), "4,5,6,7")
 
     def test_build_command_wraps_job_in_container_when_container_cpus_enabled(
         self,
