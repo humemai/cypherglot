@@ -1067,6 +1067,7 @@ class BenchmarkSQLRuntimeCoreTests(unittest.TestCase):
             postgres_dsn: str | None = None,
             db_root_dir: Path | None = None,
             iteration_progress: bool = False,
+            on_query_complete: object = None,
         ) -> dict[str, object]:
             self.assertFalse(iteration_progress)
             self.assertIsNotNone(graph_schema)
