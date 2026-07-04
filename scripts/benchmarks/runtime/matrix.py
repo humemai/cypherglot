@@ -473,6 +473,17 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--workers", type=int, default=1)
     parser.add_argument(
+        "--job-timeout-override",
+        action="append",
+        default=None,
+        metavar="VARIANT=SECONDS",
+        help=(
+            "Per-variant override of --job-timeout-s (repeatable), e.g. "
+            "'turso-indexed=3600'. Lets a variant with a known wedge burn a "
+            "shorter budget while staying in the shared shuffled queue."
+        ),
+    )
+    parser.add_argument(
         "--worker-cpusets",
         default=None,
         help=(
@@ -903,6 +914,25 @@ def _wrap_command_in_container(
         ]
     )
     return command
+
+
+def _parse_job_timeout_overrides(args: argparse.Namespace) -> dict[str, float]:
+    raw = getattr(args, "job_timeout_override", None)
+    if not raw:
+        return {}
+    overrides: dict[str, float] = {}
+    for entry in raw:
+        variant_name, _, seconds = entry.partition("=")
+        if not variant_name or not seconds:
+            raise ValueError(
+                f"--job-timeout-override expects VARIANT=SECONDS, got {entry!r}."
+            )
+        if variant_name not in VARIANT_BY_NAME:
+            raise ValueError(
+                f"--job-timeout-override names unknown variant {variant_name!r}."
+            )
+        overrides[variant_name] = float(seconds)
+    return overrides
 
 
 def _parse_worker_cpusets(args: argparse.Namespace) -> list[str] | None:
@@ -1413,7 +1443,10 @@ def _worker_loop(
                     text=True,
                     bufsize=1,
                 )
-                job_timeout_s = getattr(args, "job_timeout_s", None)
+                job_timeout_s = _parse_job_timeout_overrides(args).get(
+                    status.job.variant.name,
+                    getattr(args, "job_timeout_s", None),
+                )
                 job_timed_out = threading.Event()
                 watchdog: threading.Timer | None = None
                 if job_timeout_s:

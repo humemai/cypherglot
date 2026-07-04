@@ -714,6 +714,20 @@ class RunRuntimeMatrixTests(unittest.TestCase):
         args = argparse.Namespace(workers=1, worker_cpusets=None)
         self.assertIsNone(run_runtime_matrix._parse_worker_cpusets(args))
 
+    def test_parse_job_timeout_overrides(self) -> None:
+        args = argparse.Namespace(
+            job_timeout_override=["turso-indexed=3600", "turso-unindexed=3600"]
+        )
+        self.assertEqual(
+            run_runtime_matrix._parse_job_timeout_overrides(args),
+            {"turso-indexed": 3600.0, "turso-unindexed": 3600.0},
+        )
+        args = argparse.Namespace(job_timeout_override=None)
+        self.assertEqual(run_runtime_matrix._parse_job_timeout_overrides(args), {})
+        args = argparse.Namespace(job_timeout_override=["nonsense=10"])
+        with self.assertRaisesRegex(ValueError, "unknown variant"):
+            run_runtime_matrix._parse_job_timeout_overrides(args)
+
     def test_build_command_cpu_override_pins_client_and_server(self) -> None:
         args = _make_build_command_args()
         job = _make_age_job()
