@@ -564,6 +564,33 @@ class TestValidate(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, message):
                     cypherglot.validate_cypher_text(query)
 
+    def test_validate_cypher_parse_result_accepts_union(self) -> None:
+        # The direct parse-result path must admit UNION exactly like
+        # validate_cypher_text (the stale gate was removed in redefined-v0.1).
+        from cypherglot.parser import parse_cypher_text
+        from cypherglot.validate import validate_cypher_parse_result
+
+        ctx = validate_cypher_parse_result(
+            parse_cypher_text(
+                "MATCH (u:User) RETURN u.name AS name "
+                "UNION MATCH (u:User) RETURN u.name AS name"
+            )
+        )
+        self.assertEqual(type(ctx).__name__, "OC_RegularQueryContext")
+
+    def test_validate_cypher_parse_result_rejects_union_with_bad_branch(self) -> None:
+        from cypherglot.parser import parse_cypher_text
+        from cypherglot.validate import validate_cypher_parse_result
+
+        with self.assertRaisesRegex(ValueError, "variable-length"):
+            validate_cypher_parse_result(
+                parse_cypher_text(
+                    "MATCH (u:User) RETURN u.name AS name "
+                    "UNION OPTIONAL MATCH (a:User)-[:KNOWS*1..3]->(b:User) "
+                    "RETURN b.name AS name"
+                )
+            )
+
     def test_validate_cypher_text_accepts_union(self) -> None:
         cypherglot.validate_cypher_text(
             "MATCH (u:User) RETURN u.name AS name "

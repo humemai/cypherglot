@@ -222,10 +222,20 @@ def validate_cypher_parse_result(result: CypherParseResult):
         )
 
     if regular_query_ctx.oC_Union():
-        raise ValueError(
-            "CypherGlot does not yet admit UNION / UNION ALL queries; submit each "
-            "branch as a separate query."
+        # UNION / UNION ALL: every branch must independently be an admitted
+        # query (same contract as validate_cypher_text's UNION path).
+        branch_texts = _union_branch_texts(result)
+        if branch_texts is None:
+            raise ValueError(
+                "CypherGlot could not decompose this UNION query into branches."
+            )
+        for branch_text in branch_texts:
+            validate_cypher_parse_result(parse_cypher_text(branch_text))
+        logger.debug(
+            "Validated parsed Cypher result",
+            extra={"context_kind": type(regular_query_ctx).__name__},
         )
+        return regular_query_ctx
 
     single_query_ctx = regular_query_ctx.oC_SingleQuery()
     multi_part_query_ctx = single_query_ctx.oC_MultiPartQuery()
