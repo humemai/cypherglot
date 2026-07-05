@@ -153,7 +153,9 @@ class CompileTests(unittest.TestCase):
         self.assertEqual(
             expression.sql(dialect="sqlite"),
             'SELECT a.name AS "n", b.name AS "friend" FROM cg_node_user AS a '
-            "LEFT JOIN cg_edge_knows AS r ON r.from_id = a.id "
+            "LEFT JOIN cg_edge_knows AS r ON r.from_id = a.id AND "
+            "EXISTS(SELECT 1 FROM cg_node_user AS __cg_opt_b_guard "
+            "WHERE __cg_opt_b_guard.id = r.to_id AND __cg_opt_b_guard.age > 30) "
             "LEFT JOIN cg_node_user AS b ON b.id = r.to_id AND b.age > 30 "
             "WHERE a.name = 'Alice' ORDER BY b.name ASC",
         )
