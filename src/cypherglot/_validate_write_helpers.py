@@ -49,11 +49,9 @@ def _validate_standalone_write_shape(
 
     merge_pattern_text = _context_text(result, merge_ctx.oC_PatternPart())
     if _looks_like_relationship_pattern(merge_pattern_text):
-        if merge_ctx.oC_MergeAction():
-            raise ValueError(
-                "CypherGlot currently validates ON CREATE / ON MATCH actions only "
-                "on single-node MERGE, not relationship MERGE."
-            )
+        # ON CREATE / ON MATCH actions on relationship MERGE are admitted
+        # (redefined-v0.1); the normalizer enforces that assignments target
+        # the merged relationship alias.
         left_text, relationship_text, right_text, direction = _split_relationship_pattern(
             merge_pattern_text
         )

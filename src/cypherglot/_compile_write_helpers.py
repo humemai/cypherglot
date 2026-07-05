@@ -471,6 +471,7 @@ def _compile_resolved_match_relationship_write_sql(
     require_label_message: str,
     mismatch_message: str,
     merge: bool,
+    on_create_assignments: tuple = (),
 ) -> str:
     from .compile import _require_single_relationship_type, _resolve_type_aware_property_column
 
@@ -536,6 +537,13 @@ def _compile_resolved_match_relationship_write_sql(
     for field, value in relationship.properties:
         columns.append(_resolve_type_aware_property_column(edge_type, field))
         values.append(_sql_value(value))
+    for assignment in on_create_assignments:
+        # MERGE ... ON CREATE SET r.x = v: initialise the column only when the
+        # guarded INSERT actually creates the edge.
+        columns.append(
+            _resolve_type_aware_property_column(edge_type, assignment.field)
+        )
+        values.append(_sql_value(assignment.value))
     return _assemble_insert_select_sql(
         target_sql=f"INSERT INTO {edge_type.table_name} ({', '.join(columns)})",
         select_sql=f"SELECT {', '.join(values)}",
@@ -950,3 +958,95 @@ def _compile_match_fresh_endpoint_relationship_program(
         ),
     )
 
+
+
+def _compile_merge_relationship_on_match_update_sql(
+    *,
+    relationship: RelationshipPattern,
+    left_node,
+    right_node,
+    graph_schema: GraphSchema,
+    backend: SQLBackend,
+    on_match_assignments: tuple,
+) -> str:
+    """UPDATE for MERGE ... ON MATCH SET on a relationship.
+
+    Runs BEFORE the guarded INSERT (mirroring node MERGE): it updates only an
+    edge that already exists between the resolved endpoints; the INSERT then
+    creates (and ON-CREATE-initialises) the edge only when none matched.
+    """
+    from .compile import (
+        _compile_type_aware_node_field_expression,
+        _compile_type_aware_predicate,
+        _require_single_relationship_type,
+        _resolve_type_aware_property_column,
+    )
+
+    edge_type = graph_schema.edge_type(
+        _require_single_relationship_type(relationship)
+    )
+    left_type = graph_schema.node_type(left_node.label)
+    right_type = graph_schema.node_type(right_node.label)
+    table = edge_type.table_name
+    from_alias = left_node.alias if relationship.direction == "out" else right_node.alias
+    to_alias = right_node.alias if relationship.direction == "out" else left_node.alias
+
+    set_parts = [
+        f"{_resolve_type_aware_property_column(edge_type, item.field)} = "
+        f"{_sql_value(item.value)}"
+        for item in on_match_assignments
+    ]
+    exists_where = [
+        *[
+            _compile_type_aware_predicate(
+                field_expression=_compile_type_aware_node_field_expression(
+                    left_node.alias, left_type, field
+                ),
+                operator="=",
+                value=value,
+                backend=backend,
+            )
+            for field, value in left_node.properties
+        ],
+        *[
+            _compile_type_aware_predicate(
+                field_expression=_compile_type_aware_node_field_expression(
+                    right_node.alias, right_type, field
+                ),
+                operator="=",
+                value=value,
+                backend=backend,
+            )
+            for field, value in right_node.properties
+        ],
+        f"{table}.from_id = {from_alias}.id",
+        f"{table}.to_id = {to_alias}.id",
+    ]
+    for field, value in relationship.properties:
+        exists_where.append(
+            _compile_type_aware_predicate(
+                field_expression=_compile_type_aware_edge_field_expression(
+                    table, edge_type, field
+                ),
+                operator="=",
+                value=value,
+                backend=backend,
+            )
+        )
+    exists_sql = _assemble_select_sql(
+        select_sql="1",
+        distinct=False,
+        from_sql=(
+            f"FROM {left_type.table_name} AS {left_node.alias}, "
+            f"{right_type.table_name} AS {right_node.alias}"
+        ),
+        joins=[],
+        where_parts=exists_where,
+        order_sql=None,
+        limit=None,
+        skip=None,
+    )
+    return (
+        f"UPDATE {table} SET {', '.join(set_parts)} "
+        f"WHERE EXISTS ({exists_sql})"
+    )

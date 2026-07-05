@@ -414,6 +414,8 @@ class NormalizedMergeRelationship:
     left: NodePattern
     relationship: RelationshipPattern
     right: NodePattern
+    on_create_assignments: tuple[SetItem, ...] = ()
+    on_match_assignments: tuple[SetItem, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -1137,11 +1139,22 @@ def normalize_cypher_parse_result(
                 _split_relationship_pattern(pattern_text)
             )
             if merge_ctx is not None:
-                if merge_ctx.oC_MergeAction():
+                relationship = _parse_relationship_pattern(
+                    relationship_text, direction
+                )
+                on_create, on_match = _parse_merge_actions(result, merge_ctx)
+                if relationship.alias is None and (on_create or on_match):
                     raise ValueError(
-                        "HumemCypher v0 ON CREATE / ON MATCH actions are currently "
-                        "supported only on single-node MERGE, not relationship MERGE."
+                        "CypherGlot MERGE relationship actions require a "
+                        "relationship alias (e.g. MERGE (a)-[r:T]->(b) "
+                        "ON CREATE SET r.x = 1)."
                     )
+                for assignment in (*on_create, *on_match):
+                    if assignment.alias != relationship.alias:
+                        raise ValueError(
+                            "CypherGlot MERGE relationship actions currently "
+                            "admit SET only on the merged relationship alias."
+                        )
                 return NormalizedMergeRelationship(
                     kind="merge",
                     pattern_kind="relationship",
@@ -1150,12 +1163,14 @@ def normalize_cypher_parse_result(
                         require_label=True,
                         default_alias="__humem_merge_left_node",
                     ),
-                    relationship=_parse_relationship_pattern(relationship_text, direction),
+                    relationship=relationship,
                     right=_parse_node_pattern(
                         right_text,
                         require_label=True,
                         default_alias="__humem_merge_right_node",
                     ),
+                    on_create_assignments=on_create,
+                    on_match_assignments=on_match,
                 )
             return NormalizedCreateRelationship(
                 kind="create",

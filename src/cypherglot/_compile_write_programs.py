@@ -159,6 +159,11 @@ def _compile_merge_relationship_program(
     )
 
     if not _create_relationship_uses_distinct_nodes(statement.left, statement.right):
+        if statement.on_create_assignments or statement.on_match_assignments:
+            raise ValueError(
+                "CypherGlot does not yet admit ON CREATE / ON MATCH actions on "
+                "a self-loop relationship MERGE."
+            )
         return _compile_merge_relationship_self_loop_program(
             statement,
             graph_schema=graph_schema,
@@ -228,30 +233,49 @@ def _compile_merge_relationship_program(
             "Type-aware MERGE relationship lowering requires endpoint labels to match the schema contract."
         ),
         merge=True,
+        on_create_assignments=statement.on_create_assignments,
     )
-    return CompiledCypherProgram(
-        steps=(
-            CompiledCypherStatement(
-                sql=parse_one(
-                    _compile_type_aware_merge_node_sql(
-                        statement.left,
-                        graph_schema,
-                        backend=backend,
-                    )
+    steps = [
+        CompiledCypherStatement(
+            sql=parse_one(
+                _compile_type_aware_merge_node_sql(
+                    statement.left,
+                    graph_schema,
+                    backend=backend,
                 )
-            ),
-            CompiledCypherStatement(
-                sql=parse_one(
-                    _compile_type_aware_merge_node_sql(
-                        statement.right,
-                        graph_schema,
-                        backend=backend,
-                    )
+            )
+        ),
+        CompiledCypherStatement(
+            sql=parse_one(
+                _compile_type_aware_merge_node_sql(
+                    statement.right,
+                    graph_schema,
+                    backend=backend,
                 )
-            ),
-            CompiledCypherStatement(sql=parse_one(relationship_sql)),
+            )
+        ),
+    ]
+    if statement.on_match_assignments:
+        from ._compile_write_helpers import (
+            _compile_merge_relationship_on_match_update_sql,
         )
-    )
+
+        steps.append(
+            CompiledCypherStatement(
+                sql=parse_one(
+                    _compile_merge_relationship_on_match_update_sql(
+                        relationship=statement.relationship,
+                        left_node=statement.left,
+                        right_node=statement.right,
+                        graph_schema=graph_schema,
+                        backend=backend,
+                        on_match_assignments=statement.on_match_assignments,
+                    )
+                )
+            )
+        )
+    steps.append(CompiledCypherStatement(sql=parse_one(relationship_sql)))
+    return CompiledCypherProgram(steps=tuple(steps))
 
 
 def _compile_merge_relationship_self_loop_program(

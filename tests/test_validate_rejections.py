@@ -89,14 +89,18 @@ class TestValidate(unittest.TestCase):
             "ON MATCH SET u.age = 2"
         )
 
-    def test_validate_cypher_text_rejects_relationship_merge_actions_for_now(
+    def test_relationship_merge_actions_admitted_but_gated_to_rel_alias(
         self,
     ) -> None:
-        with self.assertRaisesRegex(
-            ValueError,
-            "only on single-node MERGE, not relationship MERGE",
-        ):
-            cypherglot.validate_cypher_text(
+        # Relationship MERGE actions are admitted in redefined-v0.1; what stays
+        # rejected is an action without a relationship alias or targeting a
+        # node alias.
+        cypherglot.validate_cypher_text(
+            "MERGE (a:User {name: 'Alice'})-[r:KNOWS]->(b:User {name: 'Bob'}) "
+            "ON CREATE SET r.since = 1"
+        )
+        with self.assertRaisesRegex(ValueError, "relationship alias"):
+            cypherglot.normalize_cypher_text(
                 "MERGE (a:User {name: 'Alice'})-[:KNOWS]->(b:User {name: 'Bob'}) "
                 "ON CREATE SET a.age = 1"
             )
