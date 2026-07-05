@@ -126,6 +126,10 @@ _CONFORMANCE_QUERIES: dict[str, str] = {
     "undirected_cross_type": "MATCH (c:Company)-[:WORKS_AT]-(u:User) RETURN u.name AS person, c.name AS company ORDER BY person",
     "inbound_one_hop": "MATCH (a:User)<-[:KNOWS]-(b:User) RETURN a.name AS dst, b.name AS src ORDER BY dst, src",
     "inbound_cross_type": "MATCH (c:Company)<-[:WORKS_AT]-(u:User) RETURN u.name AS person, c.name AS company ORDER BY person",
+    # Multi relationship types (redefined-v0.1): rows and type(r) constants
+    # must match Neo4j across the alternatives.
+    "multi_type_one_hop": "MATCH (a:User)-[r:KNOWS|WORKS_AT]->(b) RETURN a.name AS src, type(r) AS t ORDER BY src, t",
+    "multi_type_undirected": "MATCH (a:User)-[r:KNOWS|WORKS_AT]-(b) RETURN a.name AS x, type(r) AS t ORDER BY x, t",
 }
 
 

@@ -104,5 +104,68 @@ class UndirectedOneHopTests(unittest.TestCase):
             )
 
 
+class MultiTypeOneHopTests(unittest.TestCase):
+    maxDiff = None
+
+    def setUp(self) -> None:
+        schema = GraphSchema(
+            node_types=_SCHEMA.node_types,
+            edge_types=(
+                *_SCHEMA.edge_types,
+                EdgeTypeSpec(name="BLOCKS", source_type="User", target_type="User"),
+            ),
+        )
+        self.ctx = CompilerSchemaContext.type_aware(schema)
+
+    def _sql(self, query: str) -> str:
+        return cypherglot.to_sql(query, backend="sqlite", schema_context=self.ctx)
+
+    def test_multi_type_lowers_to_union_all_with_per_branch_type_constant(
+        self,
+    ) -> None:
+        sql = self._sql(
+            "MATCH (a:User)-[r:KNOWS|BLOCKS]->(b:User) "
+            "RETURN a.name AS n, type(r) AS t"
+        )
+        self.assertIn("cg_edge_knows", sql)
+        self.assertIn("cg_edge_blocks", sql)
+        self.assertIn("'KNOWS' AS \"t\"", sql)
+        self.assertIn("'BLOCKS' AS \"t\"", sql)
+        self.assertIn("AS multi_type_q", sql)
+
+    def test_multi_type_drops_contract_impossible_types(self) -> None:
+        sql = self._sql(
+            "MATCH (a:User)-[r:KNOWS|WORKS_AT]->(b:User) RETURN a.name AS n"
+        )
+        self.assertNotIn("works_at", sql)
+        self.assertNotIn("UNION ALL", sql)
+
+    def test_multi_type_composes_with_undirected(self) -> None:
+        sql = self._sql(
+            "MATCH (a:User)-[r:KNOWS|BLOCKS]-(b:User) RETURN a.name AS n"
+        )
+        self.assertEqual(sql.count("UNION ALL"), 3)
+
+    def test_multi_type_rejects_aggregates(self) -> None:
+        with self.assertRaisesRegex(ValueError, "multi-type"):
+            self._sql(
+                "MATCH (a:User)-[r:KNOWS|BLOCKS]->(b:User) "
+                "RETURN count(*) AS c"
+            )
+
+    def test_multi_type_rejects_variable_length(self) -> None:
+        with self.assertRaisesRegex(ValueError, "multi|variable-length|directed"):
+            self._sql(
+                "MATCH (a:User)-[r:KNOWS|BLOCKS*1..2]->(b:User) "
+                "RETURN b.name AS n"
+            )
+
+    def test_unknown_type_in_alternatives_raises_schema_error(self) -> None:
+        with self.assertRaises(ValueError):
+            self._sql(
+                "MATCH (a:User)-[r:KNOWS|NOPE]->(b:User) RETURN a.name AS n"
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

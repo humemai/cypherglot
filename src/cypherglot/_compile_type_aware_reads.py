@@ -271,12 +271,127 @@ def _compile_type_aware_undirected_match_relationship_sql(
     )
 
 
+def _compile_type_aware_multi_type_match_relationship_sql(
+    statement: GraphRelationalReadIR,
+    graph_schema: GraphSchema,
+    backend: SQLBackend,
+) -> str:
+    """Lower ``(a)-[r:A|B]->(b)`` as a UNION ALL over the alternative types.
+
+    Each branch binds ``r`` to a different edge table, so ``type(r)`` lowers
+    to the correct per-branch constant for free. Types whose endpoint
+    contract cannot satisfy the pattern's labels are dropped (Neo4j simply
+    finds no rows for them); if exactly one type survives, the pattern lowers
+    to that single-type query.
+    """
+    relationship = statement.relationship
+    if _is_variable_length_relationship(relationship):
+        raise ValueError(
+            "CypherGlot does not admit multiple relationship types on a "
+            "variable-length pattern; use a single type."
+        )
+    aggregate_kinds = {"count", "sum", "avg", "min", "max", "collect"}
+    if any(item.kind in aggregate_kinds for item in statement.returns):
+        raise ValueError(
+            "CypherGlot does not yet admit aggregation over a multi-type "
+            "relationship pattern; use a single type or aggregate in a "
+            "separate step."
+        )
+
+    type_names: list[str] = []
+    for raw in (relationship.type_name or "").split("|"):
+        name = raw.strip()
+        if name and name not in type_names:
+            type_names.append(name)
+
+    def type_possible(type_name: str) -> bool:
+        edge_type = graph_schema.edge_type(type_name)
+        left = statement.left.label
+        right = statement.right.label
+
+        def fits(direction: str) -> bool:
+            if direction == "out":
+                source = left or edge_type.source_type
+                target = right or edge_type.target_type
+            else:
+                target = left or edge_type.target_type
+                source = right or edge_type.source_type
+            return (
+                source == edge_type.source_type
+                and target == edge_type.target_type
+            )
+
+        if relationship.direction == "both":
+            return fits("out") or fits("in")
+        return fits(relationship.direction)
+
+    surviving = [name for name in type_names if type_possible(name)]
+    if not surviving:
+        raise ValueError(
+            "Type-aware lowering currently requires one-hop relationship "
+            "endpoint labels to match the schema contract."
+        )
+
+    def typed_statement(type_name: str, *, keep_paging: bool):
+        typed = _dataclass_replace(
+            statement,
+            relationships=(
+                _dataclass_replace(relationship, type_name=type_name),
+            ),
+        )
+        if keep_paging:
+            return typed
+        return _dataclass_replace(
+            typed, order_by=(), limit=None, skip=None, distinct=False
+        )
+
+    if len(surviving) == 1:
+        return _compile_type_aware_match_relationship_sql(
+            typed_statement(surviving[0], keep_paging=True),
+            graph_schema,
+            backend,
+        )
+
+    branch_sql = [
+        _compile_type_aware_match_relationship_sql(
+            typed_statement(name, keep_paging=False),
+            graph_schema,
+            backend,
+        )
+        for name in surviving
+    ]
+    order_sql = _compile_type_aware_undirected_order_sql(
+        statement.order_by, statement.returns
+    )
+    return _assemble_select_sql(
+        select_sql="*",
+        distinct=statement.distinct,
+        from_sql=f"FROM ({' UNION ALL '.join(branch_sql)}) AS multi_type_q",
+        joins=[],
+        where_parts=[],
+        group_sql=None,
+        order_sql=order_sql,
+        limit=statement.limit,
+        skip=statement.skip,
+    )
+
+
 def _compile_type_aware_match_relationship_sql(
     statement: GraphRelationalReadIR,
     graph_schema: GraphSchema,
     backend: SQLBackend,
     extra_where_parts: tuple[str, ...] = (),
 ) -> str:
+    if (
+        statement.relationship.type_name is not None
+        and "|" in statement.relationship.type_name
+    ):
+        return _compile_type_aware_multi_type_match_relationship_sql(
+            statement,
+            graph_schema,
+            backend,
+        )
+
     if statement.relationship.direction == "both":
         if _is_variable_length_relationship(statement.relationship):
             raise ValueError(
