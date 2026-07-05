@@ -201,7 +201,13 @@ class CypherAgeConformanceTests(unittest.TestCase):
             if name in AGE_UNSUPPORTED_QUERIES:
                 continue
             with self.subTest(query=name):
-                age_rows = self._run_age(query)
+                try:
+                    age_rows = self._run_age(query)
+                except Exception:
+                    # A failed statement aborts the transaction; roll back so
+                    # the remaining subtests are not poisoned.
+                    self.age.rollback()
+                    raise
                 sqlite_rows = self._run_sqlite(query)
                 self.assertEqual(
                     sqlite_rows,

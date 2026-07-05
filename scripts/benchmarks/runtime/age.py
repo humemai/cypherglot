@@ -106,6 +106,10 @@ AGE_UNSUPPORTED_QUERIES: frozenset[str] = frozenset(
         "union_distinct",
         "union_dedup",
         "union_all_keeps",
+        # AGE's Cypher parser rejects multi relationship types ([:A|B]);
+        # a documented engine gap, reported as conformance data.
+        "multi_type_one_hop",
+        "multi_type_undirected",
     }
 )
 
@@ -1364,12 +1368,22 @@ def _measure_query(
             if gc_was_enabled:
                 gc.enable()
     finally:
+        # The server can die mid-query at large scale (e.g. OOM); every
+        # cleanup step here must be defensive or the raised InterfaceError
+        # kills the whole job instead of letting the per-query failure be
+        # recorded as data.
         try:
             _set_statement_timeout(cur, None)
             conn.commit()
         except Exception:
-            conn.rollback()
-        cur.close()
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        try:
+            cur.close()
+        except Exception:
+            pass
 
     return _status_result(
         query=query,
