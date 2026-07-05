@@ -827,6 +827,39 @@ def _compile_type_aware_match_optional_match_relationship_sql(
                 "pattern aliases."
             )
 
+    # Conditions on the optional TARGET node must also gate the EDGE join:
+    # otherwise an edge to a non-qualifying node still matches the first LEFT
+    # JOIN and surfaces as a spurious (anchor, NULL) row even when the anchor
+    # has qualifying matches. Neo4j semantics: the whole optional pattern
+    # (including WHERE) either matches or yields one NULL row.
+    guard_alias = "__cg_opt_b_guard"
+    guard_parts: list[str] = []
+    for field, value in right.properties:
+        guard_parts.append(
+            _compile_type_aware_predicate(
+                field_expression=_compile_type_aware_node_field_expression(
+                    guard_alias, b_type, field
+                ),
+                operator="=",
+                value=value,
+                backend=backend,
+            )
+        )
+    for predicate in statement.optional_predicates:
+        if predicate.alias == b_alias:
+            guard_parts.append(
+                _compile_type_aware_match_node_predicate(
+                    guard_alias, b_type, predicate, backend=backend
+                )
+            )
+    if guard_parts:
+        edge_on.append(
+            f"EXISTS(SELECT 1 FROM {b_type.table_name} AS {guard_alias} "
+            f"WHERE {guard_alias}.id = {r_alias}.{b_col} AND "
+            + " AND ".join(guard_parts)
+            + ")"
+        )
+
     select_parts: list[str] = []
     for item in statement.returns:
         for expression, output_name in _compile_type_aware_chain_select_expressions(

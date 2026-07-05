@@ -136,10 +136,11 @@ _CONFORMANCE_QUERIES: dict[str, str] = {
     # OPTIONAL MATCH forms that already work — locked in against the oracle
     # (WHERE-on-optional must preserve unmatched rows; aggregates over the
     # optional alias must count NULLs as zero).
-    # KNOWN BUG (M1-F #1): WHERE on the optional side emits a spurious NULL
-    # row when the anchor ALSO has qualifying matches (the anti-join arm does
-    # not carry the optional predicate). Re-enable when fixed:
-    # "optional_where_on_optional": "MATCH (a:User) OPTIONAL MATCH (a)-[:KNOWS]->(b:User) WHERE b.age > 27 RETURN a.name AS name, b.name AS friend ORDER BY name, friend",
+    # Fixed (M1-F #1): the edge join now carries an EXISTS guard over the
+    # qualifying target rows, so WHERE on the optional side cannot produce a
+    # spurious NULL row next to qualifying matches.
+    "optional_where_on_optional": "MATCH (a:User) OPTIONAL MATCH (a)-[:KNOWS]->(b:User) WHERE b.age > 27 RETURN a.name AS name, b.name AS friend ORDER BY name, friend",
+    "optional_target_property": "MATCH (a:User) OPTIONAL MATCH (a)-[:KNOWS]->(b:User {age: 27}) RETURN a.name AS name, b.name AS friend ORDER BY name, friend",
     "optional_count": "MATCH (a:User) OPTIONAL MATCH (a)-[:KNOWS]->(b:User) RETURN a.name AS name, count(b) AS friends ORDER BY name",
     "optional_inbound": "MATCH (a:User) OPTIONAL MATCH (a)<-[:KNOWS]-(b:User) RETURN a.name AS name, b.name AS fan ORDER BY name, fan",
 }
