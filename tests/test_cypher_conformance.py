@@ -133,6 +133,15 @@ _CONFORMANCE_QUERIES: dict[str, str] = {
     # CASE loosenings (redefined-v0.1): bare boolean condition + ELSE null.
     "case_bare_boolean": "MATCH (u:User) RETURN u.name AS name, CASE WHEN u.active THEN 'on' ELSE 'off' END AS state ORDER BY name",
     "case_else_null": "MATCH (u:User) RETURN u.name AS name, CASE WHEN u.age >= 30 THEN 'senior' ELSE null END AS bucket ORDER BY name",
+    # OPTIONAL MATCH forms that already work — locked in against the oracle
+    # (WHERE-on-optional must preserve unmatched rows; aggregates over the
+    # optional alias must count NULLs as zero).
+    # KNOWN BUG (M1-F #1): WHERE on the optional side emits a spurious NULL
+    # row when the anchor ALSO has qualifying matches (the anti-join arm does
+    # not carry the optional predicate). Re-enable when fixed:
+    # "optional_where_on_optional": "MATCH (a:User) OPTIONAL MATCH (a)-[:KNOWS]->(b:User) WHERE b.age > 27 RETURN a.name AS name, b.name AS friend ORDER BY name, friend",
+    "optional_count": "MATCH (a:User) OPTIONAL MATCH (a)-[:KNOWS]->(b:User) RETURN a.name AS name, count(b) AS friends ORDER BY name",
+    "optional_inbound": "MATCH (a:User) OPTIONAL MATCH (a)<-[:KNOWS]-(b:User) RETURN a.name AS name, b.name AS fan ORDER BY name, fan",
 }
 
 
