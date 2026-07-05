@@ -369,8 +369,8 @@ def _compile_type_aware_return_expression(
     if item.kind == "id":
         return f"{alias}.id"
     if item.kind == "scalar":
-        assert item.value is not None
-        return _sql_value(item.value)
+        # A null literal (e.g. `ELSE null`) parses as a scalar with no value.
+        return "NULL" if item.value is None else _sql_value(item.value)
     raise ValueError(
         "Type-aware lowering currently supports entity, properties, labels, "
         "keys, field, id, scalar, and the first scalar-function slice for "
@@ -391,8 +391,7 @@ def _compile_type_aware_scalar_return_expression(
     if item.kind == "id":
         return field_expression_resolver("id")
     if item.kind == "scalar":
-        assert item.value is not None
-        return _sql_value(item.value)
+        return "NULL" if item.value is None else _sql_value(item.value)
     if item.kind == "size":
         if item.field is not None:
             return _compile_type_aware_size_expression(

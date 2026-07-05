@@ -130,6 +130,9 @@ _CONFORMANCE_QUERIES: dict[str, str] = {
     # must match Neo4j across the alternatives.
     "multi_type_one_hop": "MATCH (a:User)-[r:KNOWS|WORKS_AT]->(b) RETURN a.name AS src, type(r) AS t ORDER BY src, t",
     "multi_type_undirected": "MATCH (a:User)-[r:KNOWS|WORKS_AT]-(b) RETURN a.name AS x, type(r) AS t ORDER BY x, t",
+    # CASE loosenings (redefined-v0.1): bare boolean condition + ELSE null.
+    "case_bare_boolean": "MATCH (u:User) RETURN u.name AS name, CASE WHEN u.active THEN 'on' ELSE 'off' END AS state ORDER BY name",
+    "case_else_null": "MATCH (u:User) RETURN u.name AS name, CASE WHEN u.age >= 30 THEN 'senior' ELSE null END AS bucket ORDER BY name",
 }
 
 

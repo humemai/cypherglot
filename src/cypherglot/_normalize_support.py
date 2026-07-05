@@ -1403,7 +1403,12 @@ def _parse_case_result_item(text: str) -> ReturnItem:
 
 
 def _parse_case_condition_item(text: str) -> ReturnItem:
-    left_text, operator, value_text = _split_predicate_comparison(text.strip())
+    stripped = text.strip()
+    # Bare boolean property (`CASE WHEN u.active THEN ...`): Cypher treats a
+    # boolean-typed property as its own condition; normalize to `= true`.
+    if re.fullmatch(r"[A-Za-z_]\w*\.[A-Za-z_]\w*", stripped):
+        stripped = f"{stripped} = true"
+    left_text, operator, value_text = _split_predicate_comparison(stripped)
     left_text = left_text.strip()
     value_text = value_text.strip()
     if operator in {"IS NULL", "IS NOT NULL"}:
