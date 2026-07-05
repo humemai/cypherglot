@@ -9,6 +9,7 @@ from ._normalize_support import (
     _parse_relationship_chain_segment,
     _parse_relationship_pattern,
     _split_relationship_pattern,
+    _split_relationship_pattern_read,
     _split_return_clause,
     _unwrap_node_pattern,
     NodePattern,
@@ -145,7 +146,7 @@ def _normalize_match_source(
 
     if _looks_like_relationship_pattern(pattern_text):
         left_text, relationship_text, right_text, direction = (
-            _split_relationship_pattern(pattern_text)
+            _split_relationship_pattern_read(pattern_text)
         )
         left = _parse_node_pattern(left_text, default_alias="__humem_match_left_node")
         relationship = _parse_relationship_pattern(relationship_text, direction)

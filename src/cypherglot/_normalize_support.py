@@ -56,7 +56,9 @@ class NodePattern:
 class RelationshipPattern:
     alias: str | None
     type_name: str | None
-    direction: Literal["out", "in"]
+    # "both" = undirected read pattern `(a)-[r:T]-(b)`; admitted only for
+    # single-hop read-only MATCH (lowered as a UNION ALL of both orientations).
+    direction: Literal["out", "in", "both"]
     properties: PropertyItems = ()
     min_hops: int = 1
     max_hops: int | None = 1
@@ -297,7 +299,7 @@ def _parse_node_pattern(
 
 def _parse_relationship_pattern(
     text: str,
-    direction: Literal["out", "in"],
+    direction: Literal["out", "in", "both"],
 ) -> RelationshipPattern:
     match = _REL_PATTERN_RE.fullmatch(text.strip())
     if match is None:
@@ -927,7 +929,7 @@ def _parse_in_list_literal(text: str) -> tuple[CypherValue, ...]:
 
 
 def _looks_like_relationship_pattern(text: str) -> bool:
-    return ("-[" in text and "]->" in text) or ("<-[" in text and "]-" in text)
+    return "-[" in text and "]-" in text
 
 
 def _split_relationship_pattern(
@@ -960,6 +962,34 @@ def _split_relationship_pattern(
     raise ValueError(
         "HumemCypher v0 only supports a single directed relationship pattern."
     )
+
+
+_UNDIRECTED_RELATIONSHIP_PATTERN = re.compile(
+    r"\((?P<left>[^)]*)\)\s*-\[\s*(?P<rel>[^\]]+)\s*\]\s*-\s*\((?P<right>[^)]*)\)"
+)
+
+
+def _split_relationship_pattern_read(
+    text: str,
+) -> tuple[str, str, str, Literal["out", "in", "both"]]:
+    """Like _split_relationship_pattern, but also admits the undirected form.
+
+    Only read-only MATCH normalization uses this; writes and composites keep
+    the directed-only splitter (Cypher cannot CREATE/MERGE an undirected
+    relationship).
+    """
+    try:
+        return _split_relationship_pattern(text)
+    except ValueError:
+        undirected = _UNDIRECTED_RELATIONSHIP_PATTERN.fullmatch(text.strip())
+        if undirected is not None:
+            return (
+                undirected.group("left"),
+                undirected.group("rel"),
+                undirected.group("right"),
+                "both",
+            )
+        raise
 
 
 def _unwrap_node_pattern(text: str) -> str:

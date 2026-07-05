@@ -119,6 +119,13 @@ _CONFORMANCE_QUERIES: dict[str, str] = {
     "union_distinct": "MATCH (u:User) RETURN u.name AS name UNION MATCH (c:Company) RETURN c.name AS name",
     "union_dedup": "MATCH (u:User) RETURN u.age AS v UNION MATCH (u2:User) RETURN u2.age AS v",
     "union_all_keeps": "MATCH (u:User) RETURN u.age AS v UNION ALL MATCH (u2:User) RETURN u2.age AS v",
+    # Undirected one-hop (redefined-v0.1): each KNOWS edge must appear once
+    # per traversal orientation, ordered rows must match Neo4j exactly.
+    "undirected_one_hop": "MATCH (a:User)-[:KNOWS]-(b:User) RETURN a.name AS x, b.name AS y ORDER BY x, y",
+    "undirected_where": "MATCH (a:User)-[:KNOWS]-(b:User) WHERE a.name = 'Bob' RETURN b.name AS peer ORDER BY peer",
+    "undirected_cross_type": "MATCH (c:Company)-[:WORKS_AT]-(u:User) RETURN u.name AS person, c.name AS company ORDER BY person",
+    "inbound_one_hop": "MATCH (a:User)<-[:KNOWS]-(b:User) RETURN a.name AS dst, b.name AS src ORDER BY dst, src",
+    "inbound_cross_type": "MATCH (c:Company)<-[:WORKS_AT]-(u:User) RETURN u.name AS person, c.name AS company ORDER BY person",
 }
 
 

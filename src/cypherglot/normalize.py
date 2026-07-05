@@ -32,6 +32,7 @@ from ._normalize_support import (
     _split_comma_separated,
     _split_query_nodes_return_and_order,
     _split_relationship_pattern,
+    _split_relationship_pattern_read,
     _split_return_clause,
     _unwrap_node_pattern,
     _validate_create_relationship_separate_patterns,
@@ -693,6 +694,15 @@ def normalize_cypher_parse_result(
                         source,
                         (NormalizedMatchRelationship, NormalizedMatchChain),
                     )
+                    if (
+                        isinstance(source, NormalizedMatchRelationship)
+                        and source.relationship.direction == "both"
+                    ):
+                        raise ValueError(
+                            "CypherGlot admits undirected relationship patterns "
+                            "only in read-only MATCH queries; give the MATCH "
+                            "pattern a direction before writing from it."
+                        )
                     _validate_match_write_reused_source_endpoints(
                         source,
                         left,
@@ -800,6 +810,15 @@ def normalize_cypher_parse_result(
                         source,
                         (NormalizedMatchRelationship, NormalizedMatchChain),
                     )
+                    if (
+                        isinstance(source, NormalizedMatchRelationship)
+                        and source.relationship.direction == "both"
+                    ):
+                        raise ValueError(
+                            "CypherGlot admits undirected relationship patterns "
+                            "only in read-only MATCH queries; give the MATCH "
+                            "pattern a direction before writing from it."
+                        )
                     _validate_match_write_reused_source_endpoints(
                         source,
                         left,
@@ -1225,7 +1244,7 @@ def normalize_cypher_parse_result(
 
     if _looks_like_relationship_pattern(pattern_text):
         left_text, relationship_text, right_text, direction = (
-            _split_relationship_pattern(pattern_text)
+            _split_relationship_pattern_read(pattern_text)
         )
         left = _parse_node_pattern(left_text, default_alias="__humem_match_left_node")
         relationship = _parse_relationship_pattern(relationship_text, direction)
