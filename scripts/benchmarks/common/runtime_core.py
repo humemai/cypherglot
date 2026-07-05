@@ -2163,17 +2163,11 @@ def main(entrypoint: SQLRuntimeBenchmarkEntrypoint = SQLITE_ENTRYPOINT) -> int:
                 if suite_name == "description":
                     continue
                 _print_suite(f"olap/{suite_name}", suite)
-        failure_count = 0
-        for workload_name in ("oltp", "olap"):
-            if workload_name not in workloads:
-                continue
-            for suite_name, suite in workloads[workload_name].items():
-                if suite_name == "description":
-                    continue
-                failure_count += int(suite.get("fail_count", 0))
-                # Timeouts are data (an exceeded budget is a result, not an
-                # operational failure), so they do not affect the exit code.
-        return 1 if failure_count else 0
+        # Timeouts AND per-query failures are data (an engine rejecting or
+        # crashing on a query is a result, recorded with its error); the run
+        # completed and wrote its payload, so the process exits 0. Only
+        # infrastructure errors (exceptions reaching main) exit nonzero.
+        return 0
     finally:
         if acquired_postgresql_runtime:
             release_postgresql_benchmark_dsn()

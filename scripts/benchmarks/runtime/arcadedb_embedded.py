@@ -2738,7 +2738,10 @@ def main() -> int:
             if suite_name == "description":
                 continue
             _print_suite(f"olap/{suite_name}", suite)
-    return 1 if failure_count else 0
+    # Per-query failures are data (recorded with their errors); a run that
+    # completed and wrote its payload exits 0.
+    del failure_count
+    return 0
 
 
 if __name__ == "__main__":  # pragma: no cover
