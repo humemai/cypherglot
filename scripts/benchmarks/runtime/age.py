@@ -1415,6 +1415,7 @@ def _measure_query(
 def _run_workload_suite(
     conn: Any,
     *,
+    dsn: str | None = None,
     graph_name: str,
     workload: str,
     index_mode: str,
@@ -1442,8 +1443,9 @@ def _run_workload_suite(
             f"{suite_name}: query {query_index}/{len(queries)} {query.name}"
         )
         _progress(query_progress_label)
-        query_results.append(
-            _measure_query(
+
+        def _attempt() -> dict[str, object]:
+            return _measure_query(
                 conn,
                 graph_name=graph_name,
                 index_mode=index_mode,
@@ -1455,7 +1457,34 @@ def _run_workload_suite(
                 iteration_progress=iteration_progress,
                 timeout_ms=timeout_ms,
             )
-        )
+
+        try:
+            result = _attempt()
+        except Exception as error:  # noqa: BLE001 - server death must be data
+            # The server can drop the connection mid-suite (backend OOM at
+            # large scale); postgres usually recovers after crash recovery,
+            # so reconnect once and retry. A second failure is recorded.
+            _progress(f"{query_progress_label}: connection lost ({error}); reconnecting")
+            result = None
+            if dsn is not None:
+                try:
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
+                    time.sleep(5.0)
+                    conn = _connect_age(dsn)
+                    result = _attempt()
+                except Exception as retry_error:  # noqa: BLE001
+                    error = retry_error
+            if result is None:
+                result = _status_result(
+                    query=query,
+                    index_mode=index_mode,
+                    status="failed",
+                    extra={"error": f"{type(error).__name__}: {error}"},
+                )
+        query_results.append(result)
     rss_snapshots_mib["suite_complete"] = _capture_age_rss_snapshot(docker_config)
     _progress(f"{suite_name}: suite complete")
 
@@ -1495,6 +1524,7 @@ def _run_workload_suite(
 
 def _benchmark_result(
     conn: Any,
+    dsn: str | None = None,
     *,
     graph_name: str,
     queries: list[CorpusQuery],
@@ -1579,6 +1609,7 @@ def _benchmark_result(
             )
             suite = _run_workload_suite(
                 conn,
+                dsn=dsn,
                 graph_name=graph_name,
                 workload="oltp",
                 index_mode=mode,
@@ -1611,6 +1642,7 @@ def _benchmark_result(
             )
             suite = _run_workload_suite(
                 conn,
+                dsn=dsn,
                 graph_name=graph_name,
                 workload="olap",
                 index_mode=mode,
@@ -2100,6 +2132,7 @@ def main() -> int:
     try:
         result, failure_count = _benchmark_result(
             conn,
+            dsn=age_dsn,
             graph_name=args.graph_name,
             queries=queries,
             schema_context=schema_context,
