@@ -507,7 +507,7 @@ def _ensure_seed_constraints(
 ) -> None:
     for statement in _seed_constraint_statements(graph_schema):
         session.run(statement).consume()
-    session.run("CALL db.awaitIndexes()").consume()
+    session.run("CALL db.awaitIndexes(1800)").consume()
 
 
 def _seed_nodes(
@@ -657,7 +657,7 @@ def _seed_graph(
 def _create_query_indexes(session: Any, graph_schema: cypherglot.GraphSchema) -> None:
     for statement in _query_index_statements(graph_schema):
         session.run(statement).consume()
-    session.run("CALL db.awaitIndexes()").consume()
+    session.run("CALL db.awaitIndexes(1800)").consume()
 
 
 def _create_driver(uri: str, user: str, password: str) -> Any:
