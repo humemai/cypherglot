@@ -537,7 +537,10 @@ def _age_server_versions(conn: Any) -> dict[str, str]:
         row = cur.fetchone()
         if row and isinstance(row[0], str):
             versions["age"] = row[0]
-    conn.rollback()
+    try:
+        conn.rollback()
+    except Exception:
+        pass
     return versions
 
 
@@ -1085,7 +1088,10 @@ def _create_query_indexes(
                 cur.execute(statement)
             conn.commit()
         except Exception as exc:  # pragma: no cover - version-dependent
-            conn.rollback()
+            try:
+                conn.rollback()
+            except Exception:
+                pass
             warnings.append(f"{statement}: {exc}")
     if warnings:
         _progress(
@@ -1286,10 +1292,16 @@ def _measure_query(
         _set_statement_timeout(cur, timeout_ms)
         conn.commit()
     except Exception:
-        conn.rollback()
+        try:
+            conn.rollback()
+        except Exception:
+            pass
 
     def fail(exc: Exception, phase: str, iteration: int) -> dict[str, object]:
-        conn.rollback()
+        try:
+            conn.rollback()
+        except Exception:
+            pass
         if (timeout_ms is not None and _age_error_is_query_timeout(exc)) or isinstance(
             exc, BenchmarkQueryTimeoutError
         ):
@@ -1377,7 +1389,10 @@ def _measure_query(
             conn.commit()
         except Exception:
             try:
-                conn.rollback()
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
             except Exception:
                 pass
         try:
