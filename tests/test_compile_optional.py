@@ -172,7 +172,7 @@ class CompileTests(unittest.TestCase):
             )
 
     def test_compile_match_optional_match_rejects_alias_mismatch(self) -> None:
-        with self.assertRaisesRegex(ValueError, "must reuse the MATCH node alias"):
+        with self.assertRaisesRegex(ValueError, "must reuse a mandatory MATCH node alias"):
             cypherglot.compile_cypher_text(
                 "MATCH (a:User {name: 'Alice'}) "
                 "OPTIONAL MATCH (c)-[r:KNOWS]->(b:User) RETURN a.name AS n",
@@ -422,3 +422,53 @@ class CompileTests(unittest.TestCase):
             
             backend="sqlite",)
 
+
+
+class MandatoryOneHopOptionalTests(unittest.TestCase):
+    """M1-F part 2: one-hop mandatory MATCH before OPTIONAL MATCH."""
+
+    maxDiff = None
+
+    def _sql(self, query: str) -> str:
+        return cypherglot.to_sql(
+            query, backend="sqlite", schema_context=_public_api_schema_context()
+        )
+
+    def test_mandatory_onehop_then_optional_anchored_on_right(self) -> None:
+        sql = self._sql(
+            "MATCH (a:User)-[k:KNOWS]->(b:User) "
+            "OPTIONAL MATCH (b)-[:KNOWS]->(c:User) "
+            "RETURN a.name AS x, c.name AS z"
+        )
+        self.assertIn("FROM cg_edge_knows AS k", sql)
+        self.assertIn("AS a ON a.id = k.from_id", sql)
+        self.assertIn("AS b ON b.id = k.to_id", sql)
+        self.assertIn("LEFT JOIN cg_edge_knows AS __cg_opt_edge "
+                      "ON __cg_opt_edge.from_id = b.id", sql)
+
+    def test_mandatory_where_stays_outer_optional_where_in_on(self) -> None:
+        sql = self._sql(
+            "MATCH (a:User)-[:KNOWS]->(b:User) WHERE a.age > 30 "
+            "OPTIONAL MATCH (b)-[:KNOWS]->(c:User) WHERE c.age < 20 "
+            "RETURN a.name AS x, c.name AS z"
+        )
+        self.assertIn("WHERE a.age > 30", sql)
+        self.assertIn("__cg_opt_b_guard.age < 20", sql)
+        head, _, tail = sql.partition("WHERE a.age > 30")
+        self.assertIn("c.age < 20", head)  # optional predicate lives in ON
+
+    def test_undirected_mandatory_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "undirected mandatory|direction"):
+            self._sql(
+                "MATCH (a:User)-[:KNOWS]-(b:User) "
+                "OPTIONAL MATCH (b)-[:KNOWS]->(c:User) "
+                "RETURN a.name AS x, c.name AS z"
+            )
+
+    def test_optional_anchor_must_be_mandatory_alias(self) -> None:
+        with self.assertRaisesRegex(ValueError, "mandatory MATCH node alias"):
+            self._sql(
+                "MATCH (a:User)-[:KNOWS]->(b:User) "
+                "OPTIONAL MATCH (q)-[:KNOWS]->(c:User) "
+                "RETURN a.name AS x, c.name AS z"
+            )

@@ -317,6 +317,9 @@ class NormalizedMatchOptionalMatchReturn:
     limit: int | None = None
     distinct: bool = False
     skip: int | None = None
+    # Which mandatory alias the optional pattern's left endpoint reuses (the
+    # single node's alias, or either endpoint of a one-hop mandatory MATCH).
+    optional_anchor_alias: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -1383,10 +1386,18 @@ def _normalize_match_optional_match_return(
     assert mandatory_ctx is not None and optional_ctx is not None
 
     source = _normalize_match_source(result, mandatory_ctx)
-    if not isinstance(source, NormalizedMatchNode):
+    if not isinstance(source, (NormalizedMatchNode, NormalizedMatchRelationship)):
         raise ValueError(
             "CypherGlot currently supports MATCH ... OPTIONAL MATCH only when the "
-            "mandatory MATCH is a single node pattern."
+            "mandatory MATCH is a single node or one-hop relationship pattern."
+        )
+    if (
+        isinstance(source, NormalizedMatchRelationship)
+        and source.relationship.direction == "both"
+    ):
+        raise ValueError(
+            "CypherGlot does not yet admit an undirected mandatory MATCH before "
+            "OPTIONAL MATCH; give the pattern a direction."
         )
 
     optional_pattern_text = _context_text(result, optional_ctx.oC_Pattern())
@@ -1399,10 +1410,14 @@ def _normalize_match_optional_match_return(
         optional_pattern_text
     )
     left = _parse_node_pattern(left_text, default_alias="__humem_optional_left_node")
-    if left.alias != source.node.alias:
+    if isinstance(source, NormalizedMatchRelationship):
+        mandatory_aliases = {source.left.alias, source.right.alias}
+    else:
+        mandatory_aliases = {source.node.alias}
+    if left.alias not in mandatory_aliases:
         raise ValueError(
-            "CypherGlot OPTIONAL MATCH must reuse the MATCH node alias as the left "
-            "endpoint of the optional relationship."
+            "CypherGlot OPTIONAL MATCH must reuse a mandatory MATCH node alias as "
+            "the left endpoint of the optional relationship."
         )
     relationship = _parse_relationship_pattern(relationship_text, direction)
     if relationship.type_name is None:
@@ -1426,7 +1441,8 @@ def _normalize_match_optional_match_return(
         optional_predicates = _parse_predicates(
             _context_text(result, optional_where.oC_Expression())
         )
-    allowed = {source.node.alias: "node", right.alias: "node"}
+    allowed = dict(_source_alias_kinds(source))
+    allowed[right.alias] = "node"
     if relationship.alias is not None:
         allowed[relationship.alias] = "relationship"
     _validate_normalized_match_predicates(optional_predicates, alias_kinds=allowed)
@@ -1442,6 +1458,7 @@ def _normalize_match_optional_match_return(
         source=source,
         relationship=relationship,
         right=right,
+        optional_anchor_alias=left.alias,
         optional_predicates=optional_predicates,
         returns=returns,
         order_by=order_by,

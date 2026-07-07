@@ -403,10 +403,10 @@ def _validate_match_optional_match_shape(
 
 	mandatory_parts = mandatory_ctx.oC_Pattern().oC_PatternPart()
 	mandatory_element = mandatory_parts[0].oC_AnonymousPatternPart().oC_PatternElement()
-	if len(mandatory_parts) != 1 or mandatory_element.oC_PatternElementChain():
+	if len(mandatory_parts) != 1 or len(mandatory_element.oC_PatternElementChain()) > 1:
 		raise ValueError(
-			"CypherGlot currently admits only a single-node mandatory MATCH before "
-			"OPTIONAL MATCH."
+			"CypherGlot currently admits a single-node or one-hop mandatory MATCH "
+			"before OPTIONAL MATCH."
 		)
 
 	optional_parts = optional_ctx.oC_Pattern().oC_PatternPart()

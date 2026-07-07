@@ -143,6 +143,13 @@ _CONFORMANCE_QUERIES: dict[str, str] = {
     "optional_target_property": "MATCH (a:User) OPTIONAL MATCH (a)-[:KNOWS]->(b:User {age: 27}) RETURN a.name AS name, b.name AS friend ORDER BY name, friend",
     "optional_count": "MATCH (a:User) OPTIONAL MATCH (a)-[:KNOWS]->(b:User) RETURN a.name AS name, count(b) AS friends ORDER BY name",
     "optional_inbound": "MATCH (a:User) OPTIONAL MATCH (a)<-[:KNOWS]-(b:User) RETURN a.name AS name, b.name AS fan ORDER BY name, fan",
+    # One-hop mandatory MATCH before OPTIONAL MATCH (M1-F part 2): anchored on
+    # the right endpoint, the left endpoint, with WHERE-on-optional (EXISTS
+    # guard composition), and with aggregation over the optional alias.
+    "mandatory_onehop_optional": "MATCH (a:User)-[:KNOWS]->(b:User) OPTIONAL MATCH (b)-[:KNOWS]->(c:User) RETURN a.name AS x, b.name AS y, c.name AS z ORDER BY x, y, z",
+    "mandatory_onehop_optional_left_anchor": "MATCH (a:User)-[:KNOWS]->(b:User) OPTIONAL MATCH (a)-[:WORKS_AT]->(co:Company) RETURN b.name AS y, co.name AS company ORDER BY y, company",
+    "mandatory_onehop_optional_where": "MATCH (a:User)-[:KNOWS]->(b:User) OPTIONAL MATCH (b)-[:KNOWS]->(c:User) WHERE c.age > 27 RETURN a.name AS x, c.name AS z ORDER BY x, z",
+    "mandatory_onehop_optional_count": "MATCH (a:User)-[:KNOWS]->(b:User) OPTIONAL MATCH (b)-[:KNOWS]->(c:User) RETURN a.name AS x, count(c) AS n ORDER BY x",
 }
 
 

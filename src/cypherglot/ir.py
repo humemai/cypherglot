@@ -247,6 +247,8 @@ class GraphRelationalReadIR:
     # Predicates from an OPTIONAL MATCH part — lowered into the LEFT JOIN ON
     # clause rather than the outer WHERE, so unmatched source rows survive.
     optional_predicates: tuple[ReadPredicate, ...] = ()
+    # Mandatory alias the optional pattern anchors on (None = nodes[0]).
+    optional_anchor_alias: str | None = None
     returns: tuple[ReadReturnItem, ...] = ()
     order_by: tuple[ReadOrderItem, ...] = ()
     bindings: tuple[WithBinding, ...] = ()
@@ -542,6 +544,28 @@ def _build_read_ir(
             skip=statement.skip,
         )
     if isinstance(statement, NormalizedMatchOptionalMatchReturn):
+        if isinstance(statement.source, NormalizedMatchRelationship):
+            return GraphRelationalReadIR(
+                match_kind="optional-match-relationship",
+                source_kind="relationship",
+                nodes=(
+                    statement.source.left,
+                    statement.source.right,
+                    statement.right,
+                ),
+                relationships=(
+                    statement.source.relationship,
+                    statement.relationship,
+                ),
+                predicates=statement.source.predicates,
+                optional_predicates=statement.optional_predicates,
+                optional_anchor_alias=statement.optional_anchor_alias,
+                returns=statement.returns,
+                order_by=statement.order_by,
+                distinct=statement.distinct,
+                limit=statement.limit,
+                skip=statement.skip,
+            )
         return GraphRelationalReadIR(
             match_kind="optional-match-relationship",
             source_kind="relationship",
@@ -549,6 +573,7 @@ def _build_read_ir(
             relationships=(statement.relationship,),
             predicates=statement.source.predicates,
             optional_predicates=statement.optional_predicates,
+            optional_anchor_alias=statement.optional_anchor_alias or None,
             returns=statement.returns,
             order_by=statement.order_by,
             distinct=statement.distinct,

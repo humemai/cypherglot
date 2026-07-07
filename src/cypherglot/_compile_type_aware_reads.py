@@ -695,10 +695,27 @@ def _compile_type_aware_match_optional_match_relationship_sql(
     graph_schema: GraphSchema,
     backend: SQLBackend,
 ) -> str:
-    source_node, right = statement.nodes
-    relationship = statement.relationships[0]
+    # Two shapes: (node, opt_right) with one relationship (single-node anchor),
+    # or (mand_left, mand_right, opt_right) with (mand_rel, opt_rel) — a one-hop
+    # mandatory MATCH whose alias `optional_anchor_alias` anchors the optional.
+    mandatory_relationship = None
+    if len(statement.relationships) == 2:
+        mand_left, mand_right, right = statement.nodes
+        mandatory_relationship = statement.relationships[0]
+        relationship = statement.relationships[1]
+        mandatory_nodes = [mand_left, mand_right]
+    else:
+        source_node, right = statement.nodes
+        relationship = statement.relationships[0]
+        mandatory_nodes = [source_node]
+    anchor_alias = statement.optional_anchor_alias or mandatory_nodes[0].alias
+    anchor_node = next(
+        (node for node in mandatory_nodes if node.alias == anchor_alias),
+        mandatory_nodes[0],
+    )
+
     if (
-        source_node.label is None
+        any(node.label is None for node in mandatory_nodes)
         or right.label is None
         or relationship.type_name is None
     ):
@@ -711,15 +728,25 @@ def _compile_type_aware_match_optional_match_relationship_sql(
             "Type-aware OPTIONAL MATCH lowering does not support variable-length "
             "relationships."
         )
+    if mandatory_relationship is not None and (
+        mandatory_relationship.type_name is None
+        or "|" in mandatory_relationship.type_name
+        or mandatory_relationship.direction == "both"
+        or _is_variable_length_relationship(mandatory_relationship)
+    ):
+        raise ValueError(
+            "Type-aware OPTIONAL MATCH lowering currently requires a plain "
+            "directed single-type one-hop mandatory MATCH."
+        )
 
-    a_alias = source_node.alias
+    a_alias = anchor_alias
     b_alias = right.alias
     r_alias = relationship.alias or "__cg_opt_edge"
-    a_type = graph_schema.node_type(source_node.label)
+    a_type = graph_schema.node_type(anchor_node.label)
     b_type = graph_schema.node_type(right.label)
     edge_type = graph_schema.edge_type(relationship.type_name)
 
-    source_label = source_node.label
+    source_label = anchor_node.label
     target_label = right.label
     if relationship.direction == "in":
         source_label, target_label = target_label, source_label
@@ -733,9 +760,28 @@ def _compile_type_aware_match_optional_match_relationship_sql(
     b_col = _edge_endpoint_column(relationship.direction, "right")
 
     alias_specs: dict[str, _TypeAwareAliasSpec] = {
-        a_alias: _TypeAwareAliasSpec(a_alias, "node", a_type),
-        b_alias: _TypeAwareAliasSpec(b_alias, "node", b_type),
+        node.alias: _TypeAwareAliasSpec(
+            node.alias, "node", graph_schema.node_type(node.label)
+        )
+        for node in mandatory_nodes
     }
+    alias_specs[b_alias] = _TypeAwareAliasSpec(b_alias, "node", b_type)
+    if mandatory_relationship is not None and mandatory_relationship.alias is not None:
+        alias_specs[mandatory_relationship.alias] = _TypeAwareAliasSpec(
+            mandatory_relationship.alias,
+            "relationship",
+            graph_schema.edge_type(mandatory_relationship.type_name),
+            start_node_alias=(
+                mandatory_nodes[0].alias
+                if mandatory_relationship.direction == "out"
+                else mandatory_nodes[1].alias
+            ),
+            end_node_alias=(
+                mandatory_nodes[1].alias
+                if mandatory_relationship.direction == "out"
+                else mandatory_nodes[0].alias
+            ),
+        )
     if relationship.alias is not None:
         alias_specs[r_alias] = _TypeAwareAliasSpec(
             r_alias,
@@ -745,35 +791,78 @@ def _compile_type_aware_match_optional_match_relationship_sql(
             end_node_alias=b_alias,
         )
 
-    # Outer WHERE carries only the mandatory source predicates (these are meant
-    # to remove source rows).
+    # Outer WHERE carries only the mandatory predicates (these are meant to
+    # remove source rows). They may reference any mandatory node alias (and
+    # the mandatory relationship alias when present).
+    mandatory_types = {
+        node.alias: graph_schema.node_type(node.label) for node in mandatory_nodes
+    }
+    mandatory_rel_alias = (
+        mandatory_relationship.alias
+        if mandatory_relationship is not None
+        else None
+    )
+    mandatory_edge_type = (
+        graph_schema.edge_type(mandatory_relationship.type_name)
+        if mandatory_relationship is not None
+        else None
+    )
     where_parts: list[str] = []
-    for field, value in source_node.properties:
-        where_parts.append(
-            _compile_type_aware_predicate(
-                field_expression=_compile_type_aware_node_field_expression(
-                    a_alias, a_type, field
-                ),
-                operator="=",
-                value=value,
-                backend=backend,
+    for node in mandatory_nodes:
+        for field, value in node.properties:
+            where_parts.append(
+                _compile_type_aware_predicate(
+                    field_expression=_compile_type_aware_node_field_expression(
+                        node.alias, mandatory_types[node.alias], field
+                    ),
+                    operator="=",
+                    value=value,
+                    backend=backend,
+                )
             )
-        )
+    if mandatory_relationship is not None:
+        for field, value in mandatory_relationship.properties:
+            where_parts.append(
+                _compile_type_aware_predicate(
+                    field_expression=_compile_type_aware_edge_field_expression(
+                        mandatory_rel_alias or "__cg_mand_edge",
+                        mandatory_edge_type,
+                        field,
+                    ),
+                    operator="=",
+                    value=value,
+                    backend=backend,
+                )
+            )
     source_predicate_parts: list[tuple[int, str]] = []
     for predicate in statement.predicates:
-        if predicate.alias != a_alias:
+        if predicate.alias in mandatory_types:
+            source_predicate_parts.append(
+                (
+                    predicate.disjunct_index,
+                    _compile_type_aware_match_node_predicate(
+                        predicate.alias,
+                        mandatory_types[predicate.alias],
+                        predicate,
+                        backend=backend,
+                    ),
+                )
+            )
+        elif predicate.alias == mandatory_rel_alias and mandatory_edge_type is not None:
+            source_predicate_parts.append(
+                (
+                    predicate.disjunct_index,
+                    _compile_type_aware_match_relationship_predicate(
+                        mandatory_rel_alias, mandatory_edge_type, predicate,
+                        backend=backend,
+                    ),
+                )
+            )
+        else:
             raise ValueError(
                 "Type-aware OPTIONAL MATCH lowering supports mandatory WHERE "
-                "predicates only on the matched source alias."
+                "predicates only on the mandatory MATCH aliases."
             )
-        source_predicate_parts.append(
-            (
-                predicate.disjunct_index,
-                _compile_type_aware_match_node_predicate(
-                    a_alias, a_type, predicate, backend=backend
-                ),
-            )
-        )
     where_parts.extend(_group_disjunct_predicates(source_predicate_parts))
 
     # Optional-side predicates (pattern properties + OPTIONAL MATCH WHERE) go in
@@ -874,11 +963,32 @@ def _compile_type_aware_match_optional_match_relationship_sql(
         statement.returns, alias_specs, backend=backend
     )
 
+    if mandatory_relationship is None:
+        base_from = f"FROM {a_type.table_name} AS {a_alias}"
+        base_joins: list[str] = []
+    else:
+        mand_edge_alias = mandatory_relationship.alias or "__cg_mand_edge"
+        left_node, right_node = mandatory_nodes
+        left_col = _edge_endpoint_column(mandatory_relationship.direction, "left")
+        right_col = _edge_endpoint_column(mandatory_relationship.direction, "right")
+        base_from = (
+            f"FROM {mandatory_edge_type.table_name} AS {mand_edge_alias}"
+        )
+        base_joins = [
+            f"JOIN {mandatory_types[left_node.alias].table_name} AS "
+            f"{left_node.alias} ON {left_node.alias}.id = "
+            f"{mand_edge_alias}.{left_col}",
+            f"JOIN {mandatory_types[right_node.alias].table_name} AS "
+            f"{right_node.alias} ON {right_node.alias}.id = "
+            f"{mand_edge_alias}.{right_col}",
+        ]
+
     return _assemble_select_sql(
         select_sql=select_sql,
         distinct=statement.distinct,
-        from_sql=f"FROM {a_type.table_name} AS {a_alias}",
+        from_sql=base_from,
         joins=[
+            *base_joins,
             f"LEFT JOIN {edge_type.table_name} AS {r_alias} "
             f"ON {' AND '.join(edge_on)}",
             f"LEFT JOIN {b_type.table_name} AS {b_alias} "
