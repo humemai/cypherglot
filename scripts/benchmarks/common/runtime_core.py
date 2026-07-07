@@ -1968,6 +1968,9 @@ def _parse_args(entrypoint: SQLRuntimeBenchmarkEntrypoint) -> argparse.Namespace
 
 
 def main(entrypoint: SQLRuntimeBenchmarkEntrypoint = SQLITE_ENTRYPOINT) -> int:
+    # Measured compile times must stay cold-path: the user-facing render
+    # cache would turn every repeat iteration into a dict lookup.
+    cypherglot.set_compile_cache(enabled=False)
     args = _parse_args(entrypoint)
     apply_cpu_affinity(parse_cpu_affinity(getattr(args, "cpu_affinity", None)))
     started_at = datetime.now(timezone.utc)

@@ -438,7 +438,11 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _import_cypherglot():
-    return importlib.import_module("cypherglot")
+    module = importlib.import_module("cypherglot")
+    # Measured translation times must stay cold-path: the user-facing render
+    # cache would turn every repeat iteration into a dict lookup.
+    module.set_compile_cache(enabled=False)
+    return module
 
 
 def _load_corpus(path: Path) -> list[CorpusQuery]:

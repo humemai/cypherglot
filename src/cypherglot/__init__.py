@@ -2,6 +2,12 @@ from __future__ import annotations
 
 from importlib.metadata import PackageNotFoundError, version
 
+from ._cache import (
+    CompileCacheInfo,
+    clear_compile_cache,
+    compile_cache_info,
+    set_compile_cache,
+)
 from ._compiled_program import CompiledCypherLoop
 from .compile import (
     CompiledCypherProgram,
@@ -70,6 +76,10 @@ __all__ = [
     "NormalizedQueryNodesVectorSearch",
     "WithBinding",
     "__version__",
+    "CompileCacheInfo",
+    "clear_compile_cache",
+    "compile_cache_info",
+    "set_compile_cache",
     "compile_cypher_program_text",
     "compile_cypher_text",
     "compile_normalized_cypher_program",

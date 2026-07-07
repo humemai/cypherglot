@@ -9,6 +9,7 @@ from typing import Any, Callable
 from sqlglot import exp
 from sqlglot.dialects.dialect import Dialect
 
+from ._cache import _CACHE
 from ._logging import get_logger
 from ._compiled_program import CompiledCypherLoop
 from .compile import (
@@ -108,6 +109,19 @@ def to_sql(
     resolved_backend = _resolve_render_backend(backend, dialect)
     resolved_dialect = _resolve_render_dialect(resolved_backend, dialect)
 
+    cache_key = (
+        "sql",
+        text,
+        resolved_backend.value,
+        resolved_dialect,
+        pretty,
+        variable_length_strategy,
+        schema_context,
+    )
+    cached = _CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
     logger.debug(
         "Rendering Cypher text to SQL",
         extra={
@@ -129,6 +143,7 @@ def to_sql(
         ),
     )
     logger.debug("Rendered Cypher text to SQL")
+    _CACHE.put(cache_key, sql)
     return sql
 
 
@@ -148,6 +163,18 @@ def render_cypher_program_text(
     resolved_backend = _resolve_render_backend(backend, dialect)
     resolved_dialect = _resolve_render_dialect(resolved_backend, dialect)
 
+    cache_key = (
+        "program",
+        text,
+        resolved_backend.value,
+        resolved_dialect,
+        pretty,
+        schema_context,
+    )
+    cached = _CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
     logger.debug(
         "Rendering compiled Cypher program text",
         extra={
@@ -166,6 +193,7 @@ def render_cypher_program_text(
         pretty=pretty,
     )
     logger.debug("Rendered compiled Cypher program text")
+    _CACHE.put(cache_key, program)
     return program
 
 
