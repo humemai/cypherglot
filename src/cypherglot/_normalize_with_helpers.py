@@ -205,7 +205,7 @@ def _parse_with_bindings(
         or projection_body.oC_Limit() is not None
     ):
         raise ValueError(
-            "HumemCypher v0 WITH support currently admits only simple passthrough "
+            "CypherGlot WITH support currently admits only simple passthrough "
             "projection items without ORDER BY, SKIP/OFFSET, or LIMIT."
         )
 
@@ -229,7 +229,7 @@ def _parse_with_bindings(
         )
         if output_alias in seen_output_aliases:
             raise ValueError(
-                "HumemCypher v0 WITH support does not allow duplicate output "
+                "CypherGlot WITH support does not allow duplicate output "
                 f"alias {output_alias!r}."
             )
         seen_output_aliases.add(output_alias)
@@ -239,12 +239,12 @@ def _parse_with_bindings(
             source_alias = field_match.group("alias")
             if source_alias not in alias_kinds:
                 raise ValueError(
-                    "HumemCypher v0 WITH support currently admits scalar rebinding "
+                    "CypherGlot WITH support currently admits scalar rebinding "
                     "only from known MATCH aliases."
                 )
             if item_ctx.oC_Variable() is None:
                 raise ValueError(
-                    "HumemCypher v0 WITH scalar rebinding currently requires an "
+                    "CypherGlot WITH scalar rebinding currently requires an "
                     "AS alias."
                 )
             bindings.append(
@@ -271,7 +271,7 @@ def _parse_with_bindings(
 
         if item_ctx.oC_Variable() is None:
             raise ValueError(
-                "HumemCypher v0 derived scalar WITH bindings currently require an "
+                "CypherGlot derived scalar WITH bindings currently require an "
                 "explicit AS alias."
             )
 

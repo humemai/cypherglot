@@ -97,7 +97,7 @@ def _parse_with_binding_expression_item(
     if simple_item is not None:
         if simple_item.kind in {"start_node", "end_node"} and simple_item.field is None:
             raise ValueError(
-                "HumemCypher v0 derived WITH bindings currently support only "
+                "CypherGlot derived WITH bindings currently support only "
                 "scalar-producing expressions."
             )
         return simple_item
@@ -135,7 +135,7 @@ def _parse_with_binding_expression_item(
         return literal_item
 
     raise ValueError(
-        "HumemCypher v0 WITH support currently admits only passthrough variable "
+        "CypherGlot WITH support currently admits only passthrough variable "
         "items such as WITH u or WITH u AS person, simple scalar rebinding such "
         "as WITH u.name AS name, or derived scalar expressions that are already "
         "admitted in the WITH RETURN subset."
@@ -155,7 +155,7 @@ def _parse_with_predicates(
                 left_text, operator, value_text = _split_predicate_comparison(item)
             except ValueError as exc:
                 raise ValueError(
-                    "HumemCypher v0 WITH WHERE items must look like "
+                    "CypherGlot WITH WHERE items must look like "
                     "scalar_alias OP value or entity_alias.field OP value."
                 ) from exc
 
@@ -167,7 +167,7 @@ def _parse_with_predicates(
                 _require_entity_binding(
                     binding_map,
                     id_alias,
-                    "HumemCypher v0 WITH WHERE currently supports "
+                    "CypherGlot WITH WHERE currently supports "
                     "id(entity_alias) only for entity bindings.",
                 )
                 predicates.append(
@@ -187,12 +187,12 @@ def _parse_with_predicates(
                 binding = _require_entity_binding(
                     binding_map,
                     type_alias,
-                    "HumemCypher v0 WITH WHERE currently supports "
+                    "CypherGlot WITH WHERE currently supports "
                     "type(rel_alias) only for relationship entity bindings.",
                 )
                 if binding.alias_kind != "relationship":
                     raise ValueError(
-                        "HumemCypher v0 WITH WHERE currently supports "
+                        "CypherGlot WITH WHERE currently supports "
                         "type(rel_alias) only for relationship entity bindings."
                     )
                 predicates.append(
@@ -212,7 +212,7 @@ def _parse_with_predicates(
                 item_value = _parse_with_size_input(size_expr, binding_map)
                 if item_value is None:
                     raise ValueError(
-                        "HumemCypher v0 WITH WHERE items must look like "
+                        "CypherGlot WITH WHERE items must look like "
                         "scalar_alias OP value, entity_alias.field OP value, "
                         "id(entity_alias) OP value, type(rel_alias) OP value, "
                         "or size(admitted_input) OP value."
@@ -235,7 +235,7 @@ def _parse_with_predicates(
                 _require_entity_binding(
                     binding_map,
                     alias,
-                    "HumemCypher v0 WITH WHERE currently supports "
+                    "CypherGlot WITH WHERE currently supports "
                     "entity_alias.field only for entity bindings.",
                 )
                 predicates.append(
@@ -253,7 +253,7 @@ def _parse_with_predicates(
             binding = binding_map.get(target_text)
             if binding is None or binding.binding_kind != "scalar":
                 raise ValueError(
-                    "HumemCypher v0 WITH WHERE items must look like "
+                    "CypherGlot WITH WHERE items must look like "
                     "scalar_alias OP value, entity_alias.field OP value, "
                     "id(entity_alias) OP value, or "
                     "type(rel_alias) OP value."
@@ -269,7 +269,7 @@ def _parse_with_predicates(
             )
 
     if not predicates:
-        raise ValueError("HumemCypher v0 WITH WHERE clauses cannot be empty.")
+        raise ValueError("CypherGlot WITH WHERE clauses cannot be empty.")
     return tuple(predicates)
 
 
@@ -284,7 +284,7 @@ def _parse_with_case_result_item(
         _require_entity_binding(
             binding_map,
             alias,
-            "HumemCypher v0 searched CASE results currently support "
+            "CypherGlot searched CASE results currently support "
             "entity_alias.field only for admitted entity bindings.",
         )
         return WithReturnItem(
@@ -301,7 +301,7 @@ def _parse_with_case_result_item(
         literal_value = _parse_literal(expression_text)
     except ValueError as exc:
         raise ValueError(
-            "HumemCypher v0 searched CASE results currently support only "
+            "CypherGlot searched CASE results currently support only "
             "admitted entity-field projections, admitted scalar bindings, "
             "or scalar literal/parameter inputs in the WITH subset."
         ) from exc
@@ -321,7 +321,7 @@ def _parse_with_case_condition_item(
         size_item = _parse_with_size_input(size_expr, binding_map)
         if size_item is None:
             raise ValueError(
-                "HumemCypher v0 searched CASE WHEN size(...) conditions "
+                "CypherGlot searched CASE WHEN size(...) conditions "
                 "currently support only admitted entity-field projections "
                 "or admitted scalar bindings in the WITH subset."
             )
@@ -339,7 +339,7 @@ def _parse_with_case_condition_item(
         _require_entity_binding(
             binding_map,
             alias,
-            "HumemCypher v0 searched CASE WHEN conditions currently support "
+            "CypherGlot searched CASE WHEN conditions currently support "
             "entity_alias.field only for admitted entity bindings in the "
             "WITH subset.",
         )
@@ -361,7 +361,7 @@ def _parse_with_case_condition_item(
         )
 
     raise ValueError(
-        "HumemCypher v0 searched CASE WHEN conditions currently support "
+        "CypherGlot searched CASE WHEN conditions currently support "
         "only admitted entity-field or scalar-binding predicate surfaces "
         "in the WITH subset."
     )
@@ -376,7 +376,7 @@ def _parse_with_case_expression(
         return None
     if re.fullmatch(r"case\s+.+\s+end", expression_text, flags=re.IGNORECASE) is None:
         raise ValueError(
-            "HumemCypher v0 currently supports searched CASE expressions "
+            "CypherGlot currently supports searched CASE expressions "
             "only in the form CASE WHEN ... THEN ... [WHEN ... THEN ...]* "
             "ELSE ... END in the WITH subset."
         )
@@ -384,7 +384,7 @@ def _parse_with_case_expression(
     inner = expression_text[4:-3].strip()
     if re.match(r"when\b", inner, flags=re.IGNORECASE) is None:
         raise ValueError(
-            "HumemCypher v0 currently supports only searched CASE "
+            "CypherGlot currently supports only searched CASE "
             "expressions beginning with CASE WHEN ... in the WITH subset."
         )
 
@@ -397,14 +397,14 @@ def _parse_with_case_expression(
         then_index = _find_top_level_keyword(inner, "THEN", start=when_index + 4)
         if then_index == -1:
             raise ValueError(
-                "HumemCypher v0 searched CASE expressions require THEN "
+                "CypherGlot searched CASE expressions require THEN "
                 "after every WHEN condition in the WITH subset."
             )
         next_when = _find_top_level_keyword(inner, "WHEN", start=then_index + 4)
         else_index = _find_top_level_keyword(inner, "ELSE", start=then_index + 4)
         if else_index == -1 and next_when == -1:
             raise ValueError(
-                "HumemCypher v0 searched CASE expressions currently "
+                "CypherGlot searched CASE expressions currently "
                 "require an ELSE branch in the WITH subset."
             )
 
@@ -428,7 +428,7 @@ def _parse_with_case_expression(
         if final_else_text is not None:
             if not final_else_text:
                 raise ValueError(
-                    "HumemCypher v0 searched CASE expressions currently "
+                    "CypherGlot searched CASE expressions currently "
                     "require a non-empty ELSE result in the WITH subset."
                 )
             return WithCaseSpec(
@@ -437,7 +437,7 @@ def _parse_with_case_expression(
             )
 
     raise ValueError(
-        "HumemCypher v0 searched CASE expressions currently require at "
+        "CypherGlot searched CASE expressions currently require at "
         "least one WHEN ... THEN ... arm and a final ELSE branch in the "
         "WITH subset."
     )
@@ -458,7 +458,7 @@ def _parse_with_return_items(
         if case_spec is not None:
             if output_alias is None:
                 raise ValueError(
-                    "HumemCypher v0 WITH searched CASE projections "
+                    "CypherGlot WITH searched CASE projections "
                     "currently require an explicit AS alias."
                 )
             item = WithReturnItem(
@@ -531,7 +531,7 @@ def _parse_with_return_items(
             _require_entity_binding(
                 binding_map,
                 alias,
-                "HumemCypher v0 WITH queries cannot return unknown "
+                "CypherGlot WITH queries cannot return unknown "
                 f"entity alias {alias!r}.",
             )
             _append_with_item(
@@ -549,7 +549,7 @@ def _parse_with_return_items(
         binding = binding_map.get(expression_text)
         if binding is None:
             raise ValueError(
-                "HumemCypher v0 WITH queries currently support RETURN alias.field for "
+                "CypherGlot WITH queries currently support RETURN alias.field for "
                 "entity bindings, RETURN entity_alias for pass-through "
                 "entity bindings, RETURN scalar_alias for scalar bindings, "
                 "id(binding_alias) AS output_alias, type(rel_binding_alias) "
@@ -589,7 +589,7 @@ def _parse_with_return_items(
         )
 
     if not items:
-        raise ValueError("HumemCypher v0 WITH RETURN clauses cannot be empty.")
+        raise ValueError("CypherGlot WITH RETURN clauses cannot be empty.")
     return tuple(items)
 
 
@@ -629,7 +629,7 @@ def _parse_with_order_items(
                 )
                 continue
             raise ValueError(
-                "HumemCypher v0 WITH queries can ORDER BY a projected "
+                "CypherGlot WITH queries can ORDER BY a projected "
                 "alias, admitted binding, or an exact projected RETURN "
                 "expression."
             )
@@ -655,13 +655,13 @@ def _parse_with_order_items(
         binding = binding_map.get(item.alias)
         if binding is None:
             raise ValueError(
-                "HumemCypher v0 WITH queries cannot order by unknown "
+                "CypherGlot WITH queries cannot order by unknown "
                 f"alias {item.alias!r}."
             )
         if binding.binding_kind == "scalar":
             if item.field != "__value__":
                 raise ValueError(
-                    "HumemCypher v0 WITH queries currently support ORDER BY "
+                    "CypherGlot WITH queries currently support ORDER BY "
                     "scalar_alias "
                     "for scalar bindings."
                 )
@@ -692,7 +692,7 @@ def _parse_unwind_source(
         )
 
     raise ValueError(
-        "HumemCypher v0 UNWIND currently requires a list literal source."
+        "CypherGlot UNWIND currently requires a list literal source."
     )
 
 
@@ -703,13 +703,13 @@ def _parse_unwind_return_items(text: str, alias: str) -> tuple[WithReturnItem, .
         expression_text, output_alias = _split_with_projection_alias(raw_item.strip())
         if expression_text != alias:
             raise ValueError(
-                "HumemCypher v0 UNWIND currently supports only RETURN "
+                "CypherGlot UNWIND currently supports only RETURN "
                 "unwind_alias or RETURN unwind_alias AS output_alias."
             )
         item = WithReturnItem(kind="scalar", alias=alias, output_alias=output_alias)
         _append_with_item(items, seen_output_names, item, duplicate_scope="UNWIND")
     if not items:
-        raise ValueError("HumemCypher v0 UNWIND RETURN clauses cannot be empty.")
+        raise ValueError("CypherGlot UNWIND RETURN clauses cannot be empty.")
     return tuple(items)
 
 
@@ -737,7 +737,7 @@ def _parse_unwind_order_items(
             continue
         if item.alias != alias or item.field != "__value__":
             raise ValueError(
-                "HumemCypher v0 UNWIND currently supports ORDER BY "
+                "CypherGlot UNWIND currently supports ORDER BY "
                 "unwind_alias or ORDER BY projected_alias."
             )
         items.append(
@@ -767,7 +767,7 @@ def _append_with_item(
     output_name = item.column_name
     if output_name in seen_output_names:
         raise ValueError(
-            f"HumemCypher v0 {duplicate_scope} do not allow duplicate "
+            f"CypherGlot {duplicate_scope} do not allow duplicate "
             f"RETURN output alias {output_name!r}."
         )
     seen_output_names.add(output_name)
@@ -788,7 +788,7 @@ def _parse_with_aggregate_item(
         alias = count_match.group("alias")
         if alias != "*" and alias not in binding_map:
             raise ValueError(
-                "HumemCypher v0 WITH queries cannot aggregate unknown "
+                "CypherGlot WITH queries cannot aggregate unknown "
                 f"binding alias {alias!r}."
             )
         return WithReturnItem(kind="count", alias=alias, output_alias=output_alias)
@@ -803,7 +803,7 @@ def _parse_with_aggregate_item(
         binding = binding_map.get(alias)
         if binding is None or binding.binding_kind != "scalar":
             raise ValueError(
-                "HumemCypher v0 WITH queries currently support "
+                "CypherGlot WITH queries currently support "
                 f"{aggregate_match.group('func').lower()}(...) only over "
                 "admitted scalar bindings."
             )
@@ -829,7 +829,7 @@ def _parse_with_aggregate_item(
     _require_entity_binding(
         binding_map,
         alias,
-        "HumemCypher v0 WITH queries currently support aggregate(...) "
+        "CypherGlot WITH queries currently support aggregate(...) "
         "over entity-field inputs only when the alias is an admitted "
         "entity binding.",
     )
@@ -853,31 +853,31 @@ def _parse_with_simple_entity_function_item(
         (
             r"id\s*\(\s*(?P<alias>[A-Za-z_][A-Za-z0-9_]*)\s*\)",
             "id",
-            "HumemCypher v0 WITH queries cannot apply id(...) to "
+            "CypherGlot WITH queries cannot apply id(...) to "
             "unknown entity binding {alias!r}.",
         ),
         (
             r"type\s*\(\s*(?P<alias>[A-Za-z_][A-Za-z0-9_]*)\s*\)",
             "type",
-            "HumemCypher v0 WITH queries cannot apply type(...) to "
+            "CypherGlot WITH queries cannot apply type(...) to "
             "unknown relationship binding {alias!r}.",
         ),
         (
             r"properties\s*\(\s*(?P<alias>[A-Za-z_][A-Za-z0-9_]*)\s*\)",
             "properties",
-            "HumemCypher v0 WITH queries cannot apply properties(...) "
+            "CypherGlot WITH queries cannot apply properties(...) "
             "to unknown entity binding {alias!r}.",
         ),
         (
             r"labels\s*\(\s*(?P<alias>[A-Za-z_][A-Za-z0-9_]*)\s*\)",
             "labels",
-            "HumemCypher v0 WITH queries cannot apply labels(...) to "
+            "CypherGlot WITH queries cannot apply labels(...) to "
             "unknown node binding {alias!r}.",
         ),
         (
             r"keys\s*\(\s*(?P<alias>[A-Za-z_][A-Za-z0-9_]*)\s*\)",
             "keys",
-            "HumemCypher v0 WITH queries cannot apply keys(...) to "
+            "CypherGlot WITH queries cannot apply keys(...) to "
             "unknown entity binding {alias!r}.",
         ),
     ):
@@ -913,13 +913,13 @@ def _parse_with_simple_entity_function_item(
     binding = _require_entity_binding(
         binding_map,
         alias,
-        "HumemCypher v0 WITH queries cannot apply "
+        "CypherGlot WITH queries cannot apply "
         f"{node_match.group('func')}(...) to unknown relationship binding "
         f"{alias!r}.",
     )
     if binding.alias_kind != "relationship":
         raise ValueError(
-            "HumemCypher v0 WITH queries cannot apply "
+            "CypherGlot WITH queries cannot apply "
             f"{node_match.group('func')}(...) to unknown relationship "
             f"binding {alias!r}."
         )
@@ -954,14 +954,14 @@ def _parse_with_size_item(
 
     if output_alias is None:
         raise ValueError(
-            "HumemCypher v0 WITH size(...) projections currently require "
+            "CypherGlot WITH size(...) projections currently require "
             "an explicit AS alias."
         )
     try:
         scalar_value = _parse_literal(size_expr)
     except ValueError as exc:
         raise ValueError(
-            "HumemCypher v0 WITH queries currently support size(...) only "
+            "CypherGlot WITH queries currently support size(...) only "
             "over admitted entity-field projections, admitted id/type "
             "outputs, scalar bindings, or scalar literal/parameter inputs."
         ) from exc
@@ -1005,7 +1005,7 @@ def _parse_with_unary_function_item(
         scalar_value = _parse_literal(function_expr)
     except ValueError as exc:
         raise ValueError(
-            "HumemCypher v0 WITH queries currently support "
+            "CypherGlot WITH queries currently support "
             f"{match.group('func')}(...) only over admitted entity-field "
             "projections, scalar bindings, or scalar literal/parameter "
             "inputs."
@@ -1042,16 +1042,16 @@ def _parse_with_multi_argument_function_item(
         if not min_args <= len(args) <= max_args:
             if function_name == "substring":
                 raise ValueError(
-                    "HumemCypher v0 WITH substring(...) currently requires "
+                    "CypherGlot WITH substring(...) currently requires "
                     "exactly two or three arguments."
                 )
             if function_name in {"left", "right"}:
                 raise ValueError(
-                    "HumemCypher v0 WITH left(...) and right(...) currently "
+                    "CypherGlot WITH left(...) and right(...) currently "
                     "require exactly two arguments."
                 )
             raise ValueError(
-                "HumemCypher v0 WITH "
+                "CypherGlot WITH "
                 f"{function_name}(...) currently requires exactly "
                 f"{min_args} arguments."
             )
@@ -1074,7 +1074,7 @@ def _build_with_multi_argument_function_item(
     parsed_input = _parse_with_scalar_or_field_input(primary_expr, binding_map)
     if parsed_input is None and function_name == "coalesce":
         raise ValueError(
-            "HumemCypher v0 WITH queries currently support coalesce(...) "
+            "CypherGlot WITH queries currently support coalesce(...) "
             "only as coalesce(entity_alias.field, literal_or_parameter) "
             "or coalesce(scalar_alias, literal_or_parameter)."
         )
@@ -1085,30 +1085,30 @@ def _build_with_multi_argument_function_item(
         except ValueError as exc:
             if function_name == "replace":
                 raise ValueError(
-                    "HumemCypher v0 WITH queries currently support "
+                    "CypherGlot WITH queries currently support "
                     "replace(...) only as replace(admitted_input, "
                     "literal_or_parameter, literal_or_parameter)."
                 ) from exc
             if function_name in {"left", "right"}:
                 raise ValueError(
-                    "HumemCypher v0 WITH queries currently support left(...) "
+                    "CypherGlot WITH queries currently support left(...) "
                     "and right(...) only as function(admitted_input, "
                     "literal_or_parameter)."
                 ) from exc
             if function_name == "split":
                 raise ValueError(
-                    "HumemCypher v0 WITH queries currently support split(...) "
+                    "CypherGlot WITH queries currently support split(...) "
                     "only as split(admitted_input, literal_or_parameter)."
                 ) from exc
             raise ValueError(
-                "HumemCypher v0 WITH queries currently support "
+                "CypherGlot WITH queries currently support "
                 "substring(...) only as substring(admitted_input, "
                 "literal_or_parameter) or substring(admitted_input, "
                 "literal_or_parameter, literal_or_parameter)."
             ) from exc
         if output_alias is None and function_name == "coalesce":
             raise ValueError(
-                "HumemCypher v0 WITH queries currently support "
+                "CypherGlot WITH queries currently support "
                 "coalesce(...) only as coalesce(entity_alias.field, "
                 "literal_or_parameter) or coalesce(scalar_alias, "
                 "literal_or_parameter)."
@@ -1174,7 +1174,7 @@ def _parse_with_predicate_return_item(
 
     if output_alias is None:
         raise ValueError(
-            "HumemCypher v0 WITH predicate RETURN items currently require "
+            "CypherGlot WITH predicate RETURN items currently require "
             "an explicit AS alias."
         )
 
@@ -1208,7 +1208,7 @@ def _parse_with_predicate_return_item(
         _require_entity_binding(
             binding_map,
             id_alias,
-            "HumemCypher v0 WITH queries cannot apply id(...) to "
+            "CypherGlot WITH queries cannot apply id(...) to "
             f"unknown entity binding {id_alias!r}.",
         )
         return WithReturnItem(
@@ -1225,12 +1225,12 @@ def _parse_with_predicate_return_item(
         binding = _require_entity_binding(
             binding_map,
             type_alias,
-            "HumemCypher v0 WITH queries cannot apply type(...) to "
+            "CypherGlot WITH queries cannot apply type(...) to "
             f"unknown relationship binding {type_alias!r}.",
         )
         if binding.alias_kind != "relationship":
             raise ValueError(
-                "HumemCypher v0 WITH queries cannot apply type(...) to "
+                "CypherGlot WITH queries cannot apply type(...) to "
                 f"unknown relationship binding {type_alias!r}."
             )
         return WithReturnItem(
@@ -1248,7 +1248,7 @@ def _parse_with_predicate_return_item(
         _require_entity_binding(
             binding_map,
             alias,
-            "HumemCypher v0 WITH queries cannot return unknown entity "
+            "CypherGlot WITH queries cannot return unknown entity "
             f"alias {alias!r}.",
         )
         return WithReturnItem(
@@ -1261,7 +1261,7 @@ def _parse_with_predicate_return_item(
         )
 
     raise ValueError(
-        "HumemCypher v0 WITH queries currently support predicate RETURN "
+        "CypherGlot WITH queries currently support predicate RETURN "
         "items only as scalar_alias OP value, entity_alias.field OP "
         "value, id(entity_alias) OP value, type(rel_alias) OP value, or "
         "size(admitted_input) OP value."
@@ -1278,7 +1278,7 @@ def _parse_with_scalar_literal_item(
         return None
     if output_alias is None:
         raise ValueError(
-            "HumemCypher v0 WITH scalar literal and parameter projections "
+            "CypherGlot WITH scalar literal and parameter projections "
             "currently require an explicit AS alias."
         )
     return WithReturnItem(
@@ -1302,7 +1302,7 @@ def _parse_with_size_input(
         _require_entity_binding(
             binding_map,
             id_alias,
-            "HumemCypher v0 WITH queries cannot apply size(id(...)) to "
+            "CypherGlot WITH queries cannot apply size(id(...)) to "
             f"unknown entity binding {id_alias!r}.",
         )
         return WithReturnItem(kind="size", alias=id_alias, field="id")
@@ -1312,12 +1312,12 @@ def _parse_with_size_input(
         binding = _require_entity_binding(
             binding_map,
             type_alias,
-            "HumemCypher v0 WITH queries cannot apply size(type(...)) to "
+            "CypherGlot WITH queries cannot apply size(type(...)) to "
             f"unknown relationship binding {type_alias!r}.",
         )
         if binding.alias_kind != "relationship":
             raise ValueError(
-                "HumemCypher v0 WITH queries cannot apply size(type(...)) "
+                "CypherGlot WITH queries cannot apply size(type(...)) "
                 f"to unknown relationship binding {type_alias!r}."
             )
         return WithReturnItem(kind="size", alias=type_alias, field="type")
@@ -1329,7 +1329,7 @@ def _parse_with_size_input(
     _require_entity_binding(
         binding_map,
         alias,
-        "HumemCypher v0 WITH size(...) projections currently support "
+        "CypherGlot WITH size(...) projections currently support "
         "entity_alias.field only for admitted entity bindings.",
     )
     return WithReturnItem(kind="size", alias=alias, field=field_match.group("field"))
@@ -1349,7 +1349,7 @@ def _parse_with_scalar_or_field_input(
     _require_entity_binding(
         binding_map,
         alias,
-        "HumemCypher v0 WITH function projections currently support "
+        "CypherGlot WITH function projections currently support "
         "entity_alias.field only for admitted entity bindings.",
     )
     return WithReturnItem(
@@ -1377,7 +1377,7 @@ def _parse_with_predicate_value(
     if operator in {"IS NULL", "IS NOT NULL"}:
         if value_text.strip():
             raise ValueError(
-                "HumemCypher v0 null predicates cannot include a trailing "
+                "CypherGlot null predicates cannot include a trailing "
                 "literal value."
             )
         return None

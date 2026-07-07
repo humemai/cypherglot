@@ -53,6 +53,7 @@ from ._compile_write_programs import (
     _compile_merge_relationship_program,
 )
 from ._logging import get_logger
+from .errors import CypherCompileError
 from ._normalize_support import (
     CypherValue,
     NodePattern,
@@ -529,12 +530,13 @@ def _compile_graph_relational_backend_program(
             )
         )
 
-    raise ValueError(
+    raise CypherCompileError(
         "CypherGlot MVP compilation currently supports admitted standalone "
         "CREATE, MATCH ... RETURN, narrow UNWIND ... RETURN, MATCH ... SET, "
         "MATCH ... DELETE, and a narrow MATCH ... CREATE or MATCH ... MERGE "
         "relationship subset over one node pattern, one directed relationship "
-        "pattern, or one fixed-length directed relationship chain."
+        "pattern, or one fixed-length directed relationship chain.",
+        construct="statement_shape",
     )
 
 

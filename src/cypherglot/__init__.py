@@ -9,6 +9,7 @@ from ._cache import (
     set_compile_cache,
 )
 from ._compiled_program import CompiledCypherLoop
+from .errors import CypherCompileError
 from .compile import (
     CompiledCypherProgram,
     CompiledCypherStatement,
@@ -77,6 +78,7 @@ __all__ = [
     "WithBinding",
     "__version__",
     "CompileCacheInfo",
+    "CypherCompileError",
     "clear_compile_cache",
     "compile_cache_info",
     "set_compile_cache",

@@ -152,7 +152,7 @@ class WithReturnItem:
             return f"{function_name}({', '.join((primary_expr, *arg_suffix))})"
         if self.kind in {"count", "sum", "avg", "min", "max", "id", "type", "properties", "labels", "keys", "start_node", "end_node", "size", "scalar_value", "predicate", "lower", "upper", "trim", "ltrim", "rtrim", "reverse", "coalesce", "replace", "left", "right", "split", "abs", "sign", "round", "ceil", "floor", "sqrt", "exp", "sin", "cos", "tan", "asin", "acos", "atan", "ln", "log", "log10", "radians", "degrees", "to_string", "to_integer", "to_float", "to_boolean", "substring", "case"}:
             raise ValueError(
-                "HumemCypher v0 WITH expression RETURN items require an explicit AS alias."
+                "CypherGlot WITH expression RETURN items require an explicit AS alias."
             )
         assert self.field is not None
         return f"{self.alias}.{self.field}"
@@ -523,7 +523,7 @@ def _validate_normalized_match_set_assignments(
     for assignment in assignments:
         if assignment.alias != target_alias:
             raise ValueError(
-                "HumemCypher v0 MATCH ... SET assignments must target the "
+                "CypherGlot MATCH ... SET assignments must target the "
                 f"matched {target_kind} alias."
             )
 
@@ -537,7 +537,7 @@ def _validate_normalized_match_predicates(
         alias_kind = alias_kinds.get(predicate.alias)
         if alias_kind is None:
             raise ValueError(
-                f"HumemCypher v0 cannot filter on unknown alias {predicate.alias!r}."
+                f"CypherGlot cannot filter on unknown alias {predicate.alias!r}."
             )
 
         if (
@@ -546,7 +546,7 @@ def _validate_normalized_match_predicates(
             and predicate.operator != "="
         ):
             raise ValueError(
-                "HumemCypher v0 currently supports only equality predicates for "
+                "CypherGlot currently supports only equality predicates for "
                 "node field 'label'."
             )
 
@@ -556,7 +556,7 @@ def _validate_normalized_match_predicates(
             and predicate.operator != "="
         ):
             raise ValueError(
-                "HumemCypher v0 currently supports only equality predicates for "
+                "CypherGlot currently supports only equality predicates for "
                 "relationship field 'type'."
             )
 
@@ -675,7 +675,7 @@ def normalize_cypher_parse_result(
                 create_pattern_text = _context_text(result, create_ctx.oC_Pattern())
                 if not _looks_like_relationship_pattern(create_pattern_text):
                     raise ValueError(
-                        "HumemCypher v0 MATCH ... CREATE currently supports only one "
+                        "CypherGlot MATCH ... CREATE currently supports only one "
                         "directed relationship pattern in the CREATE clause."
                     )
 
@@ -781,7 +781,7 @@ def normalize_cypher_parse_result(
                     )
 
                 raise ValueError(
-                    "HumemCypher v0 MATCH ... CREATE currently supports one matched "
+                    "CypherGlot MATCH ... CREATE currently supports one matched "
                     "node pattern, or two disconnected matched node patterns, before "
                     "CREATE."
                 )
@@ -792,7 +792,7 @@ def normalize_cypher_parse_result(
                 merge_pattern_text = _context_text(result, merge_ctx.oC_PatternPart())
                 if not _looks_like_relationship_pattern(merge_pattern_text):
                     raise ValueError(
-                        "HumemCypher v0 MATCH ... MERGE currently supports only one directed relationship pattern in the MERGE clause."
+                        "CypherGlot MATCH ... MERGE currently supports only one directed relationship pattern in the MERGE clause."
                     )
 
                 left_text, relationship_text, right_text, direction = (
@@ -876,7 +876,7 @@ def normalize_cypher_parse_result(
                     for pattern in match_patterns
                 ):
                     raise ValueError(
-                        "HumemCypher v0 MATCH ... MERGE currently supports only two disconnected matched node patterns before MERGE, or one matched relationship or fixed-length chain source whose node aliases are reused by MERGE."
+                        "CypherGlot MATCH ... MERGE currently supports only two disconnected matched node patterns before MERGE, or one matched relationship or fixed-length chain source whose node aliases are reused by MERGE."
                     )
 
                 _validate_normalized_match_predicates(
@@ -1005,7 +1005,7 @@ def normalize_cypher_parse_result(
             if _looks_like_relationship_pattern(pattern_text):
                 if detach:
                     raise ValueError(
-                        "HumemCypher v0 currently supports DETACH DELETE only "
+                        "CypherGlot currently supports DETACH DELETE only "
                         "for matched node aliases."
                     )
                 left_text, relationship_text, right_text, direction = (
@@ -1034,7 +1034,7 @@ def normalize_cypher_parse_result(
                 )
                 if relationship.alias is None or target_alias != relationship.alias:
                     raise ValueError(
-                        "HumemCypher v0 MATCH ... DELETE relationship statements "
+                        "CypherGlot MATCH ... DELETE relationship statements "
                         "must delete the matched relationship alias."
                     )
                 return NormalizedDeleteRelationship(
@@ -1056,12 +1056,12 @@ def normalize_cypher_parse_result(
             )
             if target_alias != node.alias:
                 raise ValueError(
-                    "HumemCypher v0 MATCH ... DELETE node statements must delete "
+                    "CypherGlot MATCH ... DELETE node statements must delete "
                     "the matched node alias."
                 )
             if not detach:
                 raise ValueError(
-                    "HumemCypher v0 currently supports node deletion only through "
+                    "CypherGlot currently supports node deletion only through "
                     "DETACH DELETE."
                 )
             return NormalizedDeleteNode(
@@ -1083,7 +1083,7 @@ def normalize_cypher_parse_result(
         if len(create_patterns) == 3:
             if merge_ctx is not None:
                 raise ValueError(
-                    "HumemCypher v0 MERGE currently supports only one labeled node pattern or one directed relationship pattern."
+                    "CypherGlot MERGE currently supports only one labeled node pattern or one directed relationship pattern."
                 )
             if (
                 any(
@@ -1093,7 +1093,7 @@ def normalize_cypher_parse_result(
                 or not _looks_like_relationship_pattern(create_patterns[2])
             ):
                 raise ValueError(
-                    "HumemCypher v0 CREATE currently supports either one node "
+                    "CypherGlot CREATE currently supports either one node "
                     "pattern, one directed relationship pattern, or the narrow "
                     "three-pattern form with two node patterns followed by one "
                     "relationship pattern."
@@ -1520,23 +1520,23 @@ def _validate_match_write_reused_source_endpoints(
             new_count += 1
             if not allow_one_new_endpoint:
                 raise ValueError(
-                    "HumemCypher v0 traversal-backed MATCH write clauses currently require relationship endpoints to reuse matched node aliases exactly."
+                    "CypherGlot traversal-backed MATCH write clauses currently require relationship endpoints to reuse matched node aliases exactly."
                 )
             continue
 
         reused_count += 1
         if endpoint.properties:
             raise ValueError(
-                "HumemCypher v0 traversal-backed MATCH write clauses currently do not allow inline properties on reused endpoint aliases."
+                "CypherGlot traversal-backed MATCH write clauses currently do not allow inline properties on reused endpoint aliases."
             )
         if endpoint.label is not None and endpoint.label != source_node.label:
             raise ValueError(
-                "HumemCypher v0 traversal-backed MATCH write clauses currently require reused endpoint labels to match the matched source aliases."
+                "CypherGlot traversal-backed MATCH write clauses currently require reused endpoint labels to match the matched source aliases."
             )
 
     if allow_one_new_endpoint and (reused_count == 0 or new_count > 1):
         raise ValueError(
-            "HumemCypher v0 traversal-backed MATCH ... CREATE currently supports exactly one reused matched node alias plus at most one fresh endpoint node."
+            "CypherGlot traversal-backed MATCH ... CREATE currently supports exactly one reused matched node alias plus at most one fresh endpoint node."
         )
 
 

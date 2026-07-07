@@ -26,6 +26,8 @@ from ._validate_write_helpers import (
     _validate_mixed_read_write_shape as _validate_mixed_read_write_shape_impl,
     _validate_standalone_write_shape as _validate_standalone_write_shape_impl,
 )
+from ._construct_scanner import scan_for_unsupported_constructs
+from .errors import CypherCompileError, reject
 from .parser import CypherParseResult, parse_cypher_text
 
 
@@ -205,20 +207,32 @@ def validate_cypher_parse_result(result: CypherParseResult):
 
     if result.has_errors:
         first_error = result.syntax_errors[0]
-        raise ValueError(
+        raise CypherCompileError(
             "CypherGlot frontend reported syntax errors: "
-            + (
-                f"line {first_error.line}, column {first_error.column}: "
-                f"{first_error.message}"
-            )
+            f"{first_error.message}",
+            line=first_error.line,
+            column=first_error.column,
+            construct="syntax_error",
         )
+
+    scan_for_unsupported_constructs(result.tree)
 
     statement_ctx = result.tree.oC_Statement()
     query_ctx = statement_ctx.oC_Query()
     regular_query_ctx = query_ctx.oC_RegularQuery()
     if regular_query_ctx is None:
-        raise ValueError(
-            "CypherGlot currently validates only regular CREATE, MATCH, and UNWIND queries."
+        if query_ctx.oC_StandaloneCall() is not None:
+            reject(
+                "CypherGlot currently admits only the db.index.vector.queryNodes(...) "
+                "procedure in the vector-aware subset.",
+                ctx=query_ctx,
+                construct="call_procedure",
+                hint="Other procedures are engine-specific; use plain MATCH/RETURN queries.",
+            )
+        reject(
+            "CypherGlot currently validates only regular CREATE, MATCH, and UNWIND queries.",
+            ctx=query_ctx,
+            construct="non_regular_query",
         )
 
     if regular_query_ctx.oC_Union():
@@ -226,8 +240,10 @@ def validate_cypher_parse_result(result: CypherParseResult):
         # query (same contract as validate_cypher_text's UNION path).
         branch_texts = _union_branch_texts(result)
         if branch_texts is None:
-            raise ValueError(
-                "CypherGlot could not decompose this UNION query into branches."
+            reject(
+                "CypherGlot could not decompose this UNION query into branches.",
+                ctx=regular_query_ctx,
+                construct="union",
             )
         for branch_text in branch_texts:
             validate_cypher_parse_result(parse_cypher_text(branch_text))
@@ -283,9 +299,12 @@ def validate_cypher_parse_result(result: CypherParseResult):
         return single_part_query_ctx
 
     if len(updating_clauses) > 1 or len(reading_clauses) > 1:
-        raise ValueError(
+        reject(
             "CypherGlot currently validates only one CREATE, MATCH, or SET clause "
-            "per statement."
+            "per statement.",
+            ctx=single_part_query_ctx,
+            construct="multi_clause",
+            hint="Split the statement, or move the second MATCH into a WITH stage.",
         )
 
     if updating_clauses and not reading_clauses:
@@ -301,9 +320,11 @@ def validate_cypher_parse_result(result: CypherParseResult):
     if reading_clauses and not updating_clauses:
         read_ctx = reading_clauses[0]
         if read_ctx.oC_Match() is None or return_ctx is None:
-            raise ValueError(
+            reject(
                 "CypherGlot currently validates only MATCH ... RETURN statements "
-                "in the read subset, plus narrow standalone OPTIONAL MATCH ... RETURN and UNWIND ... RETURN subsets."
+                "in the read subset, plus narrow standalone OPTIONAL MATCH ... RETURN and UNWIND ... RETURN subsets.",
+                ctx=read_ctx,
+                construct="read_shape",
             )
         _validate_match_pattern_shape(
             result,
@@ -345,8 +366,10 @@ def validate_cypher_parse_result(result: CypherParseResult):
                     )
                 ):
                     return single_part_query_ctx
-                raise ValueError(
-                    "CypherGlot currently admits variable-length relationship MATCH ... RETURN only with non-aggregate RETURN projections, or with grouped aggregate projections built from admitted endpoint return expressions plus count(*) / count(endpoint_alias) / aggregate(endpoint.field); relationship-type and endpoint introspection still require MATCH ... WITH ... RETURN or wider support."
+                reject(
+                    "CypherGlot currently admits variable-length relationship MATCH ... RETURN only with non-aggregate RETURN projections, or with grouped aggregate projections built from admitted endpoint return expressions plus count(*) / count(endpoint_alias) / aggregate(endpoint.field); relationship-type and endpoint introspection still require MATCH ... WITH ... RETURN or wider support.",
+                    ctx=return_ctx,
+                    construct="variable_length_aggregate",
                 )
         return single_part_query_ctx
 
@@ -360,9 +383,11 @@ def validate_cypher_parse_result(result: CypherParseResult):
         )
         return single_part_query_ctx
 
-    raise ValueError(
+    reject(
         "CypherGlot currently validates only CREATE, MATCH ... RETURN, narrow OPTIONAL MATCH ... RETURN, narrow UNWIND ... RETURN, MATCH ... "
-        "SET, narrow MATCH ... CREATE, narrow MATCH ... MERGE, narrow MERGE, and narrow MATCH ... DELETE statements."
+        "SET, narrow MATCH ... CREATE, narrow MATCH ... MERGE, narrow MERGE, and narrow MATCH ... DELETE statements.",
+        ctx=single_part_query_ctx,
+        construct="statement_shape",
     )
 
 

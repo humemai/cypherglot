@@ -26,21 +26,21 @@ def _parse_return_items(text: str) -> tuple[ReturnItem, ...]:
         alias_parts = re.split(r"\s+AS\s+", item_text, flags=re.IGNORECASE)
         if len(alias_parts) > 2:
             raise ValueError(
-                "HumemCypher v0 RETURN items may use at most one AS alias."
+                "CypherGlot RETURN items may use at most one AS alias."
             )
 
         expression_text = alias_parts[0].strip()
         output_alias = alias_parts[1].strip() if len(alias_parts) == 2 else None
         if output_alias is not None and _SCALAR_ITEM_RE.fullmatch(output_alias) is None:
             raise ValueError(
-                "HumemCypher v0 RETURN item aliases must be bare identifiers."
+                "CypherGlot RETURN item aliases must be bare identifiers."
             )
 
         case_spec = _parse_case_expression(expression_text)
         if case_spec is not None:
             if output_alias is None:
                 raise ValueError(
-                    "HumemCypher v0 RETURN searched CASE items currently require an explicit AS alias."
+                    "CypherGlot RETURN searched CASE items currently require an explicit AS alias."
                 )
             items.append(
                 ReturnItem(
@@ -284,7 +284,7 @@ def _parse_return_items(text: str) -> tuple[ReturnItem, ...]:
         if size_match is not None:
             if output_alias is None:
                 raise ValueError(
-                    "HumemCypher v0 RETURN size(...) items currently require an explicit AS alias."
+                    "CypherGlot RETURN size(...) items currently require an explicit AS alias."
                 )
             size_expr = size_match.group("expr").strip()
             id_match = re.fullmatch(
@@ -347,13 +347,13 @@ def _parse_return_items(text: str) -> tuple[ReturnItem, ...]:
             args = [part.strip() for part in _split_comma_separated(coalesce_match.group("args"))]
             if len(args) != 2:
                 raise ValueError(
-                    "HumemCypher v0 RETURN coalesce(...) currently requires exactly two arguments."
+                    "CypherGlot RETURN coalesce(...) currently requires exactly two arguments."
                 )
             primary_expr, fallback_expr = args
             primary_match = _RETURN_ITEM_RE.fullmatch(primary_expr)
             if primary_match is None:
                 raise ValueError(
-                    "HumemCypher v0 RETURN coalesce(...) currently requires alias.field as the primary argument and literal_or_parameter as the fallback argument."
+                    "CypherGlot RETURN coalesce(...) currently requires alias.field as the primary argument and literal_or_parameter as the fallback argument."
                 )
             items.append(
                 ReturnItem(
@@ -375,7 +375,7 @@ def _parse_return_items(text: str) -> tuple[ReturnItem, ...]:
             args = [part.strip() for part in _split_comma_separated(replace_match.group("args"))]
             if len(args) != 3:
                 raise ValueError(
-                    "HumemCypher v0 RETURN replace(...) currently requires exactly three arguments."
+                    "CypherGlot RETURN replace(...) currently requires exactly three arguments."
                 )
             primary_expr, search_expr, replace_expr = args
             search_value = _parse_literal(search_expr)
@@ -415,7 +415,7 @@ def _parse_return_items(text: str) -> tuple[ReturnItem, ...]:
             args = [part.strip() for part in _split_comma_separated(left_right_match.group("args"))]
             if len(args) != 2:
                 raise ValueError(
-                    "HumemCypher v0 RETURN left(...) and right(...) currently require exactly two arguments."
+                    "CypherGlot RETURN left(...) and right(...) currently require exactly two arguments."
                 )
             primary_expr, length_expr = args
             length_value = _parse_literal(length_expr)
@@ -451,7 +451,7 @@ def _parse_return_items(text: str) -> tuple[ReturnItem, ...]:
             args = [part.strip() for part in _split_comma_separated(split_match.group("args"))]
             if len(args) != 2:
                 raise ValueError(
-                    "HumemCypher v0 RETURN split(...) currently requires exactly two arguments."
+                    "CypherGlot RETURN split(...) currently requires exactly two arguments."
                 )
             primary_expr, delimiter_expr = args
             delimiter_value = _parse_literal(delimiter_expr)
@@ -487,7 +487,7 @@ def _parse_return_items(text: str) -> tuple[ReturnItem, ...]:
             args = [part.strip() for part in _split_comma_separated(substring_match.group("args"))]
             if len(args) not in {2, 3}:
                 raise ValueError(
-                    "HumemCypher v0 RETURN substring(...) currently requires exactly two or three arguments."
+                    "CypherGlot RETURN substring(...) currently requires exactly two or three arguments."
                 )
             primary_expr, start_expr = args[:2]
             start_value = _parse_literal(start_expr)
@@ -525,7 +525,7 @@ def _parse_return_items(text: str) -> tuple[ReturnItem, ...]:
         if abs_match is not None:
             if output_alias is None:
                 raise ValueError(
-                    "HumemCypher v0 RETURN abs(...) items currently require an explicit AS alias."
+                    "CypherGlot RETURN abs(...) items currently require an explicit AS alias."
                 )
             abs_expr = abs_match.group("expr").strip()
             field_match = _RETURN_ITEM_RE.fullmatch(abs_expr)
@@ -557,7 +557,7 @@ def _parse_return_items(text: str) -> tuple[ReturnItem, ...]:
         if sign_match is not None:
             if output_alias is None:
                 raise ValueError(
-                    "HumemCypher v0 RETURN sign(...) items currently require an explicit AS alias."
+                    "CypherGlot RETURN sign(...) items currently require an explicit AS alias."
                 )
             sign_expr = sign_match.group("expr").strip()
             field_match = _RETURN_ITEM_RE.fullmatch(sign_expr)
@@ -589,7 +589,7 @@ def _parse_return_items(text: str) -> tuple[ReturnItem, ...]:
         if round_match is not None:
             if output_alias is None:
                 raise ValueError(
-                    "HumemCypher v0 RETURN round(...) items currently require an explicit AS alias."
+                    "CypherGlot RETURN round(...) items currently require an explicit AS alias."
                 )
             round_expr = round_match.group("expr").strip()
             field_match = _RETURN_ITEM_RE.fullmatch(round_expr)
@@ -621,7 +621,7 @@ def _parse_return_items(text: str) -> tuple[ReturnItem, ...]:
         if floor_match is not None:
             if output_alias is None:
                 raise ValueError(
-                    "HumemCypher v0 RETURN floor(...) items currently require an explicit AS alias."
+                    "CypherGlot RETURN floor(...) items currently require an explicit AS alias."
                 )
             floor_expr = floor_match.group("expr").strip()
             field_match = _RETURN_ITEM_RE.fullmatch(floor_expr)
@@ -653,7 +653,7 @@ def _parse_return_items(text: str) -> tuple[ReturnItem, ...]:
         if ceil_match is not None:
             if output_alias is None:
                 raise ValueError(
-                    "HumemCypher v0 RETURN ceil(...) items currently require an explicit AS alias."
+                    "CypherGlot RETURN ceil(...) items currently require an explicit AS alias."
                 )
             ceil_expr = ceil_match.group("expr").strip()
             field_match = _RETURN_ITEM_RE.fullmatch(ceil_expr)
@@ -685,7 +685,7 @@ def _parse_return_items(text: str) -> tuple[ReturnItem, ...]:
         if sqrt_match is not None:
             if output_alias is None:
                 raise ValueError(
-                    "HumemCypher v0 RETURN sqrt(...) items currently require an explicit AS alias."
+                    "CypherGlot RETURN sqrt(...) items currently require an explicit AS alias."
                 )
             sqrt_expr = sqrt_match.group("expr").strip()
             field_match = _RETURN_ITEM_RE.fullmatch(sqrt_expr)
@@ -717,7 +717,7 @@ def _parse_return_items(text: str) -> tuple[ReturnItem, ...]:
         if exp_match is not None:
             if output_alias is None:
                 raise ValueError(
-                    "HumemCypher v0 RETURN exp(...) items currently require an explicit AS alias."
+                    "CypherGlot RETURN exp(...) items currently require an explicit AS alias."
                 )
             exp_expr = exp_match.group("expr").strip()
             field_match = _RETURN_ITEM_RE.fullmatch(exp_expr)
@@ -749,7 +749,7 @@ def _parse_return_items(text: str) -> tuple[ReturnItem, ...]:
         if sin_match is not None:
             if output_alias is None:
                 raise ValueError(
-                    "HumemCypher v0 RETURN sin(...) items currently require an explicit AS alias."
+                    "CypherGlot RETURN sin(...) items currently require an explicit AS alias."
                 )
             sin_expr = sin_match.group("expr").strip()
             field_match = _RETURN_ITEM_RE.fullmatch(sin_expr)
@@ -781,7 +781,7 @@ def _parse_return_items(text: str) -> tuple[ReturnItem, ...]:
         if cos_match is not None:
             if output_alias is None:
                 raise ValueError(
-                    "HumemCypher v0 RETURN cos(...) items currently require an explicit AS alias."
+                    "CypherGlot RETURN cos(...) items currently require an explicit AS alias."
                 )
             cos_expr = cos_match.group("expr").strip()
             field_match = _RETURN_ITEM_RE.fullmatch(cos_expr)
@@ -813,7 +813,7 @@ def _parse_return_items(text: str) -> tuple[ReturnItem, ...]:
         if tan_match is not None:
             if output_alias is None:
                 raise ValueError(
-                    "HumemCypher v0 RETURN tan(...) items currently require an explicit AS alias."
+                    "CypherGlot RETURN tan(...) items currently require an explicit AS alias."
                 )
             tan_expr = tan_match.group("expr").strip()
             field_match = _RETURN_ITEM_RE.fullmatch(tan_expr)
@@ -845,7 +845,7 @@ def _parse_return_items(text: str) -> tuple[ReturnItem, ...]:
         if asin_match is not None:
             if output_alias is None:
                 raise ValueError(
-                    "HumemCypher v0 RETURN asin(...) items currently require an explicit AS alias."
+                    "CypherGlot RETURN asin(...) items currently require an explicit AS alias."
                 )
             asin_expr = asin_match.group("expr").strip()
             field_match = _RETURN_ITEM_RE.fullmatch(asin_expr)
@@ -877,7 +877,7 @@ def _parse_return_items(text: str) -> tuple[ReturnItem, ...]:
         if acos_match is not None:
             if output_alias is None:
                 raise ValueError(
-                    "HumemCypher v0 RETURN acos(...) items currently require an explicit AS alias."
+                    "CypherGlot RETURN acos(...) items currently require an explicit AS alias."
                 )
             acos_expr = acos_match.group("expr").strip()
             field_match = _RETURN_ITEM_RE.fullmatch(acos_expr)
@@ -909,7 +909,7 @@ def _parse_return_items(text: str) -> tuple[ReturnItem, ...]:
         if atan_match is not None:
             if output_alias is None:
                 raise ValueError(
-                    "HumemCypher v0 RETURN atan(...) items currently require an explicit AS alias."
+                    "CypherGlot RETURN atan(...) items currently require an explicit AS alias."
                 )
             atan_expr = atan_match.group("expr").strip()
             field_match = _RETURN_ITEM_RE.fullmatch(atan_expr)
@@ -941,7 +941,7 @@ def _parse_return_items(text: str) -> tuple[ReturnItem, ...]:
         if ln_match is not None:
             if output_alias is None:
                 raise ValueError(
-                    "HumemCypher v0 RETURN ln(...) items currently require an explicit AS alias."
+                    "CypherGlot RETURN ln(...) items currently require an explicit AS alias."
                 )
             ln_expr = ln_match.group("expr").strip()
             field_match = _RETURN_ITEM_RE.fullmatch(ln_expr)
@@ -973,7 +973,7 @@ def _parse_return_items(text: str) -> tuple[ReturnItem, ...]:
         if log_match is not None:
             if output_alias is None:
                 raise ValueError(
-                    "HumemCypher v0 RETURN log(...) items currently require an explicit AS alias."
+                    "CypherGlot RETURN log(...) items currently require an explicit AS alias."
                 )
             log_expr = log_match.group("expr").strip()
             field_match = _RETURN_ITEM_RE.fullmatch(log_expr)
@@ -1005,7 +1005,7 @@ def _parse_return_items(text: str) -> tuple[ReturnItem, ...]:
         if radians_match is not None:
             if output_alias is None:
                 raise ValueError(
-                    "HumemCypher v0 RETURN radians(...) items currently require an explicit AS alias."
+                    "CypherGlot RETURN radians(...) items currently require an explicit AS alias."
                 )
             radians_expr = radians_match.group("expr").strip()
             field_match = _RETURN_ITEM_RE.fullmatch(radians_expr)
@@ -1037,7 +1037,7 @@ def _parse_return_items(text: str) -> tuple[ReturnItem, ...]:
         if degrees_match is not None:
             if output_alias is None:
                 raise ValueError(
-                    "HumemCypher v0 RETURN degrees(...) items currently require an explicit AS alias."
+                    "CypherGlot RETURN degrees(...) items currently require an explicit AS alias."
                 )
             degrees_expr = degrees_match.group("expr").strip()
             field_match = _RETURN_ITEM_RE.fullmatch(degrees_expr)
@@ -1069,7 +1069,7 @@ def _parse_return_items(text: str) -> tuple[ReturnItem, ...]:
         if log10_match is not None:
             if output_alias is None:
                 raise ValueError(
-                    "HumemCypher v0 RETURN log10(...) items currently require an explicit AS alias."
+                    "CypherGlot RETURN log10(...) items currently require an explicit AS alias."
                 )
             log10_expr = log10_match.group("expr").strip()
             field_match = _RETURN_ITEM_RE.fullmatch(log10_expr)
@@ -1101,7 +1101,7 @@ def _parse_return_items(text: str) -> tuple[ReturnItem, ...]:
         if to_string_match is not None:
             if output_alias is None:
                 raise ValueError(
-                    "HumemCypher v0 RETURN toString(...) items currently require an explicit AS alias."
+                    "CypherGlot RETURN toString(...) items currently require an explicit AS alias."
                 )
             to_string_expr = to_string_match.group("expr").strip()
             field_match = _RETURN_ITEM_RE.fullmatch(to_string_expr)
@@ -1133,7 +1133,7 @@ def _parse_return_items(text: str) -> tuple[ReturnItem, ...]:
         if to_integer_match is not None:
             if output_alias is None:
                 raise ValueError(
-                    "HumemCypher v0 RETURN toInteger(...) items currently require an explicit AS alias."
+                    "CypherGlot RETURN toInteger(...) items currently require an explicit AS alias."
                 )
             to_integer_expr = to_integer_match.group("expr").strip()
             field_match = _RETURN_ITEM_RE.fullmatch(to_integer_expr)
@@ -1165,7 +1165,7 @@ def _parse_return_items(text: str) -> tuple[ReturnItem, ...]:
         if to_float_match is not None:
             if output_alias is None:
                 raise ValueError(
-                    "HumemCypher v0 RETURN toFloat(...) items currently require an explicit AS alias."
+                    "CypherGlot RETURN toFloat(...) items currently require an explicit AS alias."
                 )
             to_float_expr = to_float_match.group("expr").strip()
             field_match = _RETURN_ITEM_RE.fullmatch(to_float_expr)
@@ -1197,7 +1197,7 @@ def _parse_return_items(text: str) -> tuple[ReturnItem, ...]:
         if to_boolean_match is not None:
             if output_alias is None:
                 raise ValueError(
-                    "HumemCypher v0 RETURN toBoolean(...) items currently require an explicit AS alias."
+                    "CypherGlot RETURN toBoolean(...) items currently require an explicit AS alias."
                 )
             to_boolean_expr = to_boolean_match.group("expr").strip()
             field_match = _RETURN_ITEM_RE.fullmatch(to_boolean_expr)
@@ -1229,7 +1229,7 @@ def _parse_return_items(text: str) -> tuple[ReturnItem, ...]:
         if unary_string_match is not None:
             if output_alias is None:
                 raise ValueError(
-                    "HumemCypher v0 RETURN lower(...), upper(...), trim(...), ltrim(...), rtrim(...), and reverse(...) items currently require an explicit AS alias."
+                    "CypherGlot RETURN lower(...), upper(...), trim(...), ltrim(...), rtrim(...), and reverse(...) items currently require an explicit AS alias."
                 )
             _unary_func_name = unary_string_match.group("func").lower()
             function_kind = cast(
@@ -1267,7 +1267,7 @@ def _parse_return_items(text: str) -> tuple[ReturnItem, ...]:
         else:
             if output_alias is None:
                 raise ValueError(
-                    "HumemCypher v0 RETURN predicate items currently require an explicit AS alias."
+                    "CypherGlot RETURN predicate items currently require an explicit AS alias."
                 )
             left_text = left_text.strip()
             parsed_value: CypherValue = None
@@ -1275,7 +1275,7 @@ def _parse_return_items(text: str) -> tuple[ReturnItem, ...]:
                 parsed_value = _parse_literal(value_text.strip())
             elif value_text.strip():
                 raise ValueError(
-                    "HumemCypher v0 null predicate RETURN items cannot include a trailing literal value."
+                    "CypherGlot null predicate RETURN items cannot include a trailing literal value."
                 )
             size_match = re.fullmatch(
                 rf"size\s*\(\s*(?P<expr>.+?)\s*\)",
@@ -1370,7 +1370,7 @@ def _parse_return_items(text: str) -> tuple[ReturnItem, ...]:
             field_match = _RETURN_ITEM_RE.fullmatch(left_text)
             if field_match is None:
                 raise ValueError(
-                    "HumemCypher v0 RETURN predicate items currently require alias.field OP value, id(alias) OP value, type(rel_alias) OP value, or size(admitted_input) OP value shapes."
+                    "CypherGlot RETURN predicate items currently require alias.field OP value, id(alias) OP value, type(rel_alias) OP value, or size(admitted_input) OP value shapes."
                 )
             items.append(
                 ReturnItem(
@@ -1391,7 +1391,7 @@ def _parse_return_items(text: str) -> tuple[ReturnItem, ...]:
         else:
             if output_alias is None:
                 raise ValueError(
-                    "HumemCypher v0 RETURN scalar literal and parameter items currently require an explicit AS alias."
+                    "CypherGlot RETURN scalar literal and parameter items currently require an explicit AS alias."
                 )
             items.append(
                 ReturnItem(
@@ -1418,7 +1418,7 @@ def _parse_return_items(text: str) -> tuple[ReturnItem, ...]:
         scalar_match = _SCALAR_ITEM_RE.fullmatch(expression_text)
         if scalar_match is None:
             raise ValueError(
-                "HumemCypher v0 RETURN items must look like alias.field, alias, count(alias) AS output_alias, count(*) AS output_alias, sum(alias.field) AS output_alias, avg(alias.field) AS output_alias, min(alias.field) AS output_alias, max(alias.field) AS output_alias, id(alias) AS output_alias, type(rel_alias) AS output_alias, size(admitted_input) AS output_alias, lower(admitted_input) AS output_alias, upper(admitted_input) AS output_alias, trim(admitted_input) AS output_alias, ltrim(admitted_input) AS output_alias, rtrim(admitted_input) AS output_alias, reverse(admitted_input) AS output_alias, coalesce(admitted_input, literal_or_parameter) AS output_alias, replace(admitted_input, literal_or_parameter, literal_or_parameter) AS output_alias, left(admitted_input, literal_or_parameter) AS output_alias, right(admitted_input, literal_or_parameter) AS output_alias, split(admitted_input, literal_or_parameter) AS output_alias, substring(admitted_input, literal_or_parameter) AS output_alias, substring(admitted_input, literal_or_parameter, literal_or_parameter) AS output_alias, abs(admitted_input) AS output_alias, sign(admitted_input) AS output_alias, round(admitted_input) AS output_alias, ceil(admitted_input) AS output_alias, floor(admitted_input) AS output_alias, toString(admitted_input) AS output_alias, toInteger(admitted_input) AS output_alias, toFloat(admitted_input) AS output_alias, toBoolean(admitted_input) AS output_alias, startNode(rel_alias) AS output_alias, startNode(rel_alias).field AS output_alias, endNode(rel_alias) AS output_alias, endNode(rel_alias).field AS output_alias, predicate admitted_input OP value AS output_alias, or scalar_literal_or_parameter AS output_alias."
+                "CypherGlot RETURN items must look like alias.field, alias, count(alias) AS output_alias, count(*) AS output_alias, sum(alias.field) AS output_alias, avg(alias.field) AS output_alias, min(alias.field) AS output_alias, max(alias.field) AS output_alias, id(alias) AS output_alias, type(rel_alias) AS output_alias, size(admitted_input) AS output_alias, lower(admitted_input) AS output_alias, upper(admitted_input) AS output_alias, trim(admitted_input) AS output_alias, ltrim(admitted_input) AS output_alias, rtrim(admitted_input) AS output_alias, reverse(admitted_input) AS output_alias, coalesce(admitted_input, literal_or_parameter) AS output_alias, replace(admitted_input, literal_or_parameter, literal_or_parameter) AS output_alias, left(admitted_input, literal_or_parameter) AS output_alias, right(admitted_input, literal_or_parameter) AS output_alias, split(admitted_input, literal_or_parameter) AS output_alias, substring(admitted_input, literal_or_parameter) AS output_alias, substring(admitted_input, literal_or_parameter, literal_or_parameter) AS output_alias, abs(admitted_input) AS output_alias, sign(admitted_input) AS output_alias, round(admitted_input) AS output_alias, ceil(admitted_input) AS output_alias, floor(admitted_input) AS output_alias, toString(admitted_input) AS output_alias, toInteger(admitted_input) AS output_alias, toFloat(admitted_input) AS output_alias, toBoolean(admitted_input) AS output_alias, startNode(rel_alias) AS output_alias, startNode(rel_alias).field AS output_alias, endNode(rel_alias) AS output_alias, endNode(rel_alias).field AS output_alias, predicate admitted_input OP value AS output_alias, or scalar_literal_or_parameter AS output_alias."
             )
         items.append(
             ReturnItem(
@@ -1429,6 +1429,6 @@ def _parse_return_items(text: str) -> tuple[ReturnItem, ...]:
         )
 
     if not items:
-        raise ValueError("HumemCypher v0 RETURN clauses cannot be empty.")
+        raise ValueError("CypherGlot RETURN clauses cannot be empty.")
 
     return tuple(items)

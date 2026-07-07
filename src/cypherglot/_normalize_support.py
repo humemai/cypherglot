@@ -157,7 +157,7 @@ class ReturnItem:
             return f"{function_name}({', '.join((primary_expr, *arg_suffix))})"
         if self.kind in {"sum", "avg", "min", "max", "scalar", "size", "predicate", "id", "type", "properties", "labels", "keys", "start_node", "end_node", "lower", "upper", "trim", "ltrim", "rtrim", "reverse", "coalesce", "replace", "left", "right", "split", "abs", "sign", "round", "ceil", "floor", "sqrt", "exp", "sin", "cos", "tan", "asin", "acos", "atan", "ln", "log", "log10", "radians", "degrees", "to_string", "to_integer", "to_float", "to_boolean", "substring", "case"}:
             raise ValueError(
-                "HumemCypher v0 scalar expression RETURN items require an explicit AS alias."
+                "CypherGlot scalar expression RETURN items require an explicit AS alias."
             )
         if self.field is None:
             return self.alias
@@ -277,16 +277,16 @@ def _parse_node_pattern(
 ) -> NodePattern:
     match = _NODE_PATTERN_RE.fullmatch(text.strip())
     if match is None:
-        raise ValueError(f"HumemCypher v0 could not parse node pattern: {text!r}")
+        raise ValueError(f"CypherGlot could not parse node pattern: {text!r}")
 
     label = match.group("label")
     if require_label and label is None:
-        raise ValueError("HumemCypher v0 CREATE patterns require labeled nodes.")
+        raise ValueError("CypherGlot CREATE patterns require labeled nodes.")
 
     alias = match.group("alias") or default_alias
     if alias is None:
         raise ValueError(
-            "HumemCypher v0 currently requires a node alias unless the pattern "
+            "CypherGlot currently requires a node alias unless the pattern "
             "position admits an anonymous node."
         )
 
@@ -304,7 +304,7 @@ def _parse_relationship_pattern(
     match = _REL_PATTERN_RE.fullmatch(text.strip())
     if match is None:
         raise ValueError(
-            f"HumemCypher v0 could not parse relationship pattern: {text!r}"
+            f"CypherGlot could not parse relationship pattern: {text!r}"
         )
 
     min_hops, max_hops = _parse_relationship_hop_bounds(match.group("range"))
@@ -329,7 +329,7 @@ def _parse_relationship_hop_bounds(range_text: str | None) -> tuple[int, int | N
     )
     if match is None:
         raise ValueError(
-            f"HumemCypher v0 could not parse relationship range literal: {range_text!r}"
+            f"CypherGlot could not parse relationship range literal: {range_text!r}"
         )
 
     start_text = match.group("start")
@@ -404,7 +404,7 @@ def _parse_order_items(text: str) -> tuple[OrderItem, ...]:
         )
 
     if not items:
-        raise ValueError("HumemCypher v0 ORDER BY clauses cannot be empty.")
+        raise ValueError("CypherGlot ORDER BY clauses cannot be empty.")
 
     return tuple(items)
 
@@ -422,7 +422,7 @@ def _parse_query_nodes_order_items(
     if text is None:
         return ()
     if not text:
-        raise ValueError("HumemCypher v0 ORDER BY clauses cannot be empty.")
+        raise ValueError("CypherGlot ORDER BY clauses cannot be empty.")
 
     items: list[tuple[str, Literal["asc", "desc"]]] = []
     for raw_item in _split_comma_separated(text):
@@ -435,7 +435,7 @@ def _parse_query_nodes_order_items(
             direction = cast(Literal["asc", "desc"], parts[1].lower())
         if target not in {"node.id", "score"}:
             raise ValueError(
-                "HumemCypher v0 vector procedure ORDER BY currently supports only "
+                "CypherGlot vector procedure ORDER BY currently supports only "
                 "node.id and score."
             )
         items.append((target, direction))
@@ -447,13 +447,13 @@ def _parse_query_nodes_return_items(text: str) -> tuple[str, ...]:
     items = tuple(item.strip() for item in _split_comma_separated(text) if item.strip())
     if not items:
         raise ValueError(
-            "HumemCypher v0 vector procedure queries currently require a RETURN "
+            "CypherGlot vector procedure queries currently require a RETURN "
             "clause over node.id and/or score."
         )
     for item in items:
         if item not in {"node.id", "score"}:
             raise ValueError(
-                "HumemCypher v0 vector procedure queries currently support only "
+                "CypherGlot vector procedure queries currently support only "
                 "RETURN node.id and score."
             )
     return items
@@ -466,7 +466,7 @@ def _parse_query_nodes_limit_ref(text: str) -> int | str:
     if isinstance(value, _ParameterRef):
         return value.name
     raise ValueError(
-        "HumemCypher v0 vector procedure queries currently require the top-k "
+        "CypherGlot vector procedure queries currently require the top-k "
         "argument to be an integer literal or named parameter."
     )
 
@@ -494,14 +494,14 @@ def _split_return_clause(
         or (limit_match is not None and limit_match.start() < order_by_match.start())
     ):
         raise ValueError(
-            "HumemCypher v0 requires ORDER BY to appear before SKIP/OFFSET and LIMIT."
+            "CypherGlot requires ORDER BY to appear before SKIP/OFFSET and LIMIT."
         )
     if (
         skip_match is not None
         and limit_match is not None
         and limit_match.start() < skip_match.start()
     ):
-        raise ValueError("HumemCypher v0 requires SKIP/OFFSET to appear before LIMIT.")
+        raise ValueError("CypherGlot requires SKIP/OFFSET to appear before LIMIT.")
 
     order_by: tuple[OrderItem, ...] = ()
     if order_by_match is not None:
@@ -537,33 +537,33 @@ def _parse_return_projection(text: str) -> tuple[str, bool]:
 
     projection_text = projection_text[distinct_match.end():].strip()
     if not projection_text:
-        raise ValueError("HumemCypher v0 RETURN DISTINCT clauses cannot be empty.")
+        raise ValueError("CypherGlot RETURN DISTINCT clauses cannot be empty.")
     return projection_text, True
 
 
 def _parse_skip_clause(text: str, *, clause_name: str = "SKIP") -> int:
     if not text:
-        raise ValueError(f"HumemCypher v0 {clause_name} clauses cannot be empty.")
+        raise ValueError(f"CypherGlot {clause_name} clauses cannot be empty.")
     if not re.fullmatch(r"\d+", text):
         raise ValueError(
-            f"HumemCypher v0 {clause_name} currently requires an integer literal."
+            f"CypherGlot {clause_name} currently requires an integer literal."
         )
 
     skip = int(text)
     if skip < 0:
-        raise ValueError(f"HumemCypher v0 {clause_name} must be at least 0.")
+        raise ValueError(f"CypherGlot {clause_name} must be at least 0.")
     return skip
 
 
 def _parse_limit_clause(text: str) -> int:
     if not text:
-        raise ValueError("HumemCypher v0 LIMIT clauses cannot be empty.")
+        raise ValueError("CypherGlot LIMIT clauses cannot be empty.")
     if not re.fullmatch(r"\d+", text):
-        raise ValueError("HumemCypher v0 LIMIT currently requires an integer literal.")
+        raise ValueError("CypherGlot LIMIT currently requires an integer literal.")
 
     limit = int(text)
     if limit < 1:
-        raise ValueError("HumemCypher v0 LIMIT must be at least 1.")
+        raise ValueError("CypherGlot LIMIT must be at least 1.")
     return limit
 
 
@@ -579,14 +579,14 @@ def _parse_predicates(text: str) -> tuple[Predicate, ...]:
                 left_text, operator, value_text = _split_predicate_comparison(item)
             except ValueError as exc:
                 raise ValueError(
-                    "HumemCypher v0 WHERE items must look like alias.field OP value, id(alias) OP value, or type(rel_alias) OP value."
+                    "CypherGlot WHERE items must look like alias.field OP value, id(alias) OP value, or type(rel_alias) OP value."
                 ) from exc
             left_text = left_text.strip()
             parsed_value: CypherValue | tuple[CypherValue, ...]
             if operator in {"IS NULL", "IS NOT NULL"}:
                 if value_text.strip():
                     raise ValueError(
-                        "HumemCypher v0 null predicates cannot include a trailing "
+                        "CypherGlot null predicates cannot include a trailing "
                         "literal value."
                     )
                 parsed_value = None
@@ -641,7 +641,7 @@ def _parse_predicates(text: str) -> tuple[Predicate, ...]:
                 match = _RETURN_ITEM_RE.fullmatch(size_expr)
                 if match is None:
                     raise ValueError(
-                        "HumemCypher v0 WHERE items must look like alias.field OP value, id(alias) OP value, type(rel_alias) OP value, or size(alias.field) OP value."
+                        "CypherGlot WHERE items must look like alias.field OP value, id(alias) OP value, type(rel_alias) OP value, or size(alias.field) OP value."
                     )
                 predicates.append(
                     Predicate(
@@ -658,7 +658,7 @@ def _parse_predicates(text: str) -> tuple[Predicate, ...]:
             match = _RETURN_ITEM_RE.fullmatch(left_text)
             if match is None:
                 raise ValueError(
-                    "HumemCypher v0 WHERE items must look like alias.field OP value, id(alias) OP value, type(rel_alias) OP value, or size(alias.field) OP value."
+                    "CypherGlot WHERE items must look like alias.field OP value, id(alias) OP value, type(rel_alias) OP value, or size(alias.field) OP value."
                 )
             predicates.append(
                 Predicate(
@@ -672,7 +672,7 @@ def _parse_predicates(text: str) -> tuple[Predicate, ...]:
             )
 
     if not predicates:
-        raise ValueError("HumemCypher v0 WHERE clauses cannot be empty.")
+        raise ValueError("CypherGlot WHERE clauses cannot be empty.")
 
     return tuple(predicates)
 
@@ -680,12 +680,12 @@ def _parse_predicates(text: str) -> tuple[Predicate, ...]:
 def _parse_boolean_predicate_groups(text: str) -> list[list[str]]:
     tokens = _tokenize_boolean_expression(text)
     if not tokens:
-        raise ValueError("HumemCypher v0 WHERE clauses cannot be empty.")
+        raise ValueError("CypherGlot WHERE clauses cannot be empty.")
 
     parser = _BooleanPredicateParser(tokens)
     groups = parser.parse_expression()
     if parser.has_more_tokens():
-        raise ValueError("HumemCypher v0 could not parse the full WHERE clause.")
+        raise ValueError("CypherGlot could not parse the full WHERE clause.")
     return groups
 
 
@@ -700,7 +700,7 @@ class _BooleanPredicateParser:
     def parse_expression(self) -> list[list[str]]:
         groups = self._parse_or_expression()
         if not groups:
-            raise ValueError("HumemCypher v0 WHERE clauses cannot be empty.")
+            raise ValueError("CypherGlot WHERE clauses cannot be empty.")
         return groups
 
     def _parse_or_expression(self) -> list[list[str]]:
@@ -725,14 +725,14 @@ class _BooleanPredicateParser:
     def _parse_primary_expression(self) -> list[list[str]]:
         token = self._peek()
         if token is None:
-            raise ValueError("HumemCypher v0 WHERE clauses cannot end abruptly.")
+            raise ValueError("CypherGlot WHERE clauses cannot end abruptly.")
 
         if token == "(":
             self._index += 1
             groups = self._parse_or_expression()
             if self._peek() != ")":
                 raise ValueError(
-                    "HumemCypher v0 found an unmatched '(' in WHERE clause."
+                    "CypherGlot found an unmatched '(' in WHERE clause."
                 )
             self._index += 1
             return groups
@@ -742,7 +742,7 @@ class _BooleanPredicateParser:
             self._index += 1
             if self._peek() == "(":
                 raise ValueError(
-                    "HumemCypher v0 does not yet admit NOT over parenthesised "
+                    "CypherGlot does not yet admit NOT over parenthesised "
                     "groups; apply NOT to a single comparison."
                 )
             negated = True
@@ -760,7 +760,7 @@ class _BooleanPredicateParser:
 
         if not comparison_tokens:
             raise ValueError(
-                "HumemCypher v0 WHERE items must look like alias.field OP value."
+                "CypherGlot WHERE items must look like alias.field OP value."
             )
         comparison = " ".join(comparison_tokens)
         if negated:
@@ -835,9 +835,9 @@ def _tokenize_boolean_expression(text: str) -> list[str]:
 
     final_token = "".join(current).strip()
     if in_string:
-        raise ValueError("HumemCypher v0 found an unterminated string literal.")
+        raise ValueError("CypherGlot found an unterminated string literal.")
     if call_depth != 0:
-        raise ValueError("HumemCypher v0 found an unmatched function-call parenthesis.")
+        raise ValueError("CypherGlot found an unmatched function-call parenthesis.")
     if final_token:
         tokens.append(final_token)
     return tokens
@@ -850,7 +850,7 @@ def _parse_set_items(text: str) -> tuple[SetItem, ...]:
         match = _RETURN_ITEM_RE.fullmatch(left_text.strip())
         if match is None:
             raise ValueError(
-                "HumemCypher v0 SET items must look like alias.field = value."
+                "CypherGlot SET items must look like alias.field = value."
             )
         assignments.append(
             SetItem(
@@ -861,7 +861,7 @@ def _parse_set_items(text: str) -> tuple[SetItem, ...]:
         )
 
     if not assignments:
-        raise ValueError("HumemCypher v0 SET clauses cannot be empty.")
+        raise ValueError("CypherGlot SET clauses cannot be empty.")
 
     return tuple(assignments)
 
@@ -876,7 +876,7 @@ def _parse_properties(text: str | None) -> PropertyItems:
         key = key_text.strip()
         if not re.fullmatch(_IDENTIFIER, key):
             raise ValueError(
-                f"HumemCypher v0 property keys must be simple identifiers; got {key!r}."
+                f"CypherGlot property keys must be simple identifiers; got {key!r}."
             )
         properties.append((key, _parse_literal(value_text.strip())))
 
@@ -888,7 +888,7 @@ def _parse_literal(text: str) -> CypherValue:
         parameter_name = text[1:]
         if not re.fullmatch(_IDENTIFIER, parameter_name):
             raise ValueError(
-                f"HumemCypher v0 parameter names must be identifiers; got {text!r}."
+                f"CypherGlot parameter names must be identifiers; got {text!r}."
             )
         return _ParameterRef(parameter_name)
 
@@ -909,7 +909,7 @@ def _parse_literal(text: str) -> CypherValue:
         return float(text)
 
     raise ValueError(
-        "HumemCypher v0 only supports inline string, integer, float, boolean, "
+        "CypherGlot only supports inline string, integer, float, boolean, "
         f"and null literals; got {text!r}."
     )
 
@@ -917,7 +917,7 @@ def _parse_literal(text: str) -> CypherValue:
 def _parse_in_list_literal(text: str) -> tuple[CypherValue, ...]:
     if not (text.startswith("[") and text.endswith("]")):
         raise ValueError(
-            "HumemCypher v0 IN predicates require an inline list literal such as "
+            "CypherGlot IN predicates require an inline list literal such as "
             f"alias.field IN [value, ...]; got {text!r}."
         )
     inner = text[1:-1].strip()
@@ -960,7 +960,7 @@ def _split_relationship_pattern(
         )
 
     raise ValueError(
-        "HumemCypher v0 only supports a single directed relationship pattern."
+        "CypherGlot only supports a single directed relationship pattern."
     )
 
 
@@ -996,7 +996,7 @@ def _unwrap_node_pattern(text: str) -> str:
     match = re.fullmatch(r"\((?P<node>[^)]*)\)", text.strip())
     if match is None:
         raise ValueError(
-            "HumemCypher v0 only supports a single node pattern or one directed edge."
+            "CypherGlot only supports a single node pattern or one directed edge."
         )
     return match.group("node")
 
@@ -1041,7 +1041,7 @@ def _split_comma_separated(text: str) -> list[str]:
                 brace_depth -= 1
 
             if min(paren_depth, bracket_depth, brace_depth) < 0:
-                raise ValueError("HumemCypher v0 found an unbalanced pattern clause.")
+                raise ValueError("CypherGlot found an unbalanced pattern clause.")
 
         if (
             character == ","
@@ -1052,7 +1052,7 @@ def _split_comma_separated(text: str) -> list[str]:
         ):
             item = "".join(current).strip()
             if not item:
-                raise ValueError("HumemCypher v0 does not allow empty list items.")
+                raise ValueError("CypherGlot does not allow empty list items.")
             items.append(item)
             current = []
             continue
@@ -1061,11 +1061,11 @@ def _split_comma_separated(text: str) -> list[str]:
 
     final_item = "".join(current).strip()
     if in_string:
-        raise ValueError("HumemCypher v0 found an unterminated string literal.")
+        raise ValueError("CypherGlot found an unterminated string literal.")
     if paren_depth or bracket_depth or brace_depth:
-        raise ValueError("HumemCypher v0 found an unbalanced pattern clause.")
+        raise ValueError("CypherGlot found an unbalanced pattern clause.")
     if not final_item:
-        raise ValueError("HumemCypher v0 does not allow empty list items.")
+        raise ValueError("CypherGlot does not allow empty list items.")
     items.append(final_item)
     return items
 
@@ -1078,7 +1078,7 @@ def _validate_create_relationship_separate_patterns(
 ) -> None:
     if first_node.alias == second_node.alias:
         raise ValueError(
-            "HumemCypher v0 CREATE with separate node patterns currently requires "
+            "CypherGlot CREATE with separate node patterns currently requires "
             "two distinct created node aliases."
         )
 
@@ -1088,7 +1088,7 @@ def _validate_create_relationship_separate_patterns(
     }
     if {left.alias, right.alias} != set(created_nodes):
         raise ValueError(
-            "HumemCypher v0 CREATE with separate node patterns currently requires "
+            "CypherGlot CREATE with separate node patterns currently requires "
             "the relationship pattern to reuse exactly those two created aliases."
         )
 
@@ -1096,12 +1096,12 @@ def _validate_create_relationship_separate_patterns(
         created_node = created_nodes[endpoint.alias]
         if endpoint.label is not None and endpoint.label != created_node.label:
             raise ValueError(
-                "HumemCypher v0 CREATE reused-node endpoints must use the same "
+                "CypherGlot CREATE reused-node endpoints must use the same "
                 "label as the created node alias."
             )
         if endpoint.properties:
             raise ValueError(
-                "HumemCypher v0 CREATE reused-node endpoints in separate-pattern "
+                "CypherGlot CREATE reused-node endpoints in separate-pattern "
                 "creates cannot redeclare inline properties."
             )
 
@@ -1113,7 +1113,7 @@ def _validate_match_create_relationship_endpoints(
 ) -> None:
     if left.alias != match_node.alias and right.alias != match_node.alias:
         raise ValueError(
-            "HumemCypher v0 MATCH ... CREATE currently requires the CREATE "
+            "CypherGlot MATCH ... CREATE currently requires the CREATE "
             "relationship pattern to reuse the matched node alias on at least one "
             "endpoint."
         )
@@ -1122,19 +1122,19 @@ def _validate_match_create_relationship_endpoints(
         if endpoint.alias == match_node.alias:
             if endpoint.label is not None and endpoint.label != match_node.label:
                 raise ValueError(
-                    "HumemCypher v0 MATCH ... CREATE reused-node endpoints must use "
+                    "CypherGlot MATCH ... CREATE reused-node endpoints must use "
                     "the same label as the matched node alias."
                 )
             if endpoint.properties:
                 raise ValueError(
-                    "HumemCypher v0 MATCH ... CREATE reused-node endpoints cannot "
+                    "CypherGlot MATCH ... CREATE reused-node endpoints cannot "
                     "redeclare inline properties for the matched node alias."
                 )
             continue
 
         if endpoint.label is None:
             raise ValueError(
-                "HumemCypher v0 MATCH ... CREATE new endpoint nodes currently "
+                "CypherGlot MATCH ... CREATE new endpoint nodes currently "
                 "require a label unless they reuse the matched node alias."
             )
 
@@ -1146,7 +1146,7 @@ def _validate_match_merge_relationship_endpoints(
 ) -> None:
     if left.alias != match_node.alias and right.alias != match_node.alias:
         raise ValueError(
-            "HumemCypher v0 MATCH ... MERGE with one matched node pattern currently "
+            "CypherGlot MATCH ... MERGE with one matched node pattern currently "
             "requires the MERGE relationship pattern to reuse the matched node alias on at least one endpoint."
         )
 
@@ -1154,19 +1154,19 @@ def _validate_match_merge_relationship_endpoints(
         if endpoint.alias == match_node.alias:
             if endpoint.label is not None and endpoint.label != match_node.label:
                 raise ValueError(
-                    "HumemCypher v0 MATCH ... MERGE reused-node endpoints must use "
+                    "CypherGlot MATCH ... MERGE reused-node endpoints must use "
                     "the same label as the matched node alias."
                 )
             if endpoint.properties:
                 raise ValueError(
-                    "HumemCypher v0 MATCH ... MERGE reused-node endpoints cannot "
+                    "CypherGlot MATCH ... MERGE reused-node endpoints cannot "
                     "redeclare inline properties for the matched node alias."
                 )
             continue
 
         if endpoint.label is None:
             raise ValueError(
-                "HumemCypher v0 MATCH ... MERGE new endpoint nodes currently "
+                "CypherGlot MATCH ... MERGE new endpoint nodes currently "
                 "require a label unless they reuse the matched node alias."
             )
 
@@ -1179,7 +1179,7 @@ def _validate_match_create_relationship_between_nodes_endpoints(
 ) -> None:
     if left_match.alias == right_match.alias:
         raise ValueError(
-            "HumemCypher v0 MATCH ... CREATE with two matched node patterns "
+            "CypherGlot MATCH ... CREATE with two matched node patterns "
             "currently requires two distinct matched aliases."
         )
 
@@ -1187,7 +1187,7 @@ def _validate_match_create_relationship_between_nodes_endpoints(
     endpoint_aliases = {left.alias, right.alias}
     if endpoint_aliases != matched_aliases:
         raise ValueError(
-            "HumemCypher v0 MATCH ... CREATE with two matched node patterns "
+            "CypherGlot MATCH ... CREATE with two matched node patterns "
             "currently requires the CREATE relationship endpoints to reuse those "
             "two matched aliases exactly."
         )
@@ -1197,12 +1197,12 @@ def _validate_match_create_relationship_between_nodes_endpoints(
             continue
         if endpoint.label is not None and endpoint.label != matched_node.label:
             raise ValueError(
-                "HumemCypher v0 MATCH ... CREATE reused-node endpoints must use "
+                "CypherGlot MATCH ... CREATE reused-node endpoints must use "
                 "the same label as the matched node alias."
             )
         if endpoint.properties:
             raise ValueError(
-                "HumemCypher v0 MATCH ... CREATE reused-node endpoints cannot "
+                "CypherGlot MATCH ... CREATE reused-node endpoints cannot "
                 "redeclare inline properties for matched node aliases."
             )
 
@@ -1227,7 +1227,7 @@ def _split_outside_string(text: str, delimiter: str) -> tuple[str, str]:
         if character == delimiter and not in_string:
             return text[:index], text[index + 1:]
 
-    raise ValueError(f"HumemCypher v0 expected {delimiter!r} in {text!r}.")
+    raise ValueError(f"CypherGlot expected {delimiter!r} in {text!r}.")
 
 
 def _split_predicate_comparison(
@@ -1295,7 +1295,7 @@ def _split_predicate_comparison(
             operator = cast(Literal["=", "<", ">"], character)
             return text[:index], operator, text[index + 1:]
 
-    raise ValueError(f"HumemCypher v0 expected a comparison operator in {text!r}.")
+    raise ValueError(f"CypherGlot expected a comparison operator in {text!r}.")
 
 
 def _find_top_level_keyword(text: str, keyword: str, *, start: int = 0) -> int:
@@ -1397,7 +1397,7 @@ def _parse_case_result_item(text: str) -> ReturnItem:
         literal_value = _parse_literal(expression_text)
     except ValueError as exc:
         raise ValueError(
-            "HumemCypher v0 searched CASE results currently support only admitted field projections, admitted id/type/size outputs, or scalar literal/parameter inputs."
+            "CypherGlot searched CASE results currently support only admitted field projections, admitted id/type/size outputs, or scalar literal/parameter inputs."
         ) from exc
     return ReturnItem(alias="__case__", kind="scalar", value=literal_value)
 
@@ -1414,7 +1414,7 @@ def _parse_case_condition_item(text: str) -> ReturnItem:
     if operator in {"IS NULL", "IS NOT NULL"}:
         if value_text:
             raise ValueError(
-                "HumemCypher v0 searched CASE null predicates cannot include a trailing literal value."
+                "CypherGlot searched CASE null predicates cannot include a trailing literal value."
             )
         predicate_value: object | None = None
     else:
@@ -1463,7 +1463,7 @@ def _parse_case_condition_item(text: str) -> ReturnItem:
                 value=predicate_value,
             )
         raise ValueError(
-            "HumemCypher v0 searched CASE WHEN conditions currently support size(...) only over admitted field projections or admitted id/type outputs."
+            "CypherGlot searched CASE WHEN conditions currently support size(...) only over admitted field projections or admitted id/type outputs."
         )
 
     id_match = re.fullmatch(
@@ -1497,7 +1497,7 @@ def _parse_case_condition_item(text: str) -> ReturnItem:
     field_match = _RETURN_ITEM_RE.fullmatch(left_text)
     if field_match is None:
         raise ValueError(
-            "HumemCypher v0 searched CASE WHEN conditions currently support only admitted field, id(...), type(...), or size(...) predicate surfaces."
+            "CypherGlot searched CASE WHEN conditions currently support only admitted field, id(...), type(...), or size(...) predicate surfaces."
         )
     return ReturnItem(
         alias=field_match.group("alias"),
@@ -1514,13 +1514,13 @@ def _parse_case_expression(text: str) -> CaseSpec | None:
         return None
     if re.fullmatch(r"case\s+.+\s+end", expression_text, flags=re.IGNORECASE) is None:
         raise ValueError(
-            "HumemCypher v0 currently supports searched CASE expressions only in the form CASE WHEN ... THEN ... [WHEN ... THEN ...]* ELSE ... END."
+            "CypherGlot currently supports searched CASE expressions only in the form CASE WHEN ... THEN ... [WHEN ... THEN ...]* ELSE ... END."
         )
 
     inner = expression_text[4:-3].strip()
     if re.match(r"when\b", inner, flags=re.IGNORECASE) is None:
         raise ValueError(
-            "HumemCypher v0 currently supports only searched CASE expressions beginning with CASE WHEN ... ."
+            "CypherGlot currently supports only searched CASE expressions beginning with CASE WHEN ... ."
         )
 
     when_items: list[CaseWhen] = []
@@ -1532,13 +1532,13 @@ def _parse_case_expression(text: str) -> CaseSpec | None:
         then_index = _find_top_level_keyword(inner, "THEN", start=when_index + 4)
         if then_index == -1:
             raise ValueError(
-                "HumemCypher v0 searched CASE expressions require THEN after every WHEN condition."
+                "CypherGlot searched CASE expressions require THEN after every WHEN condition."
             )
         next_when = _find_top_level_keyword(inner, "WHEN", start=then_index + 4)
         else_index = _find_top_level_keyword(inner, "ELSE", start=then_index + 4)
         if else_index == -1 and next_when == -1:
             raise ValueError(
-                "HumemCypher v0 searched CASE expressions currently require an ELSE branch."
+                "CypherGlot searched CASE expressions currently require an ELSE branch."
             )
 
         condition_text = inner[when_index + 4:then_index].strip()
@@ -1561,7 +1561,7 @@ def _parse_case_expression(text: str) -> CaseSpec | None:
         if final_else_text is not None:
             if not final_else_text:
                 raise ValueError(
-                    "HumemCypher v0 searched CASE expressions currently require a non-empty ELSE result."
+                    "CypherGlot searched CASE expressions currently require a non-empty ELSE result."
                 )
             return CaseSpec(
                 when_items=tuple(when_items),
@@ -1569,7 +1569,7 @@ def _parse_case_expression(text: str) -> CaseSpec | None:
             )
 
     raise ValueError(
-        "HumemCypher v0 searched CASE expressions currently require at least one WHEN ... THEN ... arm and a final ELSE branch."
+        "CypherGlot searched CASE expressions currently require at least one WHEN ... THEN ... arm and a final ELSE branch."
     )
 
 

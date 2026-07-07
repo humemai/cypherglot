@@ -15,6 +15,7 @@ from ._normalize_support import (
 	_split_return_clause,
 	_unwrap_node_pattern,
 )
+from .errors import reject
 from .parser import CypherParseResult
 
 
@@ -34,8 +35,10 @@ def _validate_match_pattern_shape(
 	allow_variable_length: bool = False,
 ) -> None:
 	if match_ctx.OPTIONAL() is not None and not allow_optional:
-		raise ValueError(
-			"CypherGlot currently does not admit OPTIONAL MATCH in the supported subset."
+		reject(
+			"CypherGlot currently does not admit OPTIONAL MATCH in the supported subset.",
+			ctx=match_ctx,
+			construct="optional_match",
 		)
 
 	pattern_ctx = match_ctx.oC_Pattern()
@@ -44,18 +47,24 @@ def _validate_match_pattern_shape(
 
 	for pattern_part in pattern_parts:
 		if pattern_part.oC_Variable() is not None:
-			raise ValueError(
+			reject(
 				"CypherGlot currently does not admit named path patterns in the "
-				"supported subset."
+				"supported subset.",
+				ctx=pattern_part,
+				construct="named_path",
+				hint="Bind the nodes and relationships you need with aliases instead.",
 			)
 
 		anonymous_part = pattern_part.oC_AnonymousPatternPart()
 		pattern_element = anonymous_part.oC_PatternElement()
 		chains = pattern_element.oC_PatternElementChain()
 		if len(chains) > 1 and not allow_multi_hop:
-			raise ValueError(
+			reject(
 				"CypherGlot currently does not admit multi-hop pattern chains in "
-				"the supported subset."
+				"the supported subset.",
+				ctx=pattern_part,
+				construct="multi_hop_chain",
+				hint="Split the chain across MATCH ... WITH stages.",
 			)
 
 		for chain in chains:
@@ -65,26 +74,35 @@ def _validate_match_pattern_shape(
 				and relationship_detail.oC_RangeLiteral() is not None
 			):
 				if not allow_variable_length:
-					raise ValueError(
+					reject(
 						"CypherGlot currently does not admit variable-length "
-						"relationship patterns in the supported subset."
+						"relationship patterns in the supported subset.",
+						ctx=chain,
+						construct="variable_length",
 					)
 
 				if len(pattern_parts) != 1 or len(chains) != 1:
-					raise ValueError(
-						"CypherGlot currently admits bounded variable-length relationship patterns only as one directed MATCH relationship read."
+					reject(
+						"CypherGlot currently admits bounded variable-length relationship patterns only as one directed MATCH relationship read.",
+						ctx=chain,
+						construct="variable_length",
 					)
 
 				relationship = _parse_relationship_chain_segment(
 					_context_text(result, chain.oC_RelationshipPattern())
 				)
 				if relationship.min_hops < 0 or relationship.max_hops is None:
-					raise ValueError(
-						"CypherGlot currently admits only bounded non-negative-length variable-length relationship patterns in the supported subset."
+					reject(
+						"CypherGlot currently admits only bounded non-negative-length variable-length relationship patterns in the supported subset.",
+						ctx=chain,
+						construct="unbounded_variable_length",
+						hint="Give the pattern an explicit upper bound, e.g. [*1..4].",
 					)
 				if relationship.max_hops < relationship.min_hops:
-					raise ValueError(
-						"CypherGlot currently admits only bounded non-negative-length variable-length relationship patterns in the supported subset."
+					reject(
+						"CypherGlot currently admits only bounded non-negative-length variable-length relationship patterns in the supported subset.",
+						ctx=chain,
+						construct="unbounded_variable_length",
 					)
 
 		chain_counts.append(len(chains))
@@ -93,9 +111,12 @@ def _validate_match_pattern_shape(
 		return
 
 	if not allow_two_node_disconnected:
-		raise ValueError(
+		reject(
 			"CypherGlot currently does not admit disconnected multi-pattern MATCH "
-			"clauses in the supported subset."
+			"clauses in the supported subset.",
+			ctx=pattern_ctx,
+			construct="disconnected_pattern",
+			hint="Match each pattern in its own MATCH ... WITH stage.",
 		)
 
 	if len(pattern_parts) != 2 or any(chain_count != 0 for chain_count in chain_counts):
@@ -200,9 +221,12 @@ def _validate_query_nodes_vector_shape(
 
 	procedure_name = _context_text(result, procedure_ctx.oC_ProcedureName()).casefold()
 	if procedure_name != "db.index.vector.querynodes":
-		raise ValueError(
+		reject(
 			"CypherGlot currently admits only the db.index.vector.queryNodes(...) "
-			"procedure in the vector-aware subset."
+			"procedure in the vector-aware subset.",
+			ctx=procedure_ctx,
+			construct="call_procedure",
+			hint="Other procedures are engine-specific; use plain MATCH/RETURN queries.",
 		)
 
 	procedure_args = procedure_ctx.oC_Expression()

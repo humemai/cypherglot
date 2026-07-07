@@ -426,37 +426,37 @@ def _plain_projection_output_kind(item) -> str:
 
 def _translate_plain_read_parse_error(message: str, expression_text: str) -> str:
     direct_mappings = {
-        "HumemCypher v0 RETURN searched CASE items currently require an explicit AS alias.": (
+        "CypherGlot RETURN searched CASE items currently require an explicit AS alias.": (
             "CypherGlot currently requires searched CASE in the supported read subset to use an explicit AS alias."
         ),
-        "HumemCypher v0 RETURN size(...) items currently require an explicit AS alias.": (
+        "CypherGlot RETURN size(...) items currently require an explicit AS alias.": (
             "CypherGlot currently requires size(...) in the supported read subset to use an explicit AS alias."
         ),
-        "HumemCypher v0 RETURN predicate items currently require an explicit AS alias.": (
+        "CypherGlot RETURN predicate items currently require an explicit AS alias.": (
             "CypherGlot currently requires predicate RETURN items in the supported read subset to use an explicit AS alias."
         ),
-        "HumemCypher v0 RETURN predicate items currently require alias.field OP value, id(alias) OP value, type(rel_alias) OP value, or size(admitted_input) OP value shapes.": (
+        "CypherGlot RETURN predicate items currently require alias.field OP value, id(alias) OP value, type(rel_alias) OP value, or size(admitted_input) OP value shapes.": (
             "CypherGlot currently supports predicate RETURN items in the supported read subset only as alias.field OP value, id(alias) OP value, type(rel_alias) OP value, or size(admitted_input) OP value over admitted bindings."
         ),
-        "HumemCypher v0 RETURN scalar literal and parameter items currently require an explicit AS alias.": (
+        "CypherGlot RETURN scalar literal and parameter items currently require an explicit AS alias.": (
             "CypherGlot currently requires scalar literal and parameter RETURN items in the supported read subset to use an explicit AS alias."
         ),
-        "HumemCypher v0 RETURN coalesce(...) currently requires exactly two arguments.": (
+        "CypherGlot RETURN coalesce(...) currently requires exactly two arguments.": (
             "CypherGlot currently supports coalesce(...) in the supported read subset only as coalesce(alias.field, literal_or_parameter) over admitted bindings."
         ),
-        "HumemCypher v0 RETURN coalesce(...) currently requires alias.field as the primary argument and literal_or_parameter as the fallback argument.": (
+        "CypherGlot RETURN coalesce(...) currently requires alias.field as the primary argument and literal_or_parameter as the fallback argument.": (
             "CypherGlot currently supports coalesce(...) in the supported read subset only as coalesce(alias.field, literal_or_parameter) over admitted bindings."
         ),
-        "HumemCypher v0 RETURN replace(...) currently requires exactly three arguments.": (
+        "CypherGlot RETURN replace(...) currently requires exactly three arguments.": (
             "CypherGlot currently supports replace(...) in the supported read subset only as replace(admitted_input, literal_or_parameter, literal_or_parameter)."
         ),
-        "HumemCypher v0 RETURN left(...) and right(...) currently require exactly two arguments.": (
+        "CypherGlot RETURN left(...) and right(...) currently require exactly two arguments.": (
             "CypherGlot currently supports left(...) and right(...) in the supported read subset only as function(admitted_input, literal_or_parameter)."
         ),
-        "HumemCypher v0 RETURN split(...) currently requires exactly two arguments.": (
+        "CypherGlot RETURN split(...) currently requires exactly two arguments.": (
             "CypherGlot currently supports split(...) in the supported read subset only as split(admitted_input, literal_or_parameter)."
         ),
-        "HumemCypher v0 RETURN substring(...) currently requires exactly two or three arguments.": (
+        "CypherGlot RETURN substring(...) currently requires exactly two or three arguments.": (
             "CypherGlot currently supports substring(...) in the supported read subset only as substring(admitted_input, literal_or_parameter) or substring(admitted_input, literal_or_parameter, literal_or_parameter)."
         ),
     }
@@ -464,21 +464,21 @@ def _translate_plain_read_parse_error(message: str, expression_text: str) -> str
         return direct_mappings[message]
 
     if message == (
-        "HumemCypher v0 RETURN lower(...), upper(...), trim(...), ltrim(...), rtrim(...), and reverse(...) items currently require an explicit AS alias."
+        "CypherGlot RETURN lower(...), upper(...), trim(...), ltrim(...), rtrim(...), and reverse(...) items currently require an explicit AS alias."
     ):
         return (
             "CypherGlot currently requires lower(...), upper(...), trim(...), ltrim(...), rtrim(...), and reverse(...) in the supported read subset to use an explicit AS alias."
         )
 
     single_alias_match = re.fullmatch(
-        r"HumemCypher v0 RETURN (?P<func>abs|sign|round|floor|ceil|sqrt|exp|sin|cos|tan|asin|acos|atan|ln|log|log10|radians|degrees|toString|toInteger|toFloat|toBoolean)\(\.\.\.\) items currently require an explicit AS alias\.",
+        r"CypherGlot RETURN (?P<func>abs|sign|round|floor|ceil|sqrt|exp|sin|cos|tan|asin|acos|atan|ln|log|log10|radians|degrees|toString|toInteger|toFloat|toBoolean)\(\.\.\.\) items currently require an explicit AS alias\.",
         message,
     )
     if single_alias_match is not None:
         func_name = single_alias_match.group("func")
         return f"CypherGlot currently requires {func_name}(...) in the supported read subset to use an explicit AS alias."
 
-    if "HumemCypher v0 only supports inline string, integer, float, boolean, and null literals; got" in message:
+    if "CypherGlot only supports inline string, integer, float, boolean, and null literals; got" in message:
         if re.fullmatch(r"size\s*\(.+\)", expression_text, flags=re.IGNORECASE):
             return (
                 "CypherGlot currently supports size(...) in the supported read subset only over admitted field projections, admitted id/type outputs, or scalar literal/parameter inputs."
