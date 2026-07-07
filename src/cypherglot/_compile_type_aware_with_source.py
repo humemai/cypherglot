@@ -373,6 +373,29 @@ def _compile_type_aware_source_binding_expression(
             return f"SUBSTRING({inner}, ({start_sql} + 1))"
         return f"SUBSTRING({inner}, ({start_sql} + 1), {_sql_value(item.length_value)})"
 
+    if item.kind == "count":
+        if item.alias == "*":
+            return "COUNT(*)"
+        alias_spec = source_alias_specs.get(item.alias)
+        if alias_spec is not None:
+            # count(entity): count rows where the entity is bound (its id).
+            return f"COUNT({alias_spec.table_alias}.id)"
+        binding_spec = source_binding_specs.get(item.alias)
+        if binding_spec is not None:
+            return f"COUNT({_with_scalar_prefix(item.alias)})"
+        raise ValueError(
+            f"count(...) references unknown WITH alias {item.alias!r}."
+        )
+
+    if item.kind in {"sum", "avg", "min", "max"}:
+        binding_spec = source_binding_specs.get(item.alias)
+        if binding_spec is None:
+            raise ValueError(
+                f"{item.kind}(...) in a WITH binding currently requires an "
+                "admitted scalar binding argument."
+            )
+        return f"{item.kind.upper()}({_with_scalar_prefix(item.alias)})"
+
     raise ValueError(
         f"Unsupported derived WITH binding expression kind: {item.kind!r}."
     )
@@ -420,6 +443,39 @@ def _compile_type_aware_source_alias_field_expression(
     )
 
 
+_WITH_AGGREGATE_BINDING_KINDS = {"count", "sum", "avg", "min", "max", "collect"}
+
+
+def _with_binding_is_aggregate(binding: WithBinding) -> bool:
+    return (
+        binding.expression is not None
+        and binding.expression.kind in _WITH_AGGREGATE_BINDING_KINDS
+    )
+
+
+def _with_source_group_sql(
+    bindings,
+    columns_by_output_alias: dict[str, list[str]],
+) -> str | None:
+    """GROUP BY for a WITH stage containing aggregate bindings.
+
+    Cypher's implicit grouping keys are every non-aggregate WITH item, so the
+    inner subquery groups by all projected columns of those bindings."""
+    if not any(_with_binding_is_aggregate(binding) for binding in bindings):
+        return None
+    group_names: list[str] = []
+    for binding in bindings:
+        if _with_binding_is_aggregate(binding):
+            continue
+        for column in columns_by_output_alias.get(binding.output_alias, ()):
+            name = column.rsplit(' AS ', 1)[-1]
+            group_names.append(name)
+    if not group_names:
+        # Pure-aggregate WITH (e.g. WITH count(*) AS c): one global group.
+        return None
+    return ", ".join(group_names)
+
+
 def _compile_type_aware_with_source_sql(
     statement: GraphRelationalReadIR,
     graph_schema: GraphSchema,
@@ -444,6 +500,7 @@ def _compile_type_aware_with_source_sql(
         )
 
         select_parts: list[str] = []
+        columns_by_output_alias: dict[str, list[str]] = {}
         binding_specs: dict[str, _TypeAwareWithBindingSpec] = {}
         output_alias_by_source_alias = {
             binding.source_alias: binding.output_alias
@@ -474,7 +531,9 @@ def _compile_type_aware_with_source_sql(
         }
         for binding in statement.bindings:
             alias_spec = alias_specs.get(binding.source_alias)
-            if alias_spec is None:
+            if alias_spec is None and binding.expression is not None:
+                alias_spec = None  # derived binding; expression resolves inputs
+            elif alias_spec is None:
                 raise ValueError(
                     f"Unknown WITH binding source alias {binding.source_alias!r} "
                     "for type-aware fixed-length multi-hop source."
@@ -482,8 +541,8 @@ def _compile_type_aware_with_source_sql(
             binding_columns, scalar_logical_type = (
                 _compile_type_aware_source_binding_columns(
                     binding,
-                    table_alias=alias_spec.table_alias,
-                    entity_type=alias_spec.entity_type,
+                    table_alias=alias_spec.table_alias if alias_spec else "",
+                    entity_type=alias_spec.entity_type if alias_spec else None,
                     source_alias_specs=alias_specs,
                     source_binding_specs=source_binding_specs,
                     backend=backend,
@@ -491,20 +550,21 @@ def _compile_type_aware_with_source_sql(
             )
             binding_specs[binding.output_alias] = _build_type_aware_with_binding_spec(
                 binding=binding,
-                entity_type=alias_spec.entity_type,
+                entity_type=alias_spec.entity_type if alias_spec else None,
                 scalar_logical_type=scalar_logical_type,
                 start_binding_output_alias=(
                     output_alias_by_source_alias.get(alias_spec.start_node_alias)
-                    if alias_spec.alias_kind == "relationship"
+                    if alias_spec and alias_spec.alias_kind == "relationship"
                     else None
                 ),
                 end_binding_output_alias=(
                     output_alias_by_source_alias.get(alias_spec.end_node_alias)
-                    if alias_spec.alias_kind == "relationship"
+                    if alias_spec and alias_spec.alias_kind == "relationship"
                     else None
                 ),
             )
             select_parts.extend(binding_columns)
+            columns_by_output_alias[binding.output_alias] = list(binding_columns)
 
         return (
             _assemble_select_sql(
@@ -513,6 +573,9 @@ def _compile_type_aware_with_source_sql(
                 from_sql=from_sql,
                 joins=joins,
                 where_parts=where_parts,
+                group_sql=_with_source_group_sql(
+                    statement.bindings, columns_by_output_alias
+                ),
                 order_sql=None,
                 limit=None,
                 skip=None,
@@ -559,6 +622,7 @@ def _compile_type_aware_with_source_sql(
             )
 
         select_parts: list[str] = []
+        columns_by_output_alias: dict[str, list[str]] = {}
         binding_specs: dict[str, _TypeAwareWithBindingSpec] = {}
         source_binding_specs = {
             node.alias: _build_type_aware_with_binding_spec(
@@ -599,6 +663,7 @@ def _compile_type_aware_with_source_sql(
                 scalar_logical_type=scalar_logical_type,
             )
             select_parts.extend(binding_columns)
+            columns_by_output_alias[binding.output_alias] = list(binding_columns)
 
         return (
             _assemble_select_sql(
@@ -607,6 +672,9 @@ def _compile_type_aware_with_source_sql(
                 from_sql=f"FROM {node_type.table_name} AS {node.alias}",
                 joins=[],
                 where_parts=where_parts,
+                group_sql=_with_source_group_sql(
+                    statement.bindings, columns_by_output_alias
+                ),
                 order_sql=None,
                 limit=None,
                 skip=None,
@@ -749,6 +817,7 @@ def _compile_type_aware_with_source_sql(
             if binding.binding_kind == "entity"
         }
         select_parts: list[str] = []
+        columns_by_output_alias: dict[str, list[str]] = {}
         binding_specs = {}
         source_binding_specs = {
             alias: _build_type_aware_with_binding_spec(
@@ -797,7 +866,11 @@ def _compile_type_aware_with_source_sql(
         }
         for binding in statement.bindings:
             table_alias, entity_type = alias_map.get(binding.source_alias, (None, None))
-            if table_alias is None:
+            if table_alias is None and binding.expression is not None:
+                # Derived bindings (e.g. count(*) AS c) reference no single
+                # source alias; the expression compiler resolves its inputs.
+                table_alias, entity_type = "", None
+            elif table_alias is None:
                 raise ValueError(
                     f"Unknown WITH binding source alias {binding.source_alias!r} "
                     "for type-aware relationship source."
@@ -828,6 +901,7 @@ def _compile_type_aware_with_source_sql(
                 ),
             )
             select_parts.extend(binding_columns)
+            columns_by_output_alias[binding.output_alias] = list(binding_columns)
 
         return (
             _assemble_select_sql(
@@ -841,6 +915,9 @@ def _compile_type_aware_with_source_sql(
                     f"ON {source.right.alias}.id = {relationship_alias}.to_id",
                 ],
                 where_parts=where_parts,
+                group_sql=_with_source_group_sql(
+                    statement.bindings, columns_by_output_alias
+                ),
                 order_sql=None,
                 limit=None,
                 skip=None,

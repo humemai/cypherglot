@@ -150,6 +150,11 @@ _CONFORMANCE_QUERIES: dict[str, str] = {
     "mandatory_onehop_optional_left_anchor": "MATCH (a:User)-[:KNOWS]->(b:User) OPTIONAL MATCH (a)-[:WORKS_AT]->(co:Company) RETURN b.name AS y, co.name AS company ORDER BY y, company",
     "mandatory_onehop_optional_where": "MATCH (a:User)-[:KNOWS]->(b:User) OPTIONAL MATCH (b)-[:KNOWS]->(c:User) WHERE c.age > 27 RETURN a.name AS x, c.name AS z ORDER BY x, z",
     "mandatory_onehop_optional_count": "MATCH (a:User)-[:KNOWS]->(b:User) OPTIONAL MATCH (b)-[:KNOWS]->(c:User) RETURN a.name AS x, count(c) AS n ORDER BY x",
+    # WITH aggregation stage (G): implicit grouping keys + post-agg WHERE.
+    "with_count_having": "MATCH (a:User)-[:KNOWS]->(b:User) WITH a, count(b) AS c WHERE c > 1 RETURN a.name AS name, c ORDER BY name",
+    "with_count_grouped": "MATCH (a:User)-[:KNOWS]->(b:User) WITH a, count(b) AS c RETURN a.name AS name, c ORDER BY name",
+    "with_count_scalar_key": "MATCH (a:User)-[:KNOWS]->(b:User) WITH a.name AS name, count(b) AS c RETURN name, c ORDER BY name",
+    "with_count_star_grouped": "MATCH (a:User)-[:KNOWS]->(b:User) WITH a, count(*) AS c RETURN a.name AS name, c ORDER BY name",
 }
 
 

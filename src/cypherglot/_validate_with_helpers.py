@@ -133,11 +133,14 @@ def _validate_with_shape(result: CypherParseResult, multi_part_query_ctx) -> Non
             binding_kinds={alias: "entity" for alias in allowed_aliases},
             binding_alias_kinds=source_alias_kinds,
         )
-        if projected_kind != "scalar":
+        if projected_kind not in {"scalar", "aggregate"}:
             raise ValueError(
                 "CypherGlot currently supports derived WITH bindings only for "
-                "scalar-producing expressions in the supported multi-part subset."
+                "scalar- or aggregate-producing expressions in the supported "
+                "multi-part subset."
             )
+        # An aggregate binding's OUTPUT is a scalar column for everything
+        # downstream (outer WHERE / RETURN / ORDER BY).
         binding_kinds[output_alias] = "scalar"
 
     if with_ctx.oC_Where() is not None:

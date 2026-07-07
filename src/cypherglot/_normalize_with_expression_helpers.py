@@ -66,6 +66,20 @@ def _parse_with_binding_expression_item(
     output_alias: str,
     binding_map: dict[str, WithBinding],
 ) -> WithReturnItem:
+    # Aggregate bindings (WITH a, count(b) AS c): the WITH stage lowers to a
+    # grouped inner subquery, so the binding's output is a plain scalar column
+    # for everything downstream.
+    aggregate_item = _parse_with_aggregate_item(
+        expression_text, output_alias, binding_map
+    )
+    if aggregate_item is not None:
+        if aggregate_item.kind == "collect":
+            raise ValueError(
+                "CypherGlot does not yet admit collect(...) as a WITH binding; "
+                "collect is available in the final RETURN."
+            )
+        return aggregate_item
+
     case_spec = _parse_with_case_expression(expression_text, binding_map)
     if case_spec is not None:
         return WithReturnItem(
