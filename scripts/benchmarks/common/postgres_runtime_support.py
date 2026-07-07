@@ -171,6 +171,10 @@ def _create_postgresql_runtime() -> _ManagedPostgresRuntime:
             "--env",
             f"POSTGRES_PASSWORD={_POSTGRES_PASSWORD}",
             _POSTGRES_IMAGE,
+            # Vendor-sizing sensitivity config (off by default): shlex-split
+            # server args appended after the image run as postgres -c flags,
+            # e.g. "-c shared_buffers=8GB -c work_mem=64MB".
+            *_postgres_server_args(),
         ],
         capture_output=True,
         text=True,
@@ -268,6 +272,15 @@ def _stop_runtime(runtime: _ManagedPostgresRuntime) -> None:
         text=True,
         check=False,
     )
+
+
+def _postgres_server_args() -> list[str]:
+    raw = os.environ.get("CYPHERGLOT_BENCHMARK_POSTGRES_SERVER_ARGS", "")
+    if not raw.strip():
+        return []
+    import shlex
+
+    return shlex.split(raw)
 
 
 def _find_free_tcp_port() -> int:

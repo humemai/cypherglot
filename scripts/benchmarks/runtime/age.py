@@ -424,6 +424,15 @@ def _docker_run_command(config: DockerAgeConfig) -> list[str]:
     if config.cpuset_cpus:
         command.extend(["--cpuset-cpus", config.cpuset_cpus])
     command.append(config.image)
+    # Vendor-sizing sensitivity config (off by default): postgres -c flags,
+    # shared with the compile-target postgres container.
+    raw_server_args = os.environ.get(
+        "CYPHERGLOT_BENCHMARK_POSTGRES_SERVER_ARGS", ""
+    )
+    if raw_server_args.strip():
+        import shlex
+
+        command.extend(shlex.split(raw_server_args))
     return command
 
 

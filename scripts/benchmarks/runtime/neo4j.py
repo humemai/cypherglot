@@ -151,6 +151,13 @@ def _docker_run_command(config: DockerNeo4jConfig, password: str) -> list[str]:
     ]
     if config.cpuset_cpus:
         command.extend(["--cpuset-cpus", config.cpuset_cpus])
+    # Vendor-sizing sensitivity config (off by default): extra container env,
+    # e.g. "NEO4J_server_memory_heap_max__size=8g,NEO4J_server_memory_pagecache_size=12g".
+    raw_env = os.environ.get("CYPHERGLOT_BENCHMARK_NEO4J_ENV", "")
+    for pair in raw_env.split(","):
+        pair = pair.strip()
+        if pair:
+            command.extend(["--env", pair])
     command.append(config.image)
     return command
 
