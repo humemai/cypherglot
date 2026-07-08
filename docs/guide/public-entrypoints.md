@@ -30,7 +30,7 @@ like as they move through the API.
 | Entrypoint | What it returns | Use it when | Notes |
 | --- | --- | --- | --- |
 | `parse_cypher_text(text)` | `CypherParseResult` | You want the raw parse result and syntax errors | Parsing does not enforce the admitted subset by itself. |
-| `validate_cypher_text(text)` | `None` or raises `ValueError` | You want an explicit admitted-subset check | Good boundary check before relying on compilation. |
+| `validate_cypher_text(text)` | `None` or raises `CypherCompileError` (a `ValueError`) | You want an explicit admitted-subset check | Good boundary check before relying on compilation; see [Diagnostics](diagnostics.md). |
 | `normalize_cypher_text(text)` | A repo-owned normalized statement object | You need a stable host-runtime handoff shape | This is also the main public surface for vector-aware queries. |
 | `graph_schema_from_text(text)` | `GraphSchema` | You want to define graph types via `CREATE NODE` / `CREATE EDGE` text instead of raw Python object construction | This is the graph-native schema-definition surface above `GraphSchema(...)`. |
 | `schema_ddl_from_text(text, backend)` | `list[str]` | You want backend DDL from that schema-definition text | Reuses the checked-in type-aware schema DDL generator. |
@@ -310,9 +310,42 @@ does not pretend vector execution is native SQLGlot work.
   or `render_cypher_program_text(...)`.
 - If the query is vector-aware, stay at the normalization layer.
 
+## Compile cache
+
+The string-rendering entrypoints — `to_sql(...)` and
+`render_cypher_program_text(...)` — sit behind a transparent, bounded,
+thread-safe compile cache. It is on by default with 512 entries and is keyed
+on the exact query text plus the backend, dialect, render options, and schema
+context, so a repeated call with identical inputs returns the previously
+rendered SQL without recompiling. The AST-returning entrypoints
+(`to_sqlglot_ast(...)`, `to_sqlglot_program(...)`) are deliberately never
+cached: they return mutable SQLGlot objects, and handing two callers the same
+mutable AST would be a correctness hazard.
+
+Because the key includes the raw text, parameterization is what makes the
+cache effective: `WHERE u.age > $min_age` is byte-identical on every call
+(and compiles to a SQL bind parameter), while interpolating literals produces
+a new text — and a recompile — every time. See
+[Porting from Neo4j](porting-from-neo4j.md#parameterize-with-param-not-string-interpolation).
+
+Control surface:
+
+```python
+import cypherglot
+
+cypherglot.set_compile_cache(enabled=True, maxsize=1024)  # resize or toggle
+cypherglot.clear_compile_cache()                          # drop all entries
+info = cypherglot.compile_cache_info()                    # hits/misses/currsize
+```
+
+Setting the environment variable `CYPHERGLOT_COMPILE_CACHE=0` bypasses the
+cache without code changes. Failed compilations are never cached — a rejected
+query re-raises its `CypherCompileError` on every call.
+
 ## Related guides
 
 - [Quick Start](../getting-started/quickstart.md)
 - [Admitted Subset](admitted-subset.md)
+- [Diagnostics](diagnostics.md)
 - [Compiler Contract](compiler-contract.md)
 - [Schema Contract](schema-contract.md)

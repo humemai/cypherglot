@@ -20,14 +20,27 @@ That includes:
   relationship reads, an unlabeled endpoint (e.g. `(a:Person)-[:KNOWS]->(b)`) is
   allowed when the relationship type is explicit — the missing endpoint label is
   inferred from the edge type's source/target contract
+- undirected one-hop relationship reads such as `(a)-[r:KNOWS]-(b)`, lowered as
+  a `UNION ALL` of both orientations with Neo4j row semantics (a self-loop
+  contributes one row, not two); variable-length and write patterns stay
+  directed-only
+- multi-type one-hop relationship reads such as `[r:LIKES|FOLLOWS]`, lowered as
+  a `UNION ALL` across the edge tables with `type(r)` a per-branch constant;
+  composes with undirected patterns; writes keep the single-type requirement
 - narrow standalone `OPTIONAL MATCH ... RETURN`
-- `MATCH (a:Label) ... OPTIONAL MATCH (a)-[r:TYPE]->(b:Label) ... RETURN` — one
-  mandatory single node followed by one optional one-hop relationship (left
-  endpoint reuses the matched alias); lowered as a `LEFT JOIN` so unmatched
-  source rows survive with NULLs. The OPTIONAL MATCH `WHERE` lands in the join
-  `ON` clause (not the outer `WHERE`) to preserve that semantics
+- `MATCH ... OPTIONAL MATCH (x)-[r:TYPE]->(b:Label) ... RETURN` — a mandatory
+  single node **or one-hop directed relationship** `MATCH`, followed by one
+  optional one-hop relationship anchored on any mandatory node alias; lowered
+  as a `LEFT JOIN` so unmatched source rows survive with NULLs. The OPTIONAL
+  MATCH `WHERE` lands in the join `ON` clause (not the outer `WHERE`) to
+  preserve that semantics; an undirected, multi-type, or variable-length
+  mandatory side before `OPTIONAL MATCH` is rejected with a friendly message
 - narrow `MATCH ... WITH ... RETURN` rebinding flows
-- in ordinary `MATCH ... RETURN`, a searched `CASE WHEN <comparison> THEN ... ELSE ... END AS x` projection and a boolean predicate projection (`alias.field OP value AS flag`) are admitted (both require an `AS` alias)
+- a `WITH` aggregation stage (the Cypher-HAVING pattern):
+  `MATCH ... WITH a, count(b) AS c WHERE c > $k RETURN ...` — non-aggregate
+  `WITH` items become the implicit grouping keys, and the post-aggregation
+  `WHERE` filters on the aggregate alias
+- in ordinary `MATCH ... RETURN`, a searched `CASE WHEN <condition> THEN ... ELSE ... END AS x` projection and a boolean predicate projection (`alias.field OP value AS flag`) are admitted (both require an `AS` alias); the `WHEN` condition may be a comparison or a bare boolean field (`WHEN u.active THEN ...`), and `ELSE null` is admitted
 - narrow standalone `UNWIND ... RETURN`
 - `UNION` / `UNION ALL` of admitted branches (each branch is compiled and combined; `UNION` de-duplicates, `UNION ALL` keeps duplicates, matching Cypher)
 - grouped `count(...)`, `count(*)`, `sum(...)`, `avg(...)`, `min(...)`,
@@ -67,6 +80,9 @@ CypherGlot currently admits:
 - narrow standalone `UNWIND ... RETURN`
 - a single connected `MATCH` pattern
 - at most one relationship hop in the matched pattern
+- one-hop relationship patterns may be directed (either direction), undirected
+  (`-[r:T]-`, lowered as a `UNION ALL` of both orientations), and/or
+  multi-type (`[r:A|B]`, lowered as a `UNION ALL` across edge tables)
 - bounded non-negative-length variable-length relationship reads in ordinary
   `MATCH ... RETURN` and narrow `MATCH ... WITH ... RETURN`, including
   syntactic relationship aliases that are not referenced in downstream
@@ -227,6 +243,12 @@ The admitted `WITH` slice is currently narrow:
 - one `MATCH` clause before `WITH`
 - one `WITH` clause with passthrough variable items such as `WITH u` or
   `WITH u AS person`, plus simple scalar rebinding such as `WITH u.name AS name`
+- an aggregation stage in the `WITH` clause itself:
+  `WITH a, count(b) AS c` (also `count(*)`, and `sum`/`avg`/`min`/`max` over
+  admitted scalar inputs) — the non-aggregate `WITH` items are the implicit
+  grouping keys, lowered as a grouped inner subquery; an optional `WHERE` after
+  such a `WITH` filters on the aggregate alias (Cypher's HAVING equivalent);
+  `collect(...)` bindings in `WITH` are rejected with a friendly message
 - an optional narrow `WHERE` after `WITH`, using `scalar_alias OP value` or
   `entity_alias.field OP value`, plus admitted `id(entity_alias) OP value` and
   `type(rel_alias) OP value`
@@ -444,7 +466,8 @@ to deduplicate the piped stream before the final `RETURN`.
 
 CypherGlot does not yet admit broader `WITH` semantics such as `WITH ... ORDER BY`
 or `WITH ... LIMIT`,
-broader aggregation forms beyond narrow admitted `count(binding_alias)` and `count(*)`, broader expression projections beyond narrow admitted `id(...)`, `type(...)`, `lower(...)`, `upper(...)`, `trim(...)`, `ltrim(...)`, `rtrim(...)`, `reverse(...)`, `coalesce(...)`, `replace(...)`, `left(...)`, `right(...)`, `split(...)`, `abs(...)`, `sign(...)`, `round(...)`, `ceil(...)`, `floor(...)`, `sqrt(...)`, `exp(...)`, `sin(...)`, `cos(...)`, `tan(...)`, `toString(...)`, `toInteger(...)`, `toFloat(...)`, and `toBoolean(...)` outputs in the
+broader aggregation forms beyond the admitted aggregate slices (including the
+`WITH` aggregation stage documented above), broader expression projections beyond narrow admitted `id(...)`, `type(...)`, `lower(...)`, `upper(...)`, `trim(...)`, `ltrim(...)`, `rtrim(...)`, `reverse(...)`, `coalesce(...)`, `replace(...)`, `left(...)`, `right(...)`, `split(...)`, `abs(...)`, `sign(...)`, `round(...)`, `ceil(...)`, `floor(...)`, `sqrt(...)`, `exp(...)`, `sin(...)`, `cos(...)`, `tan(...)`, `toString(...)`, `toInteger(...)`, `toFloat(...)`, and `toBoolean(...)` outputs in the
 final `RETURN`, broader ordinary-read expression projections beyond narrow admitted literal, parameter, `size(...)`, `lower(...)`, `upper(...)`, `trim(...)`, `ltrim(...)`, `rtrim(...)`, `reverse(...)`, `coalesce(...)`, `replace(...)`, `left(...)`, `right(...)`, `split(...)`, two-arg or three-arg `substring(...)`, `abs(...)`, `sign(...)`, `round(...)`, `ceil(...)`, `floor(...)`, `sqrt(...)`, `exp(...)`, `sin(...)`, `cos(...)`, `tan(...)`, `toString(...)`, `toInteger(...)`, `toFloat(...)`, `toBoolean(...)`, simple predicate, `id(...)`, and `type(...)` outputs, broader `WITH` final-RETURN expression projections beyond narrow admitted scalar literal/parameter, predicate, `size(...)`, `lower(...)`, `upper(...)`, `trim(...)`, `ltrim(...)`, `rtrim(...)`, `reverse(...)`, `coalesce(...)`, `replace(...)`, `left(...)`, `right(...)`, `split(...)`, two-arg or three-arg `substring(...)`, `abs(...)`, `sign(...)`, `round(...)`, `ceil(...)`, `floor(...)`, `sqrt(...)`, `exp(...)`, `sin(...)`, `cos(...)`, `tan(...)`, `toString(...)`, `toInteger(...)`, `toFloat(...)`, `toBoolean(...)`, `id(...)`, and `type(...)` outputs, or
 multi-stage `WITH ... WITH ...` flows.
 
@@ -535,9 +558,14 @@ The admitted standalone `MERGE` shapes are:
   INSERT carrying the ON CREATE assignments, preceded by an ON MATCH UPDATE so
   each action applies only in its case)
 - or one directed relationship pattern whose endpoint node patterns are both
-  labeled, matched-or-created idempotently as one guarded pattern
-- `ON CREATE` / `ON MATCH` actions are not yet admitted on relationship `MERGE`,
-  and no broader full-pattern `MERGE` semantics beyond that narrow subset
+  labeled, matched-or-created idempotently as one guarded pattern, optionally
+  with `ON CREATE SET ...` and/or `ON MATCH SET ...` actions whose assignments
+  target the relationship alias (`ON MATCH` lowers to an update step before
+  the guarded insert; `ON CREATE` assignments fold into the insert columns);
+  actions targeting a node alias are rejected with a friendly message
+- `ON CREATE` / `ON MATCH` actions are not admitted on self-loop relationship
+  `MERGE` or on `MATCH ... MERGE` composites, and no broader full-pattern
+  `MERGE` semantics beyond that narrow subset
 
 ## Deferred clause families
 

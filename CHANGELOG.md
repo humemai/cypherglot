@@ -1,5 +1,61 @@
 # Changelog
 
+## Unreleased
+
+### Language coverage
+
+- `UNION` / `UNION ALL` of admitted branches (each branch validated and
+  compiled independently; `UNION` de-duplicates, matching Cypher)
+- undirected one-hop relationship reads `(a)-[r:T]-(b)`, lowered as a
+  `UNION ALL` of both orientations with Neo4j row semantics (self-loops emit
+  one row)
+- multi-type one-hop relationship reads `[:A|B]`, lowered as a `UNION ALL`
+  across the edge tables with per-branch `type(r)` constants; composes with
+  undirected patterns
+- searched `CASE` accepts bare boolean conditions (`WHEN u.active THEN ...`)
+  and explicit `ELSE null`
+- relationship `MERGE` supports `ON CREATE SET` / `ON MATCH SET` actions
+  targeting the relationship alias (`ON MATCH` lowers to an update step before
+  the guarded insert; `ON CREATE` folds into the insert columns)
+- `OPTIONAL MATCH` after a one-hop mandatory `MATCH` (not just a single node),
+  anchored on either mandatory endpoint alias; `WHERE` on the optional side
+  stays in the join condition so unmatched anchors survive with NULLs
+- `WITH` aggregation stage (the Cypher-HAVING pattern):
+  `MATCH ... WITH a, count(b) AS c WHERE c > $k RETURN ...`
+- fixed a latent inbound one-hop join miscompilation (`(a)<-[r]-(b)` was
+  joined with outbound endpoint columns in one code path)
+- fixed `OPTIONAL MATCH ... WHERE` emitting a spurious `(anchor, NULL)` row
+  next to qualifying matches when the optional predicate filtered some rows
+
+### Diagnostics
+
+- new `CypherCompileError` (a `ValueError` subclass) carrying `message`,
+  `line`, `column`, `construct`, and `hint`; exported from the package root
+- unsupported constructs are rejected early by name with a location and a
+  porting hint: list/pattern comprehensions, `EXISTS {}` subqueries,
+  `all()/any()/none()/single()` predicates, multi-label nodes, named paths,
+  `shortestPath()`/`allShortestPaths()`
+- subset-boundary gates and syntax errors carry stable `construct` identifiers
+  for batch corpus auditing
+
+### Performance
+
+- transparent bounded compile cache at the string-rendering entrypoints
+  (`to_sql`, `render_cypher_program_text`); on by default, keyed on the exact
+  query text plus backend/dialect/render options/schema context; control it
+  with `set_compile_cache(...)`, `clear_compile_cache()`,
+  `compile_cache_info()`, or the `CYPHERGLOT_COMPILE_CACHE=0` environment
+  variable. Parameterize queries with `$param` (compiled to SQL bind
+  parameters) so repeated calls hit the cache
+
+### Packaging and project
+
+- renamed the project from HumemCypher to CypherGlot throughout
+- added `py.typed` so type checkers consume the package's annotations
+- refreshed dependency pins (sqlglot 30.12.x among others)
+- new documentation: porting-from-Neo4j guide, diagnostics guide, per-backend
+  dialect notes
+
 ## v0.1.0
 
 First public release candidate for CypherGlot as a compiler-focused,
