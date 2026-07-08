@@ -1512,17 +1512,33 @@ def _worker_loop(
             status.status = "failed"
             status.completed_at = datetime.now(timezone.utc).isoformat()
             status.error = str(exc)
+            cleanup_error = _cleanup_job_db_root_dir(status.job)
             print(
                 f"[worker {worker_id}] failed {status.job.slug}: {exc} | "
                 f"{_format_progress_snapshot(statuses)}"
                 f"{_job_detail_suffix(status)}"
             )
+            if cleanup_error is not None:
+                print(
+                    f"[worker {worker_id}] warning {status.job.slug} "
+                    f"could not remove db artifacts at {status.job.db_root_dir}: "
+                    f"{cleanup_error}"
+                )
             if args.fail_fast:
                 stop_event.set()
         finally:
             if reserved_ports is not None:
                 port_pool.release_pair(reserved_ports)
-            _update_manifest(manifest_path, base_manifest, statuses, manifest_lock)
+            try:
+                _update_manifest(manifest_path, base_manifest, statuses, manifest_lock)
+            except OSError as exc:
+                # A full disk must not kill the worker thread (the failed
+                # job's scratch cleanup usually frees space moments later);
+                # the next successful update persists this status too.
+                print(
+                    f"[worker {worker_id}] warning: manifest update failed "
+                    f"({exc}); continuing"
+                )
             dispatcher.release(status)
 
 
@@ -1584,10 +1600,16 @@ def _run_jobs(
     for thread in threads:
         thread.join()
 
+    completed = [status for status in statuses if status.status == "completed"]
     failures = [status for status in statuses if status.status == "failed"]
+    never_ran = [
+        status
+        for status in statuses
+        if status.status not in {"completed", "failed"}
+    ]
     print(
-        f"runtime matrix finished: {len(statuses) - len(failures)} succeeded, "
-        f"{len(failures)} failed"
+        f"runtime matrix finished: {len(completed)} succeeded, "
+        f"{len(failures)} failed, {len(never_ran)} never ran"
     )
     print(f"manifest: {manifest_path}")
     if failures:
@@ -1596,8 +1618,10 @@ def _run_jobs(
                 f"  FAILED {failure.job.slug}: {failure.error or failure.exit_code} "
                 f"(log: {failure.job.log_path})"
             )
-        return 1
-    return 0
+    if never_ran:
+        for status in never_ran:
+            print(f"  NEVER RAN {status.job.slug} (status: {status.status})")
+    return 1 if failures or never_ran else 0
 
 
 def main() -> int:
