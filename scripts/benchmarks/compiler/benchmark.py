@@ -256,24 +256,45 @@ def _backend_lowering_result(
     render_program_all_latencies_ns: list[int] = []
     end_to_end_all_latencies_ns: list[int] = []
 
+    skipped: list[dict[str, object]] = []
     for query_index, corpus_query in enumerate(applicable_queries, start=1):
         _progress(
             "compiler benchmark: backend "
             f"{backend.value} query {query_index}/{len(applicable_queries)} "
             f"{corpus_query.name}"
         )
-        normalized_statement = cypherglot_module.normalize_cypher_text(
-            corpus_query.query
-        )
-        program_ir = build_graph_relational_ir(
-            normalized_statement,
-            schema_context=schema_context,
-        )
-        compiled_program = lower_graph_relational_ir(
-            program_ir,
-            backend=backend,
-            lowerers=lowerers,
-        )
+        try:
+            normalized_statement = cypherglot_module.normalize_cypher_text(
+                corpus_query.query
+            )
+            program_ir = build_graph_relational_ir(
+                normalized_statement,
+                schema_context=schema_context,
+            )
+            compiled_program = lower_graph_relational_ir(
+                program_ir,
+                backend=backend,
+                lowerers=lowerers,
+            )
+        except ValueError as exc:
+            # Not every backend lowers every corpus query (e.g. no write
+            # lowering, or no dedicated graph-relational lowerer at all);
+            # record the rejection instead of aborting the suite.
+            reason = str(exc).splitlines()[0]
+            _progress(
+                "compiler benchmark: backend "
+                f"{backend.value} query {query_index}/"
+                f"{len(applicable_queries)} {corpus_query.name} "
+                f"skipped (unsupported): {reason}"
+            )
+            skipped.append(
+                {
+                    "name": corpus_query.name,
+                    "category": corpus_query.category,
+                    "reason": reason,
+                }
+            )
+            continue
         backend_dialect = _backend_dialect(backend)
 
         build_ir_latencies_ns = _measure(
@@ -358,11 +379,16 @@ def _backend_lowering_result(
 
     _progress(f"compiler benchmark: backend {backend.value} complete")
 
-    return {
+    if not per_query:
+        raise ValueError(
+            f"Backend {backend.value} lowering suite measured no queries "
+            "(every applicable query was rejected)."
+        )
+    result: dict[str, object] = {
         "backend": backend.value,
         "iterations": iterations,
         "warmup": warmup,
-        "query_count": len(applicable_queries),
+        "query_count": len(per_query),
         "overall": {
             "build_ir": _summarize(build_ir_all_latencies_ns),
             "bind_backend": _summarize(bind_backend_all_latencies_ns),
@@ -372,6 +398,37 @@ def _backend_lowering_result(
         },
         "queries": per_query,
     }
+    if skipped:
+        result["skipped_queries"] = skipped
+    return result
+
+
+def _collect_backend_lowering_results(
+    queries: list[CorpusQuery],
+    *,
+    iterations: int,
+    warmup: int,
+) -> list[dict[str, object]]:
+    results: list[dict[str, object]] = []
+    for backend in SQLBackend:
+        try:
+            results.append(
+                _backend_lowering_result(
+                    queries,
+                    backend=backend,
+                    iterations=iterations,
+                    warmup=warmup,
+                )
+            )
+        except ValueError as exc:
+            # A backend with no dedicated graph-relational lowerer (it may
+            # reuse another backend's SQL via dialect rendering) has no
+            # lowering stage to measure; skip it rather than abort.
+            _progress(
+                "compiler benchmark: backend "
+                f"{backend.value} lowering suite skipped: {exc}"
+            )
+    return results
 
 
 def _parse_args() -> argparse.Namespace:
@@ -698,12 +755,35 @@ def _entrypoint_result(
         f"iterations={iterations}, warmup={warmup})"
     )
 
+    skipped: list[dict[str, object]] = []
     for query_index, corpus_query in enumerate(applicable_queries, start=1):
         _progress(
             "compiler benchmark: entrypoint "
             f"{benchmark_name} query {query_index}/{len(applicable_queries)} "
             f"{corpus_query.name}"
         )
+        if backend is not None:
+            # A backend-bound entrypoint can reject queries the shared corpus
+            # admits elsewhere (e.g. write lowering is not implemented for
+            # every backend); record the rejection instead of aborting.
+            try:
+                func(corpus_query.query)
+            except ValueError as exc:
+                reason = str(exc).splitlines()[0]
+                _progress(
+                    "compiler benchmark: entrypoint "
+                    f"{benchmark_name} query {query_index}/"
+                    f"{len(applicable_queries)} {corpus_query.name} "
+                    f"skipped (unsupported): {reason}"
+                )
+                skipped.append(
+                    {
+                        "name": corpus_query.name,
+                        "category": corpus_query.category,
+                        "reason": reason,
+                    }
+                )
+                continue
         latencies_ns = _measure(
             corpus_query.query,
             func,
@@ -721,14 +801,21 @@ def _entrypoint_result(
 
     _progress(f"compiler benchmark: entrypoint {benchmark_name} complete")
 
+    if not per_query:
+        raise ValueError(
+            f"Benchmark entrypoint {benchmark_name} measured no queries "
+            "(every applicable query was rejected by the backend)."
+        )
     result = {
         "entrypoint": label,
         "iterations": iterations,
         "warmup": warmup,
-        "query_count": len(applicable_queries),
+        "query_count": len(per_query),
         "overall": _summarize(all_latencies_ns),
         "queries": per_query,
     }
+    if skipped:
+        result["skipped_queries"] = skipped
     if backend is not None:
         result["backend"] = backend.value
     return result
@@ -1043,15 +1130,11 @@ def main() -> int:
         },
         "shared_entrypoint_results": shared_entrypoint_results,
         "backend_entrypoint_results": backend_entrypoint_results,
-        "backend_lowering_results": [
-            _backend_lowering_result(
-                queries,
-                backend=backend,
-                iterations=args.iterations,
-                warmup=args.warmup,
-            )
-            for backend in SQLBackend
-        ],
+        "backend_lowering_results": _collect_backend_lowering_results(
+            queries,
+            iterations=args.iterations,
+            warmup=args.warmup,
+        ),
         "sqlglot_mode": args.sqlglot_mode,
         "sql_corpus_path": str(args.sql_corpus),
         "sql_query_count": len(sql_queries),
