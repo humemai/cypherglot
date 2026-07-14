@@ -12,13 +12,23 @@ prints Markdown tables:
    data).
 5. Setup costs: ingest time and on-disk size per engine (T7).
 
-Repeats are aggregated as mean +/- population std over the per-run pooled
-values. Native engines report execute only; compile targets also carry the
+Repeats are aggregated as median [min-max] over the per-run pooled values
+(the primary statistic; pass --stat mean for the appendix's mean +/- std
+view). Native engines report execute only; compile targets also carry the
 compile stage (reported separately, per the steady-state methodology).
 
 Usage:
   python -m scripts.benchmarks.runtime.analyze_w3 RESULTS_DIR [RESULTS_DIR...]
       [--label-from-parent] [--csv OUT.csv]
+  python -m scripts.benchmarks.runtime.analyze_w3 BOX_DIR [BOX_DIR...]
+      --repeat-roots [--stat median|mean] [--csv OUT.csv]
+
+With --repeat-roots each root is one repeat (a fleet box archive): files are
+labelled by their stage path under the box (e.g. medium/synthetic-medium,
+vendor-sizing/snb-sf1), smoke/micro/tmp trees are skipped, and when a cell
+was attempted multiple times on one box (retry passes) only the newest
+attempt is pooled — earlier attempts of the same variant are superseded,
+not extra samples.
 """
 
 from __future__ import annotations
@@ -27,10 +37,14 @@ import argparse
 import csv
 import json
 import math
+import re
 import sys
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Iterator
+
+_EXCLUDED_STAGE_PARTS = {"smoke", "micro", "tmp", "rootfiles", "all"}
+_TIMESTAMP_SUFFIX = re.compile(r"-\d{8}T\d{6}Z$")
 
 
 def _iter_result_files(roots: list[Path]) -> Iterator[Path]:
@@ -39,6 +53,34 @@ def _iter_result_files(roots: list[Path]) -> Iterator[Path]:
             yield root
             continue
         yield from sorted(root.rglob("*.json"))
+
+
+def _iter_repeat_files(roots: list[Path]) -> Iterator[tuple[Path, str, str]]:
+    """Yield (path, repeat_id, stage_label) with per-cell retry dedup.
+
+    A cell is (repeat, stage_label, variant prefix); among multiple attempt
+    files (timestamp-suffixed) only the newest is yielded.
+    """
+    for root in roots:
+        repeat = root.name
+        newest: dict[tuple[str, str], Path] = {}
+        for path in sorted(root.rglob("*.json")):
+            rel = path.relative_to(root)
+            parts = rel.parts
+            # results live under <stage...>/out/<file>.json
+            if len(parts) < 3 or parts[-2] != "out":
+                continue
+            stage_parts = parts[:-2]
+            if _EXCLUDED_STAGE_PARTS.intersection(stage_parts):
+                continue
+            label = "/".join(stage_parts)
+            prefix = _TIMESTAMP_SUFFIX.sub("", path.stem)
+            key = (label, prefix)
+            held = newest.get(key)
+            if held is None or path.name > held.name:
+                newest[key] = path
+        for (label, _prefix), path in sorted(newest.items()):
+            yield path, repeat, label
 
 
 def _pooled(stage: dict[str, Any] | None, key: str) -> float | None:
@@ -53,12 +95,48 @@ def _mean_std(values: list[float]) -> tuple[float, float]:
     return mean, math.sqrt(var)
 
 
+def _median(values: list[float]) -> float:
+    ordered = sorted(values)
+    mid = len(ordered) // 2
+    if len(ordered) % 2:
+        return ordered[mid]
+    return (ordered[mid - 1] + ordered[mid]) / 2
+
+
+# Set by main() from --stat; median is the paper's primary statistic.
+_STAT_MODE = "median"
+_EXPECTED_N: int | None = None
+
+
+def _center(values: list[float]) -> float:
+    return _median(values) if _STAT_MODE == "median" else _mean_std(values)[0]
+
+
 def _fmt(value: float | None, std: float | None = None) -> str:
     if value is None:
         return "-"
     if std is not None and std > 0:
         return f"{value:.2f}±{std:.2f}"
     return f"{value:.2f}"
+
+
+def _fmt_agg(values: list[float] | None) -> str:
+    """Primary cell format: median [min-max]; mean±std in --stat mean mode.
+
+    Cells whose sample count differs from --expected-n are annotated (n=k)
+    so partial coverage is visible in the table itself.
+    """
+    if not values:
+        return "-"
+    if _STAT_MODE == "mean":
+        cell = _fmt(*_mean_std(values))
+    elif len(values) == 1:
+        cell = f"{values[0]:.2f}"
+    else:
+        cell = f"{_median(values):.2f} [{min(values):.2f}-{max(values):.2f}]"
+    if _EXPECTED_N is not None and len(values) != _EXPECTED_N:
+        cell += f" (n={len(values)})"
+    return cell
 
 
 class W3Aggregate:
@@ -75,8 +153,10 @@ class W3Aggregate:
         self.db_mib: dict[tuple, list[float]] = defaultdict(list)
         # per-query samples for the ablation: (label, engine, mode, query) -> ms
         self.query_execute: dict[tuple, list[float]] = defaultdict(list)
+        # raw rows for the CSV: (label, engine, mode, workload, repeat, p50)
+        self.samples: list[tuple[str, str, str, str, str, float]] = []
 
-    def add_file(self, path: Path, label: str) -> None:
+    def add_file(self, path: Path, label: str, repeat: str = "-") -> None:
         try:
             payload = json.loads(path.read_text())
         except (OSError, json.JSONDecodeError):
@@ -99,6 +179,9 @@ class W3Aggregate:
                 p50 = _pooled(suite.get("execute"), "p50_ms")
                 if p50 is not None:
                     self.execute[key].append(p50)
+                    self.samples.append(
+                        (label, backend, mode, workload, repeat, p50)
+                    )
                 c50 = _pooled(suite.get("compile"), "p50_ms")
                 if c50 is not None:
                     self.compile[key].append(c50)
@@ -125,12 +208,21 @@ class W3Aggregate:
 
 
 def _print_crossover(agg: W3Aggregate, labels: list[str]) -> None:
-    print("\n## Engine x workload (pooled execute p50 ms, mean±std over repeats)\n")
+    stat_desc = (
+        "median [min-max] over repeats"
+        if _STAT_MODE == "median"
+        else "mean±std over repeats"
+    )
+    print(f"\n## Engine x workload (pooled execute p50 ms, {stat_desc})\n")
     for label in labels:
         engines = sorted(
             {k[1] for k in agg.execute if k[0] == label},
-            key=lambda e: agg.execute.get((label, e, "indexed", "olap"),
-                                          agg.execute.get((label, e, "unindexed", "olap"), [9e9]))[0],
+            key=lambda e: _center(
+                agg.execute.get(
+                    (label, e, "indexed", "olap"),
+                    agg.execute.get((label, e, "unindexed", "olap"), [9e9]),
+                )
+            ),
         )
         print(f"### {label}\n")
         print("| engine | OLTP idx | OLTP unidx | OLAP idx | OLAP unidx |")
@@ -140,7 +232,7 @@ def _print_crossover(agg: W3Aggregate, labels: list[str]) -> None:
             for workload in ("oltp", "olap"):
                 for mode in ("indexed", "unindexed"):
                     values = agg.execute.get((label, engine, mode, workload))
-                    cells.append(_fmt(*_mean_std(values)) if values else "-")
+                    cells.append(_fmt_agg(values))
             print(f"| {engine} | {cells[0]} | {cells[1]} | {cells[2]} | {cells[3]} |")
         print()
 
@@ -156,8 +248,8 @@ def _print_index_sensitivity(agg: W3Aggregate, labels: list[str]) -> None:
             for workload in ("oltp", "olap"):
                 idx = agg.execute.get((label, engine, "indexed", workload))
                 unidx = agg.execute.get((label, engine, "unindexed", workload))
-                if idx and unidx and _mean_std(idx)[0] > 0:
-                    row.append(f"{_mean_std(unidx)[0] / _mean_std(idx)[0]:.1f}x")
+                if idx and unidx and _center(idx) > 0:
+                    row.append(f"{_center(unidx) / _center(idx):.1f}x")
                 else:
                     row.append("-")
             if row[2] != "-" or row[3] != "-":
@@ -182,10 +274,11 @@ def _print_ablation(agg: W3Aggregate, labels: list[str]) -> None:
             unroll_vals = agg.query_execute.get((lbl, engine, mode, base))
             if not unroll_vals:
                 continue
-            u, _ = _mean_std(unroll_vals)
-            r, _ = _mean_std(rcte_vals)
+            u = _center(unroll_vals)
+            r = _center(rcte_vals)
             ratio = f"{r / u:.2f}x" if u > 0 else "-"
-            print(f"| {label} | {engine} | {mode} | {base} | {_fmt(u)} | {_fmt(r)} | {ratio} |")
+            print(f"| {label} | {engine} | {mode} | {base} "
+                  f"| {_fmt_agg(unroll_vals)} | {_fmt_agg(rcte_vals)} | {ratio} |")
     if not base_names:
         print("| (no rcte twins found) | | | | | | |")
     print()
@@ -205,7 +298,8 @@ def _print_outcomes(agg: W3Aggregate, labels: list[str]) -> None:
 
 
 def _print_setup(agg: W3Aggregate, labels: list[str]) -> None:
-    print("\n## Ingest time and on-disk size (mean over runs)\n")
+    stat_desc = "median [min-max]" if _STAT_MODE == "median" else "mean±std"
+    print(f"\n## Ingest time and on-disk size ({stat_desc} over runs)\n")
     print("| dataset | engine | ingest s | db MiB |")
     print("|---|---|---|---|")
     for label in labels:
@@ -214,8 +308,8 @@ def _print_setup(agg: W3Aggregate, labels: list[str]) -> None:
             ing = agg.ingest_s.get((label, engine))
             size = agg.db_mib.get((label, engine))
             print(f"| {label} | {engine} "
-                  f"| {_fmt(_mean_std(ing)[0]) if ing else '-'} "
-                  f"| {_fmt(_mean_std(size)[0]) if size else '-'} |")
+                  f"| {_fmt_agg(ing)} "
+                  f"| {_fmt_agg(size)} |")
     print()
 
 
@@ -229,12 +323,40 @@ def main() -> int:
         "label like synthetic-medium / snb-sf1) instead of one shared label.",
     )
     parser.add_argument("--csv", type=Path, help="Also dump raw samples as CSV.")
+    parser.add_argument(
+        "--repeat-roots",
+        action="store_true",
+        help="Treat each root as one repeat (a fleet box archive): label by "
+        "stage path, skip smoke/micro/tmp, and pool only the newest attempt "
+        "per cell (retries supersede earlier attempts).",
+    )
+    parser.add_argument(
+        "--stat",
+        choices=("median", "mean"),
+        default="median",
+        help="Aggregation across repeats: median [min-max] (primary, "
+        "default) or mean±std (appendix view).",
+    )
+    parser.add_argument(
+        "--expected-n",
+        type=int,
+        default=None,
+        help="Annotate cells whose sample count differs from this (e.g. 5).",
+    )
     args = parser.parse_args()
 
+    global _STAT_MODE, _EXPECTED_N
+    _STAT_MODE = args.stat
+    _EXPECTED_N = args.expected_n
+
     agg = W3Aggregate()
-    for path in _iter_result_files(args.roots):
-        label = path.parent.parent.name if args.label_from_parent else "all"
-        agg.add_file(path, label)
+    if args.repeat_roots:
+        for path, repeat, label in _iter_repeat_files(args.roots):
+            agg.add_file(path, label, repeat)
+    else:
+        for path in _iter_result_files(args.roots):
+            label = path.parent.parent.name if args.label_from_parent else "all"
+            agg.add_file(path, label)
     labels = sorted({k[0] for k in agg.execute}) or ["all"]
 
     if not agg.execute:
@@ -250,10 +372,11 @@ def main() -> int:
     if args.csv:
         with args.csv.open("w", newline="", encoding="utf-8") as handle:
             writer = csv.writer(handle)
-            writer.writerow(["label", "engine", "index_mode", "workload", "p50_ms"])
-            for (label, engine, mode, workload), values in sorted(agg.execute.items()):
-                for value in values:
-                    writer.writerow([label, engine, mode, workload, value])
+            writer.writerow(
+                ["label", "engine", "index_mode", "workload", "repeat", "p50_ms"]
+            )
+            for row in sorted(agg.samples):
+                writer.writerow(row)
         print(f"raw samples -> {args.csv}", file=sys.stderr)
     return 0
 
