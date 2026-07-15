@@ -1,113 +1,107 @@
-# CypherGlot re-run campaign — consolidated review package
+# CypherGlot re-run campaign — consolidated review package (final)
 
-**Generated 2026-07-14.** Compiler: `v0.1.1rc2` (73a0771; sqlglot 30.12.0,
-arcadedb-embedded 26.7.2 stable, ladybug 0.18.0 in the main matrix /
-0.18.1 in the supplement). Fleet: 5× Hetzner CCX33 (cg-rerun-1..5), one
-repeat per box, local NVMe, docker images digest-pinned. Statistic:
-**median [min–max] over the 5 box repeats** (primary; Le Boudec/Hoefler),
-mean±std in the appendix file. Cells with fewer than 5 samples are
-annotated `(n=k)` in every table.
+**Generated 2026-07-15** (supersedes the 2026-07-14 draft). Compiler:
+`v0.1.1rc2` (73a0771; sqlglot 30.12.0). Engines at their latest pinned
+versions — arcadedb-embedded 26.7.2, ladybug 0.18.1, duckdb 1.5.4,
+pyturso 0.6.1, psycopg2 2.9.12, clickhouse-connect 1.4.1, neo4j image
+5.26.28 — and each engine is reported at that single version (no
+version-comparison narratives; superseded-version measurements ship
+artifact-only). Fleet: Hetzner CCX33, one repeat per box (5 primary boxes
++ single-mission top-up boxes to complete n=5), local NVMe, docker images
+digest-pinned, solo 1-worker regime at large. Statistic: **median
+[min–max] over repeats** (Raasveldt et al. DBTest'18; Hoefler & Belli
+SC'15); mean±std in the appendix file. Cells with a sample count other
+than 5 are annotated `(n=k)`.
 
 Files here:
 - `pooled_tables_rerun.md` — all five analysis views, median [min–max]
-- `pooled_tables_rerun_mean_appendix.md` — same views, mean±std (appendix/artifact)
-- `pooled_raw_rerun.csv` — every pooled sample with repeat (box) identity
-- Raw JSONs: `~/w3-rerun/box{1..5}/` and `mini:/mnt/hdd8tb/cypherglot/rerun-campaign/`
+- `pooled_tables_rerun_mean_appendix.md` — same views, mean±std
+- `pooled_raw_rerun.csv` — every pooled sample with repeat identity
+- Raw JSONs: `~/w3-rerun/box{1..5},topup{1..6}` + `mini:/mnt/hdd8tb/cypherglot/rerun-campaign/`
 
-## Coverage: what has full n=5
+## Coverage: n=5 (or better) everywhere except the SF10 capacity tier
 
 | Block | Status |
 |---|---|
 | small/synthetic-small (9 engines × modes) | ✅ n=5 |
-| medium/synthetic-medium (8 engines × modes) | ✅ n=5 |
-| medium/snb-sf1 (8 engines × modes) | ✅ n=5 |
+| medium/synthetic-medium + medium/snb-sf1 (8 engines × modes) | ✅ n=5 |
+| **large/synthetic-large (6 engines × modes)** | ✅ **n=5** (sqlite n=6) — completed by the top-up fleet |
 | vendor-sizing (pg/neo4j/age × modes × 2 datasets) | ✅ n=5 |
-| ladybug 0.18.1 supplement (small/medium/snb-sf1) | ✅ n=5 |
-| ladybug 0.18.0 main-matrix medium synthetic | ✅ n=5 |
-| Compiler microbenchmark (fleet silicon, cache-off) | ✅ 1 box (box1), fixed harness |
-| Schema microbenchmark | ✅ boxes 1+3, 3 repeats each |
+| ladybug 0.18.1 (small/medium/snb-sf1) | ✅ n=5 |
+| large/snb-sf10 | clickhouse-indexed **n=5**; neo4j-unindexed n=2 full + 1 timeout-partial; all other engines infeasible (capacity findings) |
+| Compiler microbenchmark (fleet silicon, cache-off) | ✅ box1, fixed harness |
+| Schema microbenchmark | ✅ 3 repeats × 2 boxes |
 
-## Coverage residuals (all documented, none silent)
+## Residuals & capacity findings (all documented, none silent)
 
-- **large/synthetic-large**: per-cell n=2–5. Cause: disk-capacity guard
-  kills during the co-run first passes; retry passes + wave-2 (raw-CSV
-  deletion) recovered most cells. Worst cells: postgresql-indexed n=2,
-  neo4j-unindexed n=2. sqlite-indexed n=3–4 (box4's final attempt died at
-  query 18/19 on temp-spill; partial per-query data retained).
-- **large/snb-sf10**: thin by design reality — clickhouse-indexed n=3,
-  neo4j-unindexed n=1; **turso (both modes) infeasible on 240G boxes**
-  (>165 GB partial DB and still ingesting = capacity finding, reported as
-  such); postgres/sqlite/age SNB-SF10 cells failed on query-phase temp
-  spill or ingest OOM across boxes. The SF10 tier is reported as a
-  capacity/outcome story (Table: outcome accounting), not a latency table.
-- **ladybug-medium/ladybug-snb-sf1 (0.18.0 pin): n=4** — box5's sf1 stage
-  was hit by the provisioning error; its patch chain re-ran the vendor
-  variants but not this cell. The 0.18.1 supplement has full n=5 on the
-  same cell.
-- **ladybug large**: 0.18.0 = ingest too slow to attempt (pre-fix);
-  0.18.1 probe = ingest OOM-killed at 10M/78M edges on the 30G host
-  (n=1 probe, disclosed as a finding; NOT a latency row).
+- **SNB SF10 is a feasibility story**: turso >165 GB partial and still
+  ingesting (both modes); postgres/sqlite/age fail on query-phase temp
+  spill or ingest pressure; ladybug OOM at ingest; neo4j completed on
+  2 of several attempts (plus one 6-hour-job-timeout partial with 8/16
+  OLAP queries measured). Report as the outcome-accounting table.
+- **postgresql-indexed @ synthetic-large is capacity-borderline**: its
+  OLAP temp spill exceeded a 225G box in 2 of 7 attempts even solo;
+  the 5 reported samples are clean completions.
+- **Query-universe caveat (table footnote required)**: pooled suite-level
+  p50 mixes per-run query coverage when runs differ in which slow queries
+  completed. Known cells: pg-indexed@large OLAP (one sample ran all 19
+  OLAP queries incl. a 239 s VL rollup; four samples recorded 14 —
+  the VL-family gap needs a harness investigation note), pg-unindexed@
+  large OLAP (same shape), duckdb medium/snb-sf1 OLAP, sqlite medium
+  OLAP indexed, clickhouse vendor snb OLAP. Medians are robust to this;
+  min–max exposes it honestly. RECOMMENDATION for the paper: use
+  per-query tables for these cells, or pool only queries present in all
+  samples of a cell (decide at writing time).
+- db-size is unavailable for server engines (in-container volumes);
+  scope the size column to embedded engines or report ingest time only.
+- Setup rows pool indexed+unindexed ingest samples (n=10/20 annotations).
 
-## Headline numbers (from pooled_tables_rerun.md)
+## Headline numbers
 
-**Ladybug #645 fix verified, with a twist (0.18.0 → 0.18.1, medium, n=5):**
-- Ingest: synthetic 4415s → 522s (**8.5× faster**); snb-sf1 4312s → 644s (6.7×)
-- On-disk: synthetic 967 MiB → 1747 MiB (**1.8× larger**); snb 2460 → 8810 MiB (**3.6× larger**)
-- Query p50 (snb-sf1): OLTP 33 → 59 ms, OLAP 261 → 342 ms (**~1.3–1.8× slower**)
-- Interpretation candidate: the ALP import fix trades compression/layout
-  for ingest speed; larger footprint also explains the new large-scale
-  ingest OOM. Strong Discussion material + second upstream report.
+- **Crossover**: embedded compile targets (sqlite/duckdb) dominate OLTP at
+  every scale; column stores take OLAP as scale grows; the compiled-
+  Cypher-on-relational approach brackets native neo4j from both sides in
+  most cells (full tables in pooled_tables_rerun.md).
+- **Index-removal sensitivity**: OLTP ratios 1.2×–6500×; OLAP ≈1.0×
+  everywhere (scan-shaped corpus OLAP).
+- **VL lowering ablation**: rcte wins up to ~50× on reachability shapes,
+  loses up to ~9× on grouped-rollup shapes — both strategies needed;
+  tight ranges at n=5.
+- **Vendor-sizing block**: vendor memory config makes neo4j OLAP ~1.6×
+  faster on SNB-SF1 but only ~7% on synthetic-medium; postgres unchanged;
+  age mixed. Defaults cost some engines real performance,
+  workload-dependently (appendix figure + Discussion paragraph).
+- **Ladybug (0.18.1)**: medium-scale engine; small/medium/snb-sf1 rows at
+  n=5; large-scale ingest OOM on a 30G host (documented limit; upstream
+  report candidate — user files).
 
-**Vendor-sizing block (defaults vs vendor-recommended memory, n=5):**
-- neo4j OLAP @ snb-sf1: 3063 → 1925 ms indexed (**1.6× faster**), 2774 → 1780 unindexed
-- neo4j OLAP @ synthetic-medium: only ~7% faster (13715 → 12789)
-- postgresql: ≈ unchanged everywhere (defaults already adequate for this workload/host)
-- age: mixed — snb OLAP unindexed 3300 → 2649 (1.25× faster), synthetic OLAP ~14% *slower*
-- Paper angle: "archaic defaults" cost neo4j real performance on the
-  SNB-shaped workload but the effect is workload-dependent, not uniform.
+## Upstream candidates (user files)
 
-**Index-removal sensitivity** (unchanged story, now with ranges): OLTP
-ratios span 1.2× (small) to 6532× (sqlite @ large); OLAP is flat (≈1.0×)
-almost everywhere — the corpus's OLAP queries are scan-shaped.
+1. ladybug 0.18.1 ingest OOM at ~10M nodes/78M edges on 30G host (log:
+   `box1/ladybug-0181/synthetic-large/session/20260712T170237Z/logs/`).
+2. turso @ SNB SF10 storage blowup (>165 GB vs sqlite's ~60–100 GB).
+3. (context, likely config) postgres SNB SF10 query temp spill >45 GB.
 
-**VL lowering ablation**: rcte wins up to 50× on reachability-shaped
-queries (postgres 0.02×, duckdb 0.06×, sqlite 0.03–0.09×) but loses up to
-8.9× on grouped-rollup shapes — the both-strategies-needed story holds
-with tight ranges at n=5.
+## Harness backlog (post-deadline)
 
-## Data-quality caveats for table footnotes
+- SNB fixture loader requires the raw `initial_snapshot/dynamic` dir even
+  on cache hit (topology_ldbc_snb.py:444) — check cache first.
+- Job kill paths can leak the engine container (matrix worker should
+  docker-rm on kill).
+- Investigate the pg-indexed VL-query recording gap (14 vs 19 OLAP
+  queries per run, no timeout/fail recorded for the absent five).
 
-1. Pooled suite p50 across repeats can look bimodal when one box lost its
-   slowest queries to timeouts (pooled p50 then covers fewer, faster
-   queries). Visible at: duckdb medium/snb-sf1 OLAP (max 14–16s vs median
-   ~95ms), sqlite medium OLAP indexed (min 5.8s vs median 18.3s),
-   clickhouse vendor snb OLAP (min 376ms). Cross-reference the outcome
-   table; consider per-query tables for these cells in the paper.
-2. db-size is 0.00/missing for server engines (postgres/clickhouse
-   in-container volumes; age/neo4j not sampled) — report ingest time
-   only, or scope the size column to embedded engines.
-3. Setup rows pool indexed+unindexed ingest samples (hence n=10/20);
-   split if the paper wants per-mode ingest.
+## Excluded from paper tables (ship artifact-only)
 
-## Findings bank (upstream candidates, user files)
-
-1. **ladybug 0.18.1 ingest OOM** at ~10M nodes/78M edges on 30G host
-   (kill -9 during ingest; log archived at
-   `box1/ladybug-0181/synthetic-large/session/20260712T170237Z/logs/`),
-   plus the storage-blowup observation above.
-2. **turso @ SNB SF10 storage blowup**: >165 GB partial and unfinished vs
-   sqlite ≈60–100 GB for identical rows (both index modes) — banked.
-3. postgres SNB query-phase temp spill >45 GB at SF10 (context for the
-   capacity table, likely config-tunable, disclose rather than file).
-
-## Fallback campaign data
-
-The July 8–12 fallback campaign (531 JSONs, pre-rc2 compiler) stays OUT of
-paper tables (different compiler version); ships labeled in the artifact
-(`~/w3-fleet-fallback/`, mirrored on mini).
+- Fallback campaign (July 8–12, pre-rc2 compiler): `~/w3-fleet-fallback/`.
+- Ladybug 0.18.0 main-matrix block (superseded version).
+- Guard-killed partial attempts superseded by clean retries (quarantined
+  under `out-excluded/`, e.g. topup1 pg-indexed).
+- Snapshot-inherited fallback JSONs in the raw topup5 archive (the clean
+  root `topup5-clean` holds its one genuine result).
 
 ## Cost
 
-Campaign total ≈ €330 (fallback + re-run + supplements). All servers
-deleted 2026-07-14 02:25 UTC; snapshot 406523883 (€0.60/mo) retained
-until paper data verified.
+Campaign total ≈ €345 (fallback + re-run + supplements + top-ups). All
+servers deleted 2026-07-15 ~12:00 UTC; snapshot 406523883 (€0.60/mo)
+retained until paper data verified.

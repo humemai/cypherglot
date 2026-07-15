@@ -35,19 +35,19 @@
 
 | engine | OLTP idx | OLTP unidx | OLAP idx | OLAP unidx |
 |---|---|---|---|---|
-| clickhouse | 749.60±77.82 | - | 3184.02±148.61 | - |
-| neo4j | - | 3190.98 | - | 27471.50 |
+| clickhouse | 822.31±108.27 | - | 3276.06±167.17 | - |
+| neo4j | - | 1110.68±1470.99 | - | 27471.50 |
 
 ### large/synthetic-large
 
 | engine | OLTP idx | OLTP unidx | OLAP idx | OLAP unidx |
 |---|---|---|---|---|
-| postgresql | 0.81±0.03 | 582.63±73.78 | 1335.77±43.70 | 2937.01±202.76 |
+| postgresql | 1.09±0.34 | 607.01±82.05 | 4383.35±5920.26 | 4972.29±4074.60 |
 | duckdb | 3.99±0.29 | 8.54±0.57 | 6073.08±1186.86 | 5811.42±1191.66 |
-| clickhouse | 78.06±20.12 | - | 6486.84±569.36 | - |
-| sqlite | 0.12±0.00 | 868.21±114.46 | 6594.80±713.91 | 6345.20±3426.64 |
-| neo4j | 1.15±0.08 | 1469.69±121.84 | 9129.59±387.21 | 9972.12±413.98 |
-| age | 295.47±67.38 | 841.78±132.09 | 12891.00±604.58 | 12961.04±688.53 |
+| sqlite | 0.12±0.00 | 907.59±136.65 | 6488.64±568.20 | 7136.17±3449.05 |
+| clickhouse | 79.51±18.23 | - | 6680.71±640.06 | - |
+| neo4j | 1.17±0.08 | 1560.25±110.38 | 9200.89±374.54 | 10320.34±452.72 |
+| age | 280.94±55.15 | 879.65±134.90 | 13173.00±602.05 | 13354.77±727.33 |
 
 ### medium/snb-sf1
 
@@ -110,11 +110,11 @@
 
 | dataset | engine | OLTP ratio | OLAP ratio |
 |---|---|---|---|
-| large/synthetic-large | age | 2.8x | 1.0x |
+| large/synthetic-large | age | 3.1x | 1.0x |
 | large/synthetic-large | duckdb | 2.1x | 1.0x |
-| large/synthetic-large | neo4j | 1278.8x | 1.1x |
-| large/synthetic-large | postgresql | 717.6x | 2.2x |
-| large/synthetic-large | sqlite | 7021.5x | 1.0x |
+| large/synthetic-large | neo4j | 1334.5x | 1.1x |
+| large/synthetic-large | postgresql | 558.6x | 1.1x |
+| large/synthetic-large | sqlite | 7276.9x | 1.1x |
 | medium/snb-sf1 | age | 3.2x | 1.0x |
 | medium/snb-sf1 | arcadedb-embedded | 1842.7x | 1.0x |
 | medium/snb-sf1 | duckdb | 0.3x | 1.8x |
@@ -148,17 +148,23 @@
 
 | dataset | engine | mode | query | unroll | rcte | rcte/unroll |
 |---|---|---|---|---|---|---|
-| large/synthetic-large | clickhouse | indexed | olap_variable_length_grouped_max_rollup | 6494.75±344.34 | 3213.56±414.89 | 0.49x |
-| large/synthetic-large | clickhouse | indexed | olap_variable_length_grouped_rollup | 29856.06±2469.12 | 58993.49±6080.13 | 1.98x |
-| large/synthetic-large | clickhouse | indexed | olap_variable_length_reachability | 6438.89±327.37 | 3210.66±378.49 | 0.50x |
+| large/synthetic-large | clickhouse | indexed | olap_variable_length_grouped_max_rollup | 6647.01±433.11 | 3325.17±433.05 | 0.50x |
+| large/synthetic-large | clickhouse | indexed | olap_variable_length_grouped_rollup | 30696.66±2775.55 | 60944.66±6693.48 | 1.99x |
+| large/synthetic-large | clickhouse | indexed | olap_variable_length_reachability | 6593.84±426.35 | 3304.96±387.53 | 0.50x |
 | large/synthetic-large | duckdb | indexed | olap_variable_length_grouped_max_rollup | 674.01±31.76 | 44.85±5.49 | 0.07x |
 | large/synthetic-large | duckdb | indexed | olap_variable_length_grouped_rollup | 11570.02±719.34 | 97580.80±21617.74 | 8.43x |
 | large/synthetic-large | duckdb | indexed | olap_variable_length_reachability | 831.62±43.07 | 50.50±1.89 | 0.06x |
 | large/synthetic-large | duckdb | unindexed | olap_variable_length_grouped_max_rollup | 671.19±33.87 | 52.88±7.23 | 0.08x |
 | large/synthetic-large | duckdb | unindexed | olap_variable_length_grouped_rollup | 11572.58±691.84 | 92587.28±21664.83 | 8.00x |
 | large/synthetic-large | duckdb | unindexed | olap_variable_length_reachability | 831.01±48.50 | 54.53±5.42 | 0.07x |
-| large/synthetic-large | sqlite | unindexed | olap_variable_length_grouped_max_rollup | 70245.13 | 2523.09 | 0.04x |
-| large/synthetic-large | sqlite | unindexed | olap_variable_length_reachability | 79145.04 | 2620.85±212.14 | 0.03x |
+| large/synthetic-large | postgresql | indexed | olap_variable_length_grouped_max_rollup | 6959.33 | 3.11 | 0.00x |
+| large/synthetic-large | postgresql | indexed | olap_variable_length_reachability | 7556.60 | 2.27±0.92 | 0.00x |
+| large/synthetic-large | postgresql | unindexed | olap_variable_length_grouped_max_rollup | 24263.32 | 8503.23 | 0.35x |
+| large/synthetic-large | postgresql | unindexed | olap_variable_length_reachability | 26721.42 | 7257.98±1044.96 | 0.27x |
+| large/synthetic-large | sqlite | indexed | olap_variable_length_grouped_max_rollup | 0.33±0.00 | 38.81±0.20 | 116.88x |
+| large/synthetic-large | sqlite | indexed | olap_variable_length_reachability | 0.40±0.00 | 53.74±5.44 | 134.65x |
+| large/synthetic-large | sqlite | unindexed | olap_variable_length_grouped_max_rollup | 70245.13 | 2781.58±258.49 | 0.04x |
+| large/synthetic-large | sqlite | unindexed | olap_variable_length_reachability | 86397.49±7252.46 | 2701.09±248.51 | 0.03x |
 | medium/snb-sf1 | duckdb | indexed | olap_variable_length_grouped_rollup | 29241.15±2411.19 | 183455.93 | 6.27x |
 | medium/snb-sf1 | duckdb | unindexed | olap_variable_length_grouped_rollup | 28635.07±3229.83 | 195363.30±16669.75 | 6.82x |
 | medium/synthetic-medium | clickhouse | indexed | olap_variable_length_grouped_max_rollup | 132.82±10.82 | 111.67±34.98 | 0.84x |
@@ -217,13 +223,17 @@
 |---|---|---|---|---|---|---|
 | ladybug-0181/snb-sf1 | ladybug | unindexed | olap | 65 | 0 | 15 |
 | ladybug-medium/ladybug-snb-sf1 | ladybug | unindexed | olap | 52 | 0 | 12 |
-| large/snb-sf10 | clickhouse | indexed | olap | 36 | 9 | 9 |
+| large/snb-sf10 | clickhouse | indexed | olap | 60 | 15 | 15 |
 | large/snb-sf10 | neo4j | unindexed | olap | 11 | 5 | 0 |
-| large/synthetic-large | age | indexed | olap | 39 | 0 | 9 |
-| large/synthetic-large | age | unindexed | olap | 39 | 0 | 9 |
-| large/synthetic-large | neo4j | indexed | olap | 60 | 4 | 0 |
-| large/synthetic-large | neo4j | unindexed | olap | 28 | 4 | 0 |
-| large/synthetic-large | sqlite | unindexed | olap | 59 | 2 | 0 |
+| large/snb-sf10 | neo4j | unindexed | oltp | 38 | 4 | 0 |
+| large/synthetic-large | age | indexed | olap | 65 | 0 | 15 |
+| large/synthetic-large | age | unindexed | olap | 65 | 0 | 15 |
+| large/synthetic-large | neo4j | indexed | olap | 75 | 5 | 0 |
+| large/synthetic-large | neo4j | unindexed | olap | 70 | 10 | 0 |
+| large/synthetic-large | postgresql | indexed | olap | 74 | 1 | 0 |
+| large/synthetic-large | postgresql | unindexed | olap | 74 | 1 | 0 |
+| large/synthetic-large | sqlite | indexed | olap | 76 | 4 | 0 |
+| large/synthetic-large | sqlite | unindexed | olap | 75 | 3 | 0 |
 | medium/snb-sf1 | age | indexed | olap | 60 | 20 | 0 |
 | medium/snb-sf1 | age | unindexed | olap | 60 | 20 | 0 |
 | medium/snb-sf1 | arcadedb-embedded | indexed | olap | 75 | 5 | 0 |
@@ -264,14 +274,14 @@
 | ladybug-0181/synthetic-small | ladybug | 0.59±0.09 | 10.45 |
 | ladybug-medium/ladybug-snb-sf1 | ladybug | 4595.69±507.96 | 2458.79±6.82 |
 | ladybug-medium/ladybug-synthetic-medium | ladybug | 4607.77±435.90 | 967.00±0.41 |
-| large/snb-sf10 | clickhouse | 875.91±60.48 | 0.00 |
-| large/snb-sf10 | neo4j | 8867.96 | - |
-| large/synthetic-large | age | 2735.09±218.33 | - |
-| large/synthetic-large | clickhouse | 746.14±48.85 | 0.00 |
+| large/snb-sf10 | clickhouse | 919.04±71.18 | 0.00 |
+| large/snb-sf10 | neo4j | 10046.53±1178.90 | - |
+| large/synthetic-large | age | 2877.30±242.82 | - |
+| large/synthetic-large | clickhouse | 769.39±63.82 | 0.00 |
 | large/synthetic-large | duckdb | 254.25±7.27 | 13025.31±1209.98 |
-| large/synthetic-large | neo4j | 9289.86±620.78 | - |
-| large/synthetic-large | postgresql | 1593.56±113.24 | 0.00 |
-| large/synthetic-large | sqlite | 1599.11±86.96 | 30901.56±1295.89 |
+| large/synthetic-large | neo4j | 9701.77±697.24 | - |
+| large/synthetic-large | postgresql | 1828.21±510.93 | 0.00 |
+| large/synthetic-large | sqlite | 1644.30±107.18 | 31064.82±1306.13 |
 | medium/snb-sf1 | age | 447.96±22.22 | - |
 | medium/snb-sf1 | arcadedb-embedded | 303.09±95.39 | 3049.92±151.08 |
 | medium/snb-sf1 | clickhouse | 60.22±3.59 | 0.00 |
