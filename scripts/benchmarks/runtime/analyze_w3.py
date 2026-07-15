@@ -155,6 +155,9 @@ class W3Aggregate:
         self.query_execute: dict[tuple, list[float]] = defaultdict(list)
         # raw rows for the CSV: (label, engine, mode, workload, repeat, p50)
         self.samples: list[tuple[str, str, str, str, str, float]] = []
+        # per-query rows: (label, engine, mode, workload, query, repeat, p50)
+        self.query_samples: list[
+            tuple[str, str, str, str, str, str, float]] = []
 
     def add_file(self, path: Path, label: str, repeat: str = "-") -> None:
         try:
@@ -205,6 +208,10 @@ class W3Aggregate:
                         self.query_execute[
                             (label, backend, mode, query.get("name"))
                         ].append(q50)
+                        self.query_samples.append(
+                            (label, backend, mode, workload,
+                             query.get("name"), repeat, q50)
+                        )
 
 
 def _print_crossover(agg: W3Aggregate, labels: list[str]) -> None:
@@ -324,6 +331,10 @@ def main() -> int:
     )
     parser.add_argument("--csv", type=Path, help="Also dump raw samples as CSV.")
     parser.add_argument(
+        "--per-query-csv", type=Path,
+        help="Dump per-query per-repeat p50 samples as CSV (the input for "
+        "median-of-per-query-medians aggregation).")
+    parser.add_argument(
         "--repeat-roots",
         action="store_true",
         help="Treat each root as one repeat (a fleet box archive): label by "
@@ -378,6 +389,14 @@ def main() -> int:
             for row in sorted(agg.samples):
                 writer.writerow(row)
         print(f"raw samples -> {args.csv}", file=sys.stderr)
+    if args.per_query_csv:
+        with args.per_query_csv.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(["label", "engine", "index_mode", "workload",
+                             "query", "repeat", "p50_ms"])
+            for row in sorted(agg.query_samples):
+                writer.writerow(row)
+        print(f"per-query samples -> {args.per_query_csv}", file=sys.stderr)
     return 0
 
 
