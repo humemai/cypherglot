@@ -55,6 +55,11 @@
 - refreshed dependency pins (sqlglot 30.12.x among others)
 - new documentation: porting-from-Neo4j guide, diagnostics guide, per-backend
   dialect notes
+- benchmark tooling: the compiler microbenchmark records unsupported
+  backend/query combinations as skips instead of aborting; the W3 analyzer
+  gained repeat-root pooling (median [min-max] primary statistic, retry
+  dedup); checked-in campaign results live under
+  `scripts/benchmarks/results/rerun-2026-07-ccx33/`
 
 ## v0.1.0
 

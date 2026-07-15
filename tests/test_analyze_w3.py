@@ -51,11 +51,18 @@ class AnalyzeW3Tests(unittest.TestCase):
                 capture_output=True, text=True, cwd=REPO_ROOT,
             )
             self.assertEqual(proc.returncode, 0, proc.stderr)
-            self.assertIn("3.00±1.00", proc.stdout)      # mean±std of 2,4
+            self.assertIn("3.00 [2.00-4.00]", proc.stdout)  # median [min-max] of 2,4
+            proc_mean = subprocess.run(
+                [sys.executable, "-m", "scripts.benchmarks.runtime.analyze_w3",
+                 str(Path(tmp)), "--label-from-parent", "--stat", "mean"],
+                capture_output=True, text=True, cwd=REPO_ROOT,
+            )
+            self.assertEqual(proc_mean.returncode, 0, proc_mean.stderr)
+            self.assertIn("3.00±1.00", proc_mean.stdout)  # mean±std of 2,4
             self.assertIn("0.50x", proc.stdout)           # rcte/unroll = 1.5/3.0
             self.assertIn("| stage | sqlite | indexed | olap | 4 | 2 | 0 |",
                           proc.stdout)                    # outcome accounting
-            self.assertIn("| stage | sqlite | 2.00 | 12.50 |", proc.stdout)
+            self.assertIn("| stage | sqlite | 2.00 [2.00-2.00] | 12.50 [12.50-12.50] |", proc.stdout)
 
 
 if __name__ == "__main__":

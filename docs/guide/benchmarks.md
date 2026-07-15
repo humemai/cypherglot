@@ -239,9 +239,8 @@ Supporting files:
 
 - `scripts/benchmarks/corpora/compiler_benchmark_corpus.json`
 - `scripts/benchmarks/corpora/compiler_sqlglot_benchmark_corpus.json`
-- `scripts/benchmarks/results/compiler_benchmark.json`
-- the checked-in compiler summary Markdown artifact under
-  `scripts/benchmarks/results/`
+- the checked-in campaign results under
+  `scripts/benchmarks/results/rerun-2026-07-ccx33/` (see its README)
 - `scripts/benchmarks/compiler/summarize_results.py`
 
 ### Compiler scope
@@ -310,10 +309,10 @@ The default compiler run uses:
 
 ### Compiler output and current evidence
 
-The default compiler entrypoint still writes
-`scripts/benchmarks/results/compiler_benchmark.json`, while the current
-checked-in human-readable summary lives as a Markdown artifact under
-`scripts/benchmarks/results/`.
+The default compiler entrypoint writes
+`scripts/benchmarks/results/compiler_benchmark.json` (local scratch, not
+checked in); the current checked-in measurement is
+`scripts/benchmarks/results/rerun-2026-07-ccx33/micro/compiler_benchmark_ccx33_box1.json`.
 
 The checked-in compiler artifacts currently reflect a `22`-query CypherGlot
 compiler corpus and a matching `22`-query SQLGlot comparison corpus over the
@@ -350,8 +349,10 @@ Script:
 - `scripts/benchmarks/compiler/summarize_results.py`
 
 This summarizer reads one or more compiler benchmark JSON files and renders a
-Markdown report. By default it consumes the checked-in single-run baseline at
-`scripts/benchmarks/results/compiler_benchmark.json` and emits:
+Markdown report. By default it consumes the local single-run output at
+`scripts/benchmarks/results/compiler_benchmark.json` (pass the checked-in
+campaign JSON under `results/rerun-2026-07-ccx33/micro/` explicitly to
+summarize the reported measurement) and emits:
 
 - an overview block with schema and environment metadata
 - a shared-entrypoint summary table
@@ -658,9 +659,11 @@ ArcadeDB release may make that workaround unnecessary.
 
 ## Notes
 
-- The current checked-in experiment summaries were produced on a Linux
-  workstation built around a Ryzen 9 7950X. Treat that hardware note as result
-  provenance, not as part of the public-facing benchmark naming.
+- The checked-in experiment results under
+  `scripts/benchmarks/results/rerun-2026-07-ccx33/` were measured on a fleet
+  of identical Hetzner CCX33 machines (one repeat per machine, median
+  [min-max] reporting); see that directory's README for provenance and
+  regeneration instructions. Local runs elsewhere are dev scratch.
 - Percentiles are computed from raw per-iteration latency samples using linear
   interpolation.
 - The measured loop disables Python GC to reduce avoidable collection noise.

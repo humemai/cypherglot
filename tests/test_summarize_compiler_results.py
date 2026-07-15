@@ -28,7 +28,9 @@ class SummarizeCompilerResultsTests(unittest.TestCase):
                 / "scripts"
                 / "benchmarks"
                 / "results"
-                / "compiler_benchmark.json"
+                / "rerun-2026-07-ccx33"
+                / "micro"
+                / "compiler_benchmark_ccx33_box1.json"
             ]
         )
 
