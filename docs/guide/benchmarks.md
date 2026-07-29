@@ -657,6 +657,39 @@ works around it by keeping one GAV-enabled OLAP worker open for the full timeout
 and classification pass instead of reopening the database for each query. A future
 ArcadeDB release may make that workaround unnecessary.
 
+## Host provisioning requirements at the large tiers
+
+Large-scale runs, and SNB SF10 in particular, are as sensitive to how the host
+is laid out as to which engine is under test. Getting this wrong does not
+produce slow results, it produces missing ones, and they are easy to misread as
+engine capacity limits.
+
+Three requirements:
+
+1. **Put `TMPDIR` on the same large volume as the databases.** Index builds and
+   query-phase sorts spill there, and the spill can be tens of GB. Leaving
+   `TMPDIR` on a root disk that also stores the dataset fixture is the single
+   most common cause of large-tier job kills.
+2. **Point docker's `data-root` at the large volume too.** Neo4j and AGE declare
+   `uses_db_root_dir=False` and keep their data in docker volumes, so they land
+   under `/var/lib/docker` and ignore the scratch directory entirely. A big
+   scratch volume does not help them unless docker moves with it.
+3. **Budget disk for the fixture separately from the databases.** The converted
+   SNB SF10 fixture alone is about 84 GB, and it must coexist with whatever the
+   engine under test writes.
+
+For calibration, a CCX33 booted from the July 2026 campaign snapshot sits at
+186 GB used of 225 GB on the root disk before any benchmark starts. With the
+disk guard tripping under 12 GB free, that leaves no usable spill headroom on
+root.
+
+The guard in the campaign fleet scripts kills the running job when either
+watched mount drops below 12 GB free. It writes every kill to
+`/root/disk_guard.log`, so **check that log before concluding that an engine
+cannot handle a scale**. A job killed by the guard exits with SIGTERM, or with
+SIGKILL if it does not exit within 25 seconds, which a JVM in the middle of a
+bulk ingest generally will not.
+
 ## Notes
 
 - The checked-in experiment results under
@@ -664,6 +697,16 @@ ArcadeDB release may make that workaround unnecessary.
   of identical Hetzner CCX33 machines (one repeat per machine, median
   [min-max] reporting); see that directory's README for provenance and
   regeneration instructions. Local runs elsewhere are dev scratch.
+- The SF10 rows in that campaign are known to be provisioning-limited rather
+  than engine-limited for most engines; see
+  `.notes/sf10-disk-sweep-2026-07-30.md` for the kill accounting and the
+  follow-up sweep.
+- The ArcadeDB JVM heap defaults (`-Xmx4g` / `-Xmx16g` / `-Xmx64g` for
+  small/medium/large) are not host-aware. On a 32 GiB machine the large default
+  is twice physical memory, which suppresses GC pressure and inflates reported
+  RSS. Override with `--arcadedb-jvm-args=-Xmx<N>g` when the host is smaller
+  than the default assumes. Note the `=` form: a value beginning with `-` is
+  rejected by argparse if passed as a separate token.
 - Percentiles are computed from raw per-iteration latency samples using linear
   interpolation.
 - The measured loop disables Python GC to reduce avoidable collection noise.
