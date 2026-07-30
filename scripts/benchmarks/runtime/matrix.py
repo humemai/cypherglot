@@ -709,13 +709,33 @@ def _resolve_run_stamp(run_stamp: str | None) -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
 
+ARCADEDB_HEAP_FRACTION = 0.6
+
+
 def _arcadedb_heap_ceiling_gib() -> int | None:
     """Largest -Xmx worth handing the JVM on this host, or None if unknown.
 
-    Kept at 75% of physical memory. The JVM treats -Xmx as licence to grow, so a
-    ceiling above physical RAM means it never feels GC pressure until the kernel
-    intervenes, and the heap squeezes out the page cache that ArcadeDB's storage
-    layer relies on.
+    60% of physical memory. The JVM treats -Xmx as licence to grow, so a
+    ceiling near or above physical RAM means it never feels GC pressure until
+    the kernel intervenes, and the heap squeezes out the page cache that
+    ArcadeDB's storage layer relies on.
+
+    The fraction is 60% rather than something larger because the Java heap is
+    not the only claimant: ArcadeDB also wants off-heap direct buffers and the
+    page cache its storage layer reads through, and the Python harness sits in
+    the same cgroup. Measured on the 32 GiB CCX33 fleet at synthetic-large
+    (2026-07-30):
+
+      -Xmx64g  OOM-killed at ~30 GiB resident, during ingest
+      -Xmx24g  ingest and OLTP complete, then OOM-killed three times in OLAP
+               at 23.6-24.6 GiB resident
+
+    So a ceiling that merely fits physical memory is not enough. 60% also keeps
+    the working presets intact: on a 32 GiB host it leaves -Xmx4g and -Xmx16g
+    untouched and clamps only the large preset, which has never produced a
+    result on this hardware. The clamped value (18g there) is a safety net, not
+    a tuned figure -- the largest heap that actually completes OLAP at the 10M
+    tier is still an open question.
     """
     try:
         page_size = os.sysconf("SC_PAGE_SIZE")
@@ -725,7 +745,7 @@ def _arcadedb_heap_ceiling_gib() -> int | None:
     if page_size <= 0 or page_count <= 0:
         return None
     total_gib = (page_size * page_count) / (1024**3)
-    return max(1, int(total_gib * 0.75))
+    return max(1, int(total_gib * ARCADEDB_HEAP_FRACTION))
 
 
 def _resolve_arcadedb_jvm_args(scale_name: str, override: str | None) -> str:
