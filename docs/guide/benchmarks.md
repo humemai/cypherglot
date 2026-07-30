@@ -636,6 +636,41 @@ For cross-engine interpretation, keep the runtime split explicit:
 - The repeated-run summary therefore answers both backend-comparison and
   methodology questions, but it is not a single apples-to-apples leaderboard.
 
+### OLAP execution paths are not symmetric
+
+One asymmetry has to be stated rather than left implicit, because it favours a
+single engine.
+
+**ArcadeDB is the only engine in the matrix given a materialised analytical
+projection.** Before the OLAP suite it builds a `GRAPH ANALYTICAL VIEW` over
+every vertex and edge type (`UPDATE MODE OFF`), and the build cost is booked to
+setup as `gav_ms`, not to query latency. Every other engine answers the same 16
+OLAP queries from its ordinary store.
+
+No equivalent exists to grant the others for this workload, which is why the
+asymmetry is disclosed rather than corrected:
+
+| Engine | Analytical facility for this corpus |
+|---|---|
+| ArcadeDB Embedded | Graph Analytical View — materialised, built during setup |
+| Neo4j | None applicable. GDS projects graphs to run *algorithms* (PageRank, centrality); it does not accelerate Cypher aggregation, and no GDS plugin is configured |
+| LadybugDB | None to enable — columnar/Arrow-native by construction |
+| DuckDB, ClickHouse | None to enable — analytical engines by default |
+| SQLite, PostgreSQL, Turso, AGE | None — row stores with no analytical mode |
+
+The reason GDS does not apply is the corpus itself: all 16 OLAP queries are
+aggregations, projections and variable-length traversals (`olap_type1_age_rollup`,
+`olap_three_type_path_count`, `olap_variable_length_reachability`, …). None is a
+graph algorithm. The nearest genuine analogue would be materialised views for
+PostgreSQL or ClickHouse, but that changes what CypherGlot compiles to and is a
+different question from engine comparison.
+
+So the advantage is **measured instead of assumed**. Pass
+`--arcadedb-no-analytical-view` (or `--arcadedb-no-analytical-view` at the
+matrix level) to run ArcadeDB's OLAP suite against the plain store; the paired
+with/without runs quantify what the view is worth. Report ArcadeDB OLAP numbers
+alongside which arm produced them.
+
 ### Runtime caveats
 
 LadybugDB has two known upstream follow-ups that affect the large-runtime benchmark
