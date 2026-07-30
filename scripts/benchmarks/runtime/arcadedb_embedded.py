@@ -543,6 +543,7 @@ def _prepare_arcadedb_fixture(
     sqlite_source: GeneratedGraphFixture,
     ingest_batch_size: int,
     db_root_dir: Path | None,
+    analytical_view: bool = True,
 ) -> ArcadeDBFixture:
     suite_name = f"arcadedb-embedded-{workload}-{index_mode}-suite"
     progress_label = f"{ARCADEDB_BACKEND_NAME}/{index_mode}"
@@ -617,7 +618,12 @@ def _prepare_arcadedb_fixture(
             backend=ARCADEDB_BACKEND_NAME
         )
 
-        if workload == "olap":
+        # ArcadeDB is the only engine in the matrix given a materialised
+        # analytical projection, and its build cost is booked to setup rather
+        # than to query latency. --no-analytical-view measures the same queries
+        # on the plain store so the advantage can be quantified instead of
+        # assumed. See .notes/sf10-disk-sweep-2026-07-30.md.
+        if workload == "olap" and analytical_view:
             _progress(f"{progress_label}: creating graph analytical view")
             _, gav_ns = _measure_ns(
                 lambda: _prepare_arcadedb_olap_gav(database, graph_schema)
@@ -1992,6 +1998,7 @@ def _run_workload_suite(
     iteration_progress: bool,
     timeout_ms: float | None = None,
     worker_startup_timeout_s: float = ARCADEDB_WORKER_STARTUP_TIMEOUT_S,
+    analytical_view: bool = True,
 ) -> dict[str, object]:
     suite_name = f"{workload}/{_suite_key(index_mode)}"
     try:
@@ -2002,6 +2009,7 @@ def _run_workload_suite(
             sqlite_source=sqlite_source,
             ingest_batch_size=ingest_batch_size,
             db_root_dir=db_root_dir,
+            analytical_view=analytical_view,
         )
     except ArcadeDBFixtureSetupError as exc:
         _progress(
@@ -2217,6 +2225,7 @@ def _benchmark_result(
     worker_startup_timeout_s: float = ARCADEDB_WORKER_STARTUP_TIMEOUT_S,
     topology: Topology | None = None,
     progress_callback: RuntimeProgressCallback | None = None,
+    analytical_view: bool = True,
 ) -> tuple[dict[str, object], int]:
     active_topology = topology if topology is not None else SyntheticTopology()
     graph_schema, edge_plans = active_topology.build_schema(scale)
@@ -2296,11 +2305,15 @@ def _benchmark_result(
                             "the generated graph using the runtime corpus "
                             "directly as OpenCypher, with a Graph Analytical "
                             "View prepared before the OLAP suite."
+                            if analytical_view
+                            else "directly as OpenCypher, with no Graph "
+                            "Analytical View (plain store)."
                         )
                     },
                 )
                 suite = _run_workload_suite(
                     workload="olap",
+                    analytical_view=analytical_view,
                     index_mode=current_index_mode,
                     queries=olap_queries,
                     iterations=olap_iterations_value,
@@ -2548,6 +2561,18 @@ def _parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--no-analytical-view",
+        dest="analytical_view",
+        action="store_false",
+        help=(
+            "Skip the Graph Analytical View before the OLAP suite and run the "
+            "OLAP queries against the plain store. ArcadeDB is the only engine "
+            "in the matrix given a materialised analytical projection, so this "
+            "measures how much of its OLAP result the view is worth."
+        ),
+    )
+    parser.set_defaults(analytical_view=True)
+    parser.add_argument(
         "--query-worker-spec",
         type=Path,
         help=argparse.SUPPRESS,
@@ -2707,6 +2732,7 @@ def main() -> int:
         oltp_timeout_ms=oltp_timeout_ms,
         olap_timeout_ms=olap_timeout_ms,
         worker_startup_timeout_s=args.worker_startup_timeout_s,
+        analytical_view=args.analytical_view,
         topology=topology,
         progress_callback=(
             lambda partial_result, partial_failure_count: write_checkpoint(

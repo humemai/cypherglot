@@ -706,6 +706,9 @@ class BenchmarkArcadeDBEmbeddedRuntimeScriptTests(unittest.TestCase):
             db_root_dir: Path | None,
             iteration_progress: bool,
             worker_startup_timeout_s: float,
+            # Absorb optional suite kwargs (e.g. analytical_view) so adding one
+            # does not break this stub.
+            **_extra: object,
         ) -> dict[str, object]:
             self.assertIsNotNone(graph_schema)
             self.assertIs(sqlite_source, sqlite_source_mock)

@@ -578,6 +578,17 @@ def _parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--arcadedb-no-analytical-view",
+        action="store_true",
+        help=(
+            "Run ArcadeDB's OLAP suite without its Graph Analytical View. "
+            "ArcadeDB is the only engine in the matrix given a materialised "
+            "analytical projection, and the build cost is booked to setup "
+            "rather than query latency, so the paired run quantifies what the "
+            "view is worth instead of leaving it as an unstated advantage."
+        ),
+    )
+    parser.add_argument(
         "--arcadedb-wheel-path",
         type=Path,
         help=(
@@ -1135,6 +1146,10 @@ def _build_command(
                 str(args.arcadedb_worker_startup_timeout_s),
             ]
         )
+    if job.variant.backend == "arcadedb_embedded" and getattr(
+        args, "arcadedb_no_analytical_view", False
+    ):
+        command.append("--no-analytical-view")
 
     env = os.environ.copy()
     server_cpuset = cpu_override or _resolve_server_cpuset(args)
