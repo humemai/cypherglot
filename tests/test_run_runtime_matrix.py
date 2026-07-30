@@ -249,22 +249,42 @@ class RunRuntimeMatrixTests(unittest.TestCase):
         self.assertIn("neo4j_ports=8788/8575", details)
 
     def test_resolve_arcadedb_jvm_args_uses_scale_defaults(self) -> None:
-        self.assertEqual(
-            resolve_arcadedb_jvm_args("small", None),
-            "-Xmx4g",
-        )
-        self.assertEqual(
-            resolve_arcadedb_jvm_args("medium", None),
-            "-Xmx16g",
-        )
-        self.assertEqual(
-            resolve_arcadedb_jvm_args("large", None),
-            "-Xmx64g",
-        )
+        # A host with plenty of memory gets the presets verbatim.
+        with patch.object(
+            run_runtime_matrix, "_arcadedb_heap_ceiling_gib", return_value=96
+        ):
+            self.assertEqual(resolve_arcadedb_jvm_args("small", None), "-Xmx4g")
+            self.assertEqual(resolve_arcadedb_jvm_args("medium", None), "-Xmx16g")
+            self.assertEqual(resolve_arcadedb_jvm_args("large", None), "-Xmx64g")
         self.assertEqual(
             resolve_arcadedb_jvm_args("medium", "-Xmx12g"),
             "-Xmx12g",
         )
+
+    def test_resolve_arcadedb_jvm_args_clamps_preset_to_host_memory(self) -> None:
+        """The large preset (-Xmx64g) is unrunnable on the 32 GiB fleet host.
+
+        Every July 2026 attempt at synthetic-large was OOM-killed near 30 GiB
+        resident, which is why the campaign has no ArcadeDB rows at that tier.
+        Presets that already fit must pass through untouched.
+        """
+        with patch.object(
+            run_runtime_matrix, "_arcadedb_heap_ceiling_gib", return_value=23
+        ):
+            self.assertEqual(resolve_arcadedb_jvm_args("large", None), "-Xmx23g")
+            self.assertEqual(resolve_arcadedb_jvm_args("medium", None), "-Xmx16g")
+            self.assertEqual(resolve_arcadedb_jvm_args("small", None), "-Xmx4g")
+            # An explicit override is a deliberate choice and still wins.
+            self.assertEqual(
+                resolve_arcadedb_jvm_args("large", "-Xmx64g"),
+                "-Xmx64g",
+            )
+
+    def test_resolve_arcadedb_jvm_args_passes_through_when_host_unknown(self) -> None:
+        with patch.object(
+            run_runtime_matrix, "_arcadedb_heap_ceiling_gib", return_value=None
+        ):
+            self.assertEqual(resolve_arcadedb_jvm_args("large", None), "-Xmx64g")
 
     def test_build_jobs_expands_repeats_and_shuffles_deterministically(self) -> None:
         variants = [

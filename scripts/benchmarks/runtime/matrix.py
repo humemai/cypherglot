@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import random
 import shlex
 import shutil
@@ -708,10 +709,47 @@ def _resolve_run_stamp(run_stamp: str | None) -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
 
+def _arcadedb_heap_ceiling_gib() -> int | None:
+    """Largest -Xmx worth handing the JVM on this host, or None if unknown.
+
+    Kept at 75% of physical memory. The JVM treats -Xmx as licence to grow, so a
+    ceiling above physical RAM means it never feels GC pressure until the kernel
+    intervenes, and the heap squeezes out the page cache that ArcadeDB's storage
+    layer relies on.
+    """
+    try:
+        page_size = os.sysconf("SC_PAGE_SIZE")
+        page_count = os.sysconf("SC_PHYS_PAGES")
+    except (AttributeError, ValueError, OSError):
+        return None
+    if page_size <= 0 or page_count <= 0:
+        return None
+    total_gib = (page_size * page_count) / (1024**3)
+    return max(1, int(total_gib * 0.75))
+
+
 def _resolve_arcadedb_jvm_args(scale_name: str, override: str | None) -> str:
     if override:
         return override
-    return SCALE_PRESETS[scale_name].arcadedb_jvm_args
+    preset = SCALE_PRESETS[scale_name].arcadedb_jvm_args
+    # The per-scale presets are not host-aware: `large` asks for -Xmx64g, which
+    # on the 32 GiB CCX33 measurement host is twice physical memory. Every July
+    # 2026 attempt at that tier was OOM-killed around 30 GiB resident, which is
+    # why the campaign has no ArcadeDB rows at synthetic-large at all. Clamp the
+    # default down to something the host can actually honour; an explicit
+    # --arcadedb-jvm-args always wins so deliberate over-commit stays possible.
+    match = re.fullmatch(r"-Xmx(\d+)g", preset.strip())
+    ceiling = _arcadedb_heap_ceiling_gib()
+    if match is None or ceiling is None:
+        return preset
+    requested = int(match.group(1))
+    if requested <= ceiling:
+        return preset
+    print(
+        f"    ArcadeDB heap preset {preset} exceeds 75% of this host's memory; "
+        f"clamping to -Xmx{ceiling}g (pass --arcadedb-jvm-args to override)"
+    )
+    return f"-Xmx{ceiling}g"
 
 
 def _selected_variants(names: list[str] | None) -> list[VariantSpec]:
