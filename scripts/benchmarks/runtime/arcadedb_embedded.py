@@ -101,7 +101,16 @@ ARCADEDB_GAV_NAME = "cypherglot_olap"
 ARCADEDB_GAV_NODE_PROPERTIES = ("id", "name", "age", "active", "score")
 ARCADEDB_GAV_EDGE_PROPERTIES = ("rank", "active", "score")
 INDEX_MODE_CHOICES = ("indexed", "unindexed", "both")
-ARCADEDB_WORKER_STARTUP_TIMEOUT_S = 5.0
+# How long to wait for the OLAP probe worker's Graph Analytical View to reach
+# READY. This is OUR budget, not an ArcadeDB limit.
+#
+# 5.0s was fine while ArcadeDB only ever reached small and medium, where the GAV
+# is effectively instant. At synthetic-large (10M nodes / 77.79M edges) the view
+# is still `status: BUILDING, nodeCount: 0` after an hour, so every OLAP run at
+# that tier failed setup with a bare "Timed out waiting for GAV" -- a harness
+# default masquerading as an engine failure. Sized for the largest tier; pass
+# --worker-startup-timeout-s to override.
+ARCADEDB_WORKER_STARTUP_TIMEOUT_S = 3600.0
 ARCADEDB_WORKER_SHUTDOWN_TIMEOUT_S = 1.0
 ARCADEDB_ITERATIVE_EXECUTION_MODE = "iterative"
 ARCADEDB_SKIPPED_AFTER_PROBE_EXECUTION_MODE = "skipped-after-probe"

@@ -715,7 +715,13 @@ class BenchmarkArcadeDBEmbeddedRuntimeScriptTests(unittest.TestCase):
             self.assertEqual(ingest_batch_size, SMALL_SCALE.ingest_batch_size)
             self.assertFalse(iteration_progress)
             self.assertIsNone(db_root_dir)
-            self.assertEqual(worker_startup_timeout_s, 5.0)
+            # Sized for the largest tier: the GAV over 78M edges is still
+            # BUILDING after an hour, and the old 5.0s default turned that into
+            # a spurious setup failure at every OLAP run at synthetic-large.
+            self.assertEqual(
+                worker_startup_timeout_s,
+                benchmark_arcadedb_embedded_runtime.ARCADEDB_WORKER_STARTUP_TIMEOUT_S,
+            )
             suite_calls.append((workload, index_mode))
             return {
                 "backend": "arcadedb-embedded",
