@@ -13,17 +13,46 @@ Audited 2026-07-31 against the campaign fleet (Hetzner CCX33: 8 dedicated vCPU,
 | Axis | Value | Mechanism |
 |---|---|---|
 | CPU budget | 4 of 8 vCPU per job | `--worker-cpusets`, applied to the client **and** its server containers |
-| Co-runners | none at large scale (`--workers 1`) | one job per box; the dispatcher never co-runs two jobs of one backend |
+| Backend collisions | never | the dispatcher never co-runs two jobs of the same backend |
 | Dataset | identical fixture per scale | same generated graph or LDBC SNB directory |
 | Query corpus | identical | same 14 OLTP / 16-19 OLAP queries, same order |
 | Iterations / warmup | identical per scale | `--iterations`, `--warmup`, `--olap-iterations` |
 | Query timeouts | identical | `--oltp-timeout-ms`, `--olap-timeout-ms`; a timeout is recorded as data |
 | Job budget | identical | `--job-timeout-s` |
 
-CPU *budget* is genuinely equal. What each engine does inside that budget is
-not — see below.
+CPU *budget* is genuinely equal **within a scale**. What each engine does
+inside that budget is not, and the budget itself changes between scales — see
+below.
 
 ## NOT held equal
+
+### 0. The co-runner regime changes between scales
+
+| Scale | `--workers` | Cpusets | Per job |
+|---|---|---|---|
+| small, medium, snb-sf1 | 2 | `0,1,2,3 \| 4,5,6,7` | 4 cores, **shares the box with a co-runner** |
+| large, snb-sf10 | 1 | `0,1,2,3` | 4 cores, **whole box to itself**, 4 cores idle |
+
+The fleet script describes this as the "same 4-vCPU envelope, no co-runner",
+and the core count is indeed the same. Everything else is not:
+
+| Resource | small / medium | large |
+|---|---|---|
+| CPU cores | 4 | 4 |
+| RAM available | ~32 GiB shared by 2 jobs | 32 GiB to one job |
+| Memory bandwidth, L3 | contended | exclusive |
+| Disk I/O | contended | exclusive |
+
+So a job at large gets roughly **twice the effective memory** and uncontended
+bandwidth compared with the same job at medium. The regime change was
+deliberate — two co-running 10M-scale jobs exhaust the box (AGE server OOM,
+ClickHouse disk-reservation failure) — but it is a confound for any
+**cross-scale** claim.
+
+In particular, a scaling curve that reads "the crossover emerges as scale
+grows" is partly measuring a regime change at the large boundary, not scale
+alone. Within-scale engine comparisons are unaffected; between-scale ones need
+this stated.
 
 ### 1. Thread counts (CPU oversubscription)
 
@@ -108,6 +137,9 @@ fixture must be budgeted separately from the databases.
 2. **Set a container memory limit** (`--memory`) equal across server engines,
    and decide what the embedded engines' equivalent should be. Without this,
    memory-related claims are not comparable.
-3. Until 1 and 2 are done, **state the asymmetries** rather than implying
+3. **Either run large at 2 workers too, or state the regime change** wherever a
+   cross-scale trend is claimed. Running large solo is defensible on capacity
+   grounds; presenting small/medium/large as one curve without noting it is not.
+4. Until these are done, **state the asymmetries** rather than implying
    parity. An EA&B reviewer will accept a disclosed limitation; an undisclosed
    one that they find themselves is fatal.
