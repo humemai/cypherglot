@@ -636,6 +636,15 @@ For cross-engine interpretation, keep the runtime split explicit:
 - The repeated-run summary therefore answers both backend-comparison and
   methodology questions, but it is not a single apples-to-apples leaderboard.
 
+### Resource allocation
+
+CPU *budget* is equal across engines (4 of 8 vCPU per job, client and server
+containers alike), but thread counts and memory ceilings are **not** equalised:
+engines size thread pools from total host cores rather than the affinity mask,
+and no container memory limit is set. See
+[Resource Allocation](resource-allocation.md) for the full contract and the
+measured numbers before quoting any cross-engine comparison.
+
 ### OLAP execution paths are not symmetric
 
 One asymmetry has to be stated rather than left implicit, because it favours a
