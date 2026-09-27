@@ -2,7 +2,7 @@
 
 CypherGlot is the Cypher frontend compiler for the HumemAI stack.
 
-[![Docs](https://img.shields.io/badge/docs-humem.ai-0f766e)](https://docs.humem.ai/cypherglot/)
+[![Docs](https://img.shields.io/badge/docs-humem.ai-892122)](https://docs.humem.ai/cypherglot/)
 [![Test](https://github.com/humemai/cypherglot/actions/workflows/test.yml/badge.svg)](https://github.com/humemai/cypherglot/actions/workflows/test.yml)
 [![Build Docs](https://github.com/humemai/cypherglot/actions/workflows/build-docs.yml/badge.svg)](https://github.com/humemai/cypherglot/actions/workflows/build-docs.yml)
 [![Generated Frontend](https://github.com/humemai/cypherglot/actions/workflows/generated-cypher.yml/badge.svg)](https://github.com/humemai/cypherglot/actions/workflows/generated-cypher.yml)
@@ -396,6 +396,8 @@ Build the docs locally:
 ```bash
 uv run mkdocs build --strict
 ```
+
+The docs theme (colours, fonts, logo, favicon) is the HumemAI design system, vendored into `docs/brand` from [humemai/design-system](https://github.com/humemai/design-system). Don't edit it there; vendor a new copy with that repo's `scripts/vendor-into.sh`.
 
 ## 🔗 Quick links
 
