@@ -313,7 +313,9 @@ def _seed_arcadedb_from_fixture(
     with db.graph_batch(
         batch_size=batch_size,
         expected_edge_count=sqlite_source.row_counts["edge_count"],
-        bidirectional=False,
+        # Leave bidirectional unset: the engine default (two-way edge pointers) matches
+        # the CREATE EDGE TYPE statements above, and 26.10.1+ refuses a one-way edge
+        # in a two-way type.
         commit_every=batch_size,
         use_wal=False,
         parallel_flush=False,
