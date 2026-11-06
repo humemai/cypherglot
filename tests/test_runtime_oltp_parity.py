@@ -267,7 +267,7 @@ class RuntimeOltpParityTests(unittest.TestCase):
         if not _ladybug_available():
             raise unittest.SkipTest("ladybug is not installed")
         if not _arcadedb_available():
-            raise unittest.SkipTest("arcadedb-embedded is not installed")
+            raise unittest.SkipTest("arcadedb-jvm is not installed")
 
         cls.ladybug_unindexed = _prepare_ladybug_fixture(
             workload="oltp",

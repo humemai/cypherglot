@@ -127,7 +127,7 @@ class ArcadeDBEmbeddedOlapParityTests(unittest.TestCase):
         if not _ladybug_available():
             raise unittest.SkipTest("ladybug is not installed")
         if not _arcadedb_available():
-            raise unittest.SkipTest("arcadedb-embedded is not installed")
+            raise unittest.SkipTest("arcadedb-jvm is not installed")
         if _neo4j_graph_database is None:
             raise unittest.SkipTest("neo4j is not installed")
         if shutil.which("docker") is None:

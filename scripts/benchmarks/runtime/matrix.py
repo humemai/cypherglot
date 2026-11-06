@@ -580,7 +580,7 @@ def _parse_args() -> argparse.Namespace:
         "--arcadedb-wheel-path",
         type=Path,
         help=(
-            "Optional local arcadedb-embedded wheel to install into each job "
+            "Optional local arcadedb-jvm wheel to install into each job "
             "container instead of resolving the latest package from PyPI. "
             "Requires --container-cpus."
         ),
@@ -802,7 +802,7 @@ def _containerized_jobs_enabled(args: argparse.Namespace) -> bool:
 def _resolve_arcadedb_install_target(args: argparse.Namespace) -> str:
     wheel_path = getattr(args, "arcadedb_wheel_path", None)
     if wheel_path is None:
-        return "arcadedb-embedded"
+        return "arcadedb-jvm"
     return str(Path(wheel_path).expanduser().resolve())
 
 

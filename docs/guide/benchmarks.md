@@ -473,9 +473,9 @@ ArcadeDB heap defaults now follow the scale preset automatically:
 Override that default for a given run with `--arcadedb-jvm-args`.
 
 When per-job containers are enabled with `--container-cpus`, you can also pass
-`--arcadedb-wheel-path /absolute/path/to/arcadedb_embedded-...whl` to install a
+`--arcadedb-wheel-path /absolute/path/to/arcadedb_jvm-...whl` to install a
 local ArcadeDB wheel into those containers instead of resolving the latest
-`arcadedb-embedded` build from PyPI.
+`arcadedb-jvm` build from PyPI.
 
 Recommended `small` run:
 

@@ -60,7 +60,7 @@ from scripts.benchmarks.common.topology import (
 )
 
 try:
-    import arcadedb_embedded as arcadedb
+    import arcadedb
 except ImportError:  # pragma: no cover - optional dependency
     arcadedb = SimpleNamespace(
         __version__=None,
@@ -173,7 +173,7 @@ def _arcadedb_available() -> bool:
 
 def _arcadedb_version() -> str | None:
     try:
-        return importlib.metadata.version("arcadedb-embedded")
+        return importlib.metadata.version("arcadedb-jvm")
     except importlib.metadata.PackageNotFoundError:
         if not _ARCADEDB_AVAILABLE:
             return None
@@ -193,9 +193,8 @@ def _open_arcadedb(db_path: Path) -> Any:
         and callable(create_database)
     ):
         raise ValueError(
-            "arcadedb-embedded is not installed. Install it with "
-            "`uv sync --group test` or a dev build such as "
-            "`uv add arcadedb-embedded==26.4.1.dev3`."
+            "arcadedb-jvm is not installed. Install it with "
+            "`uv sync --group test` or `uv add arcadedb-jvm`."
         )
     db_path_str = db_path.as_posix()
     if database_exists(db_path_str):
@@ -2608,9 +2607,8 @@ def main() -> int:
         args.db_root_dir.mkdir(parents=True, exist_ok=True)
     if not _arcadedb_available():
         raise ValueError(
-            "arcadedb-embedded is not installed. Install it with "
-            "`uv sync --group test` or a dev build such as "
-            "`uv add arcadedb-embedded==26.4.1.dev3`."
+            "arcadedb-jvm is not installed. Install it with "
+            "`uv sync --group test` or `uv add arcadedb-jvm`."
         )
 
     scale = RuntimeScale(
